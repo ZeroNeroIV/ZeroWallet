@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import { BarChart } from 'react-native-gifted-charts';
-import { spacing, typography } from '../../theme';
+import { spacing } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');

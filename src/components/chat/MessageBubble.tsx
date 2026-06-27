@@ -24,7 +24,8 @@ import {
 import Clipboard from '@react-native-clipboard/clipboard';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import type { AIMessage } from '../../types/ai';
-import { spacing, typography, borderRadius } from '../../theme';
+import { spacing, borderRadius } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { mediumHaptic } from '../../services/haptics/hapticFeedback';
 import { useAIChatStore } from '../../store/aiChatStore';

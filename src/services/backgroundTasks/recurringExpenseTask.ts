@@ -12,6 +12,7 @@
 import { RecurringExpenseRepository } from '../../database/repositories/RecurringExpenseRepository';
 import { TransactionRepository } from '../../database/repositories/TransactionRepository';
 import { AccountRepository } from '../../database/repositories/AccountRepository';
+import { VaultType } from '../../domain/vault/VaultType';
 import { useAccountStore } from '../../store/accountStore';
 import type { RecurringFrequency } from '../../types/models';
 
@@ -207,20 +208,11 @@ export async function checkAndProcessRecurringExpenses(accountId: string): Promi
           totalAmount += expense.amount;
         }
         
-        // Update vault balance
         const currentBalance = accountStore.balances[expense.accountId];
         if (currentBalance) {
-          const updates: any = {};
+          const vt = VaultType.parse(expense.vaultType);
           const totalDeduction = expense.amount * missedOccurrences;
-          
-          if (expense.vaultType === 'main') {
-            updates.mainBalance = currentBalance.mainBalance - totalDeduction;
-          } else if (expense.vaultType === 'savings') {
-            updates.savingsBalance = currentBalance.savingsBalance - totalDeduction;
-          } else {
-            updates.heldBalance = currentBalance.heldBalance - totalDeduction;
-          }
-          accountStore.updateBalance(expense.accountId, updates);
+          accountStore.updateBalance(expense.accountId, vt.adjustBalance(currentBalance, -totalDeduction));
         }
         
         // Calculate next occurrence

@@ -16,9 +16,11 @@ import type { AuthStackParamList } from '../../types/navigation';
 import { Input } from '../../components/forms/Input';
 import { Button } from '../../components/forms/Button';
 import { CurrencyPicker } from '../../components/forms/CurrencyPicker';
-import { useAuthStore } from '../../store';
+import { useAuthStore } from '../../store/authStore';
 import { validateEmail, validatePassword, validateName } from '../../utils/validators';
-import { colors, spacing, typography } from '../../theme';
+import { colors } from '../../theme/colors';
+import { spacing } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { getCurrencyByCode } from '../../constants/currencies';
 

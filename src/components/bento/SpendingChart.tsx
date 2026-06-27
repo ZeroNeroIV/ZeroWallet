@@ -3,7 +3,8 @@ import { View, Text, StyleSheet, Dimensions, TouchableOpacity } from 'react-nati
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { LineChart, BarChart } from 'react-native-gifted-charts';
 import { AnimatePresence, MotiView } from 'moti';
-import { spacing, typography } from '../../theme';
+import { spacing } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import { BentoCard } from './BentoCard';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { mmkv } from '../../store/middleware/mmkvStorage';

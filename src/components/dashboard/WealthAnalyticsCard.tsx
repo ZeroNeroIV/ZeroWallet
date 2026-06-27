@@ -2,7 +2,8 @@ import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Dimensions, ScrollView } from 'react-native';
 import Svg, { Path, Defs, LinearGradient, Stop, Line, Text as SvgText } from 'react-native-svg';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { spacing, typography } from '../../theme';
+import { spacing } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;

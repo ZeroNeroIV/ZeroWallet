@@ -17,7 +17,8 @@ import React from 'react';
 import { View, StyleSheet, ViewStyle, Dimensions } from 'react-native';
 import { MotiView } from 'moti';
 import { Skeleton } from 'moti/skeleton';
-import { colors, spacing } from '../../theme';
+import { colors } from '../../theme/colors';
+import { spacing } from '../../theme/spacing';
 
 const { width: screenWidth } = Dimensions.get('window');
 

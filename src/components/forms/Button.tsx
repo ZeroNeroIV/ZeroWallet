@@ -10,7 +10,9 @@ import {
   TouchableOpacityProps,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { colors, spacing, typography, borderRadius } from '../../theme';
+import { colors } from '../../theme/colors';
+import { spacing, borderRadius } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import { lightHaptic } from '../../services/haptics/hapticFeedback';
 
 interface ButtonProps extends TouchableOpacityProps {

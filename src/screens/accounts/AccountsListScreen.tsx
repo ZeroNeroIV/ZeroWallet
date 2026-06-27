@@ -13,10 +13,13 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { MainStackParamList } from '../../types/navigation';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useAuthStore, useAccountStore } from '../../store';
+import { useAuthStore } from '../../store/authStore';
+import { useAccountStore } from '../../store/accountStore';
 import { AccountRepository } from '../../database/repositories/AccountRepository';
 import type { Account } from '../../types/models';
-import { colors, spacing, typography, borderRadius } from '../../theme';
+import { colors } from '../../theme/colors';
+import { spacing, borderRadius } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import { Button } from '../../components/forms/Button';
 import { useThemeColors } from '../../hooks/useThemeColors';
 

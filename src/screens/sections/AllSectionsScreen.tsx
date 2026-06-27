@@ -15,7 +15,8 @@ import { View, Text, TouchableOpacity, FlatList, StyleSheet } from 'react-native
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { spacing, typography } from '../../theme';
+import { spacing } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { MainStackParamList } from '../../types/navigation';
 

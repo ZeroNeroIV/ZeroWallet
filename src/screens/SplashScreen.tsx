@@ -2,8 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useThemeColors } from '../hooks/useThemeColors';
-import { typography } from '../theme';
-
+import { typography } from '../theme/typography';
 export default function SplashScreen() {
     const themeColors = useThemeColors();
     const fadeAnim = useRef(new Animated.Value(0)).current;

@@ -17,7 +17,8 @@ import { CurrencyPicker } from '../../components/forms/CurrencyPicker';
 import { useAuthStore } from '../../store/authStore';
 import { Account } from '../../types/models';
 import { AccountRepository } from '../../database/repositories/AccountRepository';
-import { spacing, typography, borderRadius } from '../../theme';
+import { spacing, borderRadius } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { getCurrencyByCode } from '../../constants/currencies';
 

@@ -31,10 +31,12 @@ import type { MainStackParamList } from '../../types/navigation';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Input } from '../../components/forms/Input';
 import { Button } from '../../components/forms/Button';
-import { useAuthStore } from '../../store';
+import { useAuthStore } from '../../store/authStore';
 import { CategoryRepository } from '../../database/repositories/CategoryRepository';
 import { validateRequired } from '../../utils/validators';
-import { colors, spacing, typography, borderRadius } from '../../theme';
+import { colors } from '../../theme/colors';
+import { spacing, borderRadius } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import type { Category, CategoryType } from '../../types/models';
 import { useThemeColors } from '../../hooks/useThemeColors';
 

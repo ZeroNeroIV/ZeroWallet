@@ -4,7 +4,8 @@ import { View, Text, StyleSheet, Dimensions } from 'react-native';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = (SCREEN_WIDTH - 24 * 2 - 12) / 2; // lg margins + gap/2
 import { PieChart } from 'react-native-gifted-charts';
-import { spacing, typography } from '../../theme';
+import { spacing } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
 
 interface CategorySpend {

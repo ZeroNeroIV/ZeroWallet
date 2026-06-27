@@ -8,7 +8,9 @@ import {
 } from 'react-native';
 import { MotiView } from 'moti';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { colors, spacing, typography } from '../../theme';
+import { colors } from '../../theme/colors';
+import { spacing } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import { lightHaptic, mediumHaptic } from '../../services/haptics/hapticFeedback';
 
 interface FABAction {

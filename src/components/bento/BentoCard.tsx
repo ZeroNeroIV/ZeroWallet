@@ -1,7 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { StyleSheet, ViewStyle } from 'react-native';
 import { MotiView } from 'moti';
-import { spacing } from '../../theme';
+import { spacing } from '../../theme/spacing';
 import { useThemeColors } from '../../hooks/useThemeColors';
 
 interface BentoCardProps {

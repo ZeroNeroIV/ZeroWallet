@@ -15,10 +15,13 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Input } from '../../components/forms/Input';
 import { Button } from '../../components/forms/Button';
 import { CurrencyPicker } from '../../components/forms/CurrencyPicker';
-import { useAuthStore, useAccountStore } from '../../store';
+import { useAuthStore } from '../../store/authStore';
+import { useAccountStore } from '../../store/accountStore';
 import { AccountRepository } from '../../database/repositories/AccountRepository';
 import { validateRequired } from '../../utils/validators';
-import { colors, spacing, typography, borderRadius } from '../../theme';
+import { colors } from '../../theme/colors';
+import { spacing, borderRadius } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
 
 type CreateAccountNavigationProp = StackNavigationProp<

@@ -5,7 +5,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import type { RootStackParamList } from '../types/navigation';
 import { AuthNavigator } from './AuthNavigator';
 import { MainNavigator } from './MainNavigator';
-import { useAuthStore } from '../store';
+import { useAuthStore } from '../store/authStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { initDatabase } from '../database';
 import BiometricLockScreen from '../screens/security/BiometricLockScreen';

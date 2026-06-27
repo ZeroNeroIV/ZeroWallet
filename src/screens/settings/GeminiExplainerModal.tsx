@@ -26,7 +26,9 @@ import {
   Linking,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { compatColors as colors, spacing, typography } from '../../theme';
+import { compatColors as colors } from '../../theme/colors';
+import { spacing } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import { lightHaptic, mediumHaptic } from '../../services/haptics/hapticFeedback';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { GEMINI_MODELS, TOKENS_EXPLANATION } from '../../constants/geminiModels';

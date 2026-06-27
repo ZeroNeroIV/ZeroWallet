@@ -32,11 +32,13 @@ import { Input } from '../../components/forms/Input';
 import { Button } from '../../components/forms/Button';
 import { AmountInput } from '../../components/forms/AmountInput';
 import { CategoryPicker } from '../../components/forms/CategoryPicker';
-import { useAuthStore } from '../../store';
+import { useAuthStore } from '../../store/authStore';
 import { SubscriptionRepository } from '../../database/repositories/SubscriptionRepository';
 import { CategoryRepository } from '../../database/repositories/CategoryRepository';
 import { validateRequired } from '../../utils/validators';
-import { colors, spacing, typography, borderRadius } from '../../theme';
+import { colors } from '../../theme/colors';
+import { spacing, borderRadius } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import type { Category, VaultType } from '../../types/models';
 

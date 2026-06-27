@@ -25,7 +25,9 @@ import {
   Pressable,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { colors, spacing, typography } from '../../theme';
+import { colors } from '../../theme/colors';
+import { spacing } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import { lightHaptic, mediumHaptic } from '../../services/haptics/hapticFeedback';
 import { ThemeMode } from '../../contexts/ThemeContext';
 import { useThemeColors } from '../../hooks/useThemeColors';

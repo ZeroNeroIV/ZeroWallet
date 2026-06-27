@@ -12,6 +12,7 @@
  *   - Throws AIOperationError on validation failures
  */
 
+import * as v from '../../utils/validation/primitives';
 import { CategoryRepository } from '../../database/repositories/CategoryRepository';
 import { TransactionRepository } from '../../database/repositories/TransactionRepository';
 import { GoalRepository } from '../../database/repositories/GoalRepository';
@@ -60,94 +61,59 @@ export class ValidationService {
   }
 
   // ============================================================================
-  // Generic Validation Methods
+  // Generic Validation Methods (backed by shared primitives)
   // ============================================================================
 
+  private throwValidationError(fieldName: string, message: string): never {
+    throw new AIOperationError(
+      AIOperationErrorType.VALIDATION_ERROR, message,
+      `Please check the ${fieldName} field.`,
+    );
+  }
+
   validateRequired(value: any, fieldName: string): void {
-    if (value === undefined || value === null || value === '') {
-      throw new AIOperationError(
-        AIOperationErrorType.VALIDATION_ERROR,
-        `${fieldName} is required`,
-        `${fieldName} is required. Please provide a value.`
-      );
-    }
+    const r = v.validateRequired(value, fieldName);
+    if (!r.valid) this.throwValidationError(fieldName, r.message!);
   }
 
   validatePositiveNumber(value: number, fieldName: string): void {
-    if (typeof value !== 'number' || isNaN(value) || value <= 0) {
-      throw new AIOperationError(
-        AIOperationErrorType.VALIDATION_ERROR,
-        `${fieldName} must be a positive number`,
-        `${fieldName} must be a positive number. You provided: ${value}`
-      );
-    }
+    const r = v.validatePositiveNumber(value, fieldName);
+    if (!r.valid) this.throwValidationError(fieldName, r.message!);
   }
 
   validateNonNegativeNumber(value: number, fieldName: string): void {
-    if (typeof value !== 'number' || isNaN(value) || value < 0) {
-      throw new AIOperationError(
-        AIOperationErrorType.VALIDATION_ERROR,
-        `${fieldName} must be a non-negative number`,
-        `${fieldName} must be zero or greater. You provided: ${value}`
-      );
-    }
+    const r = v.validateNonNegativeNumber(value, fieldName);
+    if (!r.valid) this.throwValidationError(fieldName, r.message!);
   }
 
   validateDateString(value: string, fieldName: string): number {
-    const date = new Date(value);
-    if (isNaN(date.getTime())) {
-      throw new AIOperationError(
-        AIOperationErrorType.VALIDATION_ERROR,
-        `${fieldName} is not a valid date`,
-        `${fieldName} must be a valid date in YYYY-MM-DD format. You provided: ${value}`
-      );
-    }
-    return date.getTime();
+    const ts = v.parseDateString(value);
+    if (ts === null) this.throwValidationError(fieldName, `${fieldName} is not a valid date`);
+    return ts!;
   }
 
   validateEnum<T>(value: any, validValues: readonly T[], fieldName: string): T {
-    if (!validValues.includes(value as T)) {
-      throw new AIOperationError(
-        AIOperationErrorType.VALIDATION_ERROR,
-        `${fieldName} has invalid value`,
-        `${fieldName} must be one of: ${validValues.join(', ')}. You provided: ${value}`
-      );
+    if (!v.isInEnum(value, validValues)) {
+      this.throwValidationError(fieldName, `${fieldName} must be one of: ${validValues.join(', ')}`);
     }
     return value as T;
   }
 
-  validateStringLength(
-    value: string,
-    fieldName: string,
-    min: number,
-    max: number
-  ): void {
-    if (value.length < min || value.length > max) {
-      throw new AIOperationError(
-        AIOperationErrorType.VALIDATION_ERROR,
-        `${fieldName} length must be between ${min} and ${max}`,
-        `${fieldName} must be between ${min} and ${max} characters. Current length: ${value.length}`
-      );
+  validateStringLength(value: string, fieldName: string, min: number, max: number): void {
+    if (!v.isStringLengthBetween(value, min, max)) {
+      this.throwValidationError(fieldName, `${fieldName} must be between ${min} and ${max} characters`);
     }
   }
 
   validateBillingDay(day: number): void {
-    if (!Number.isInteger(day) || day < 1 || day > 31) {
-      throw new AIOperationError(
-        AIOperationErrorType.VALIDATION_ERROR,
-        'Billing day must be between 1 and 31',
-        `Billing day must be a number between 1 and 31. You provided: ${day}`
-      );
+    if (!v.isBillingDay(day)) {
+      this.throwValidationError('Billing day', `Billing day must be between 1 and 31. You provided: ${day}`);
     }
   }
 
   validateInterval(interval: number): void {
-    if (!Number.isInteger(interval) || interval < 1) {
-      throw new AIOperationError(
-        AIOperationErrorType.VALIDATION_ERROR,
-        'Interval must be a positive integer',
-        `Interval must be 1 or greater. You provided: ${interval}`
-      );
+    if (!v.isInteger(interval) || interval < 1) {
+      this.throwValidationError('Interval', 'Interval must be a positive integer');
     }
   }
 

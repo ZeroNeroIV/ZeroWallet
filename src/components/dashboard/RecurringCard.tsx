@@ -15,7 +15,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { spacing } from '../../theme';
+import { spacing } from '../../theme/spacing';
 import { useThemeColors } from '../../hooks/useThemeColors';
 
 interface RecurringCardProps {
