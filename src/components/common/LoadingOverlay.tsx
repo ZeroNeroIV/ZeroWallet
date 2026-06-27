@@ -21,7 +21,9 @@ import {
   Modal,
   ViewStyle,
 } from 'react-native';
-import { colors, spacing, typography } from '../../theme';
+import { colors } from '../../theme/colors';
+import { spacing } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 
 interface LoadingOverlayProps {
   visible: boolean;

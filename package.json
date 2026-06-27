@@ -16,8 +16,7 @@
     "test": "jest",
     "cr": "cd android && ./gradlew clean && cd .. && yarn android",
     "cleanIOS": "rm -rf ~/Library/Developer/Xcode/DerivedData && df -h",
-    "generate:icons": "node scripts/generate-icons.js",
-    "structure": "bash generate-structure.sh"
+    "generate:icons": "node scripts/generate-icons.js"
   },
   "dependencies": {
     "@bam.tech/react-native-image-resizer": "^3.0.11",

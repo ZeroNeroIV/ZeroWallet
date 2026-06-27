@@ -15,7 +15,7 @@
 
 import React, { useEffect } from 'react';
 import { View, StyleSheet, Image, Animated, ImageStyle } from 'react-native';
-import { colors } from '../../theme';
+import { colors } from '../../theme/colors';
 
 interface SplashScreenProps {
   onFinish?: () => void;

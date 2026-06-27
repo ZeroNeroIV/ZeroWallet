@@ -1,11 +1,10 @@
 // Account Store - Manages account balances (MMKV persisted for fast access)
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Platform } from 'react-native';
 import { mmkvStorage } from './middleware/mmkvStorage';
 
+import { VaultType } from '../domain/vault/VaultType';
 import type { AccountState } from '../types/store';
-import type { VaultType } from '../types/models';
 
 // ============================================
 // Account Store
@@ -68,41 +67,19 @@ export const useAccountStore = create<AccountState>()(
             return state;
           }
 
-          // Check sufficient balance
-          const fromBalance =
-            from === 'main'
-              ? currentBalance.mainBalance
-              : from === 'savings'
-                ? currentBalance.savingsBalance
-                : currentBalance.heldBalance;
+          const fromVt = VaultType.parse(from);
+          const fromBalance = fromVt.getBalance(currentBalance);
 
           if (fromBalance < amount) {
             console.error('[AccountStore] Insufficient balance in', from);
             throw new Error(`Insufficient balance in ${from} vault`);
           }
 
-          // Create new balance object
+          const toVt = VaultType.parse(to);
           const newBalance = { ...currentBalance };
+          newBalance[fromVt.key] -= amount;
+          newBalance[toVt.key] += amount;
 
-          // Subtract from source vault
-          if (from === 'main') {
-            newBalance.mainBalance -= amount;
-          } else if (from === 'savings') {
-            newBalance.savingsBalance -= amount;
-          } else {
-            newBalance.heldBalance -= amount;
-          }
-
-          // Add to destination vault
-          if (to === 'main') {
-            newBalance.mainBalance += amount;
-          } else if (to === 'savings') {
-            newBalance.savingsBalance += amount;
-          } else {
-            newBalance.heldBalance += amount;
-          }
-
-          // Recalculate computed fields
           newBalance.totalBalance =
             newBalance.mainBalance +
             newBalance.savingsBalance +
@@ -113,10 +90,6 @@ export const useAccountStore = create<AccountState>()(
 
           newBalance.lastUpdated = Date.now();
 
-          console.log(
-            `[AccountStore] Transferred ${amount} from ${from} to ${to}`
-          );
-
           return {
             balances: {
               ...state.balances,
@@ -124,8 +97,6 @@ export const useAccountStore = create<AccountState>()(
             },
           };
         });
-
-
       },
 
       getCurrentBalance: () => {

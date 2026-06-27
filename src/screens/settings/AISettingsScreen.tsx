@@ -28,7 +28,9 @@ import {
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSettingsStore } from '../../store/settingsStore';
-import { spacing, typography, compatColors as colors } from '../../theme';
+import { spacing } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
+import { compatColors as colors } from '../../theme/colors';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { lightHaptic, mediumHaptic } from '../../services/haptics/hapticFeedback';
 import { GeminiExplainerModal } from './GeminiExplainerModal';

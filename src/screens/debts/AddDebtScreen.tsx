@@ -18,9 +18,10 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { Input } from '../../components/forms/Input';
 import { AmountInput } from '../../components/forms/AmountInput';
 import { Button } from '../../components/forms/Button';
-import { useAuthStore } from '../../store';
+import { useAuthStore } from '../../store/authStore';
 import { DebtRepository } from '../../database/repositories/DebtRepository';
-import { spacing, typography, borderRadius } from '../../theme';
+import { spacing, borderRadius } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import type { DebtType } from '../../types/models';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { format } from 'date-fns';

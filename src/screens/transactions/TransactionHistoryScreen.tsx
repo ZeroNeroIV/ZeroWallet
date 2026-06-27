@@ -15,7 +15,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { TransactionItem } from '../../components/transactions/TransactionItem';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { borderRadius } from '../../theme';
+import { borderRadius } from '../../theme/spacing';
 import { MainStackParamList } from '../../types/navigation';
 import { Transaction, Category } from '../../types/models';
 import { useAuthStore } from '../../store/authStore';

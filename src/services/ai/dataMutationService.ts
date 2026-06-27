@@ -1,19 +1,3 @@
-/**
- * Purpose: Handle AI-initiated CRUD operations with pending action workflow
- *
- * Inputs:
- *   - accountId (string): Current user's account ID
- *   - userId (string): Current user's ID for category operations
- *
- * Outputs:
- *   - Returns (DataMutationService): Service instance with mutation methods
- *
- * Side effects:
- *   - Creates pending actions in memory
- *   - Executes database write operations on confirmation
- *   - Logs all operations via audit service
- */
-
 import { v4 as uuidv4 } from 'uuid';
 import { ValidationService } from './validationService';
 import { TransactionRepository } from '../../database/repositories/TransactionRepository';
@@ -22,6 +6,7 @@ import { DebtRepository } from '../../database/repositories/DebtRepository';
 import { SubscriptionRepository } from '../../database/repositories/SubscriptionRepository';
 import { RecurringExpenseRepository } from '../../database/repositories/RecurringExpenseRepository';
 import { CategoryRepository } from '../../database/repositories/CategoryRepository';
+import { logger } from '../../utils/logger';
 import {
   AIOperationError,
   AIOperationErrorType,
@@ -68,6 +53,7 @@ export class DataMutationService {
   private subscriptionRepo: SubscriptionRepository;
   private recurringRepo: RecurringExpenseRepository;
   private categoryRepo: CategoryRepository;
+  private executeHandlers: Map<string, (data: Record<string, any>) => Promise<string | undefined>>;
 
   constructor(accountId: string, userId: string) {
     this.accountId = accountId;
@@ -81,6 +67,31 @@ export class DataMutationService {
     this.subscriptionRepo = new SubscriptionRepository();
     this.recurringRepo = new RecurringExpenseRepository();
     this.categoryRepo = new CategoryRepository();
+    this.executeHandlers = new Map([
+      [WRITE_FUNCTION_NAMES.CREATE_TRANSACTION, (d) => this.executeCreateTransaction(d).then((id) => id)],
+      [WRITE_FUNCTION_NAMES.UPDATE_TRANSACTION, async (d) => { await this.executeUpdateTransaction(d); return d.transactionId; }],
+      [WRITE_FUNCTION_NAMES.DELETE_TRANSACTION, (d) => this.transactionRepo.delete(d.transactionId).then(() => undefined)],
+      [WRITE_FUNCTION_NAMES.CREATE_GOAL, (d) => this.executeCreateGoal(d).then((id) => id)],
+      [WRITE_FUNCTION_NAMES.UPDATE_GOAL, async (d) => { await this.goalRepo.update(d.goalId, d); return d.goalId; }],
+      [WRITE_FUNCTION_NAMES.UPDATE_GOAL_PROGRESS, async (d) => { await this.goalRepo.updateProgress(d.goalId, d.currentAmount); return d.goalId; }],
+      [WRITE_FUNCTION_NAMES.COMPLETE_GOAL, async (d) => { await this.goalRepo.markCompleted(d.goalId); return d.goalId; }],
+      [WRITE_FUNCTION_NAMES.DELETE_GOAL, (d) => this.goalRepo.delete(d.goalId).then(() => undefined)],
+      [WRITE_FUNCTION_NAMES.CREATE_DEBT, (d) => this.executeCreateDebt(d).then((id) => id)],
+      [WRITE_FUNCTION_NAMES.UPDATE_DEBT, async (d) => { await this.debtRepo.update(d.debtId, d); return d.debtId; }],
+      [WRITE_FUNCTION_NAMES.RECORD_DEBT_PAYMENT, async (d) => { await this.debtRepo.recordPayment(d.debtId, d.paymentAmount); return d.debtId; }],
+      [WRITE_FUNCTION_NAMES.MARK_DEBT_AS_PAID, async (d) => { await this.debtRepo.markAsPaid(d.debtId); return d.debtId; }],
+      [WRITE_FUNCTION_NAMES.DELETE_DEBT, (d) => this.debtRepo.delete(d.debtId).then(() => undefined)],
+      [WRITE_FUNCTION_NAMES.CREATE_SUBSCRIPTION, (d) => this.executeCreateSubscription(d).then((id) => id)],
+      [WRITE_FUNCTION_NAMES.UPDATE_SUBSCRIPTION, async (d) => { await this.subscriptionRepo.update(d.subscriptionId, d); return d.subscriptionId; }],
+      [WRITE_FUNCTION_NAMES.TOGGLE_SUBSCRIPTION, async (d) => { await this.subscriptionRepo.update(d.subscriptionId, { isActive: d.isActive }); return d.subscriptionId; }],
+      [WRITE_FUNCTION_NAMES.DELETE_SUBSCRIPTION, (d) => this.subscriptionRepo.delete(d.subscriptionId).then(() => undefined)],
+      [WRITE_FUNCTION_NAMES.CREATE_RECURRING_EXPENSE, (d) => this.executeCreateRecurringExpense(d).then((id) => id)],
+      [WRITE_FUNCTION_NAMES.UPDATE_RECURRING_EXPENSE, async (d) => { await this.recurringRepo.update(d.recurringExpenseId, d); return d.recurringExpenseId; }],
+      [WRITE_FUNCTION_NAMES.DELETE_RECURRING_EXPENSE, (d) => this.recurringRepo.delete(d.recurringExpenseId).then(() => undefined)],
+      [WRITE_FUNCTION_NAMES.CREATE_CATEGORY, (d) => this.executeCreateCategory(d).then((id) => id)],
+      [WRITE_FUNCTION_NAMES.UPDATE_CATEGORY, async (d) => { await this.categoryRepo.update(d.categoryId, d); return d.categoryId; }],
+      [WRITE_FUNCTION_NAMES.DELETE_CATEGORY, (d) => this.categoryRepo.delete(d.categoryId).then(() => undefined)],
+    ]);
   }
 
   // ============================================================================
@@ -113,7 +124,6 @@ export class DataMutationService {
 
     this.pendingActions.set(actionId, action);
 
-    // Auto-expire after TTL
     setTimeout(() => {
       this.expireAction(actionId);
     }, PENDING_ACTION_TTL_MS);
@@ -142,54 +152,80 @@ export class DataMutationService {
   }
 
   // ============================================================================
+  // Generic Action Builders
+  // ============================================================================
+
+  private async createAction<T, V>(
+    params: T,
+    entityType: EntityType,
+    funcName: string,
+    validate: (p: T) => Promise<V>,
+    buildSummary: (v: V) => string,
+  ): Promise<PendingAction> {
+    try {
+      const validated = await validate(params);
+      return this.createPendingAction(funcName, 'create', entityType, params, validated as any, buildSummary(validated));
+    } catch (error) {
+      throw this.handleError(error, `create ${entityType}`);
+    }
+  }
+
+  private async deleteAction<T extends { reason?: string }>(
+    params: T,
+    entityType: EntityType,
+    funcName: string,
+    entityId: string,
+    resolveData: (p: T) => Record<string, any>,
+  ): Promise<PendingAction> {
+    try {
+      await this.validator.validateEntityExists(entityType, entityId);
+      const summary = `Delete ${entityType}${params.reason ? ` (${params.reason})` : ''}`;
+      return this.createPendingAction(funcName, 'delete', entityType, params, resolveData(params), summary);
+    } catch (error) {
+      throw this.handleError(error, `delete ${entityType}`);
+    }
+  }
+
+  private async simpleUpdateAction<T>(
+    params: T,
+    entityType: EntityType,
+    funcName: string,
+    entityId: string,
+    buildSummary: () => string,
+  ): Promise<PendingAction> {
+    try {
+      await this.validator.validateEntityExists(entityType, entityId);
+      return this.createPendingAction(funcName, 'update', entityType, params, params as any, buildSummary());
+    } catch (error) {
+      throw this.handleError(error, `update ${entityType}`);
+    }
+  }
+
+  // ============================================================================
   // Transaction Operations
   // ============================================================================
 
   async createTransactionAction(params: CreateTransactionParams): Promise<PendingAction> {
-    try {
-      // Validate inputs
-      const validated = await this.validator.validateTransactionInput(params);
-
-      // Create summary
-      const summary = `Add ${validated.amount.toFixed(2)} ${params.type} to ${validated.categoryName}${params.description ? ` (${params.description})` : ''}`;
-
-      // Create pending action
-      return this.createPendingAction(
-        WRITE_FUNCTION_NAMES.CREATE_TRANSACTION,
-        'create',
-        'transaction',
-        params,
-        validated,
-        summary
-      );
-    } catch (error) {
-      throw this.handleError(error, 'create transaction');
-    }
+    return this.createAction(params, 'transaction', WRITE_FUNCTION_NAMES.CREATE_TRANSACTION,
+      (p) => this.validator.validateTransactionInput(p),
+      (v) => `Add ${v.amount.toFixed(2)} ${v.type} to ${v.categoryName}${params.description ? ` (${params.description})` : ''}`,
+    );
   }
 
   async updateTransactionAction(params: UpdateTransactionParams): Promise<PendingAction> {
     try {
-      // Validate transaction exists
       await this.validator.validateEntityExists('transaction', params.transactionId);
 
-      // Get current transaction
       const transaction = await this.transactionRepo.findById(params.transactionId);
       if (!transaction) {
-        throw new AIOperationError(
-          AIOperationErrorType.ENTITY_NOT_FOUND,
-          'Transaction not found',
-          'Transaction not found.'
-        );
+        throw new AIOperationError(AIOperationErrorType.ENTITY_NOT_FOUND, 'Transaction not found', 'Transaction not found.');
       }
 
-      // Validate and resolve updates
       const resolvedData: Record<string, any> = { transactionId: params.transactionId };
+      const updates: string[] = [];
 
       if (params.categoryName) {
-        const category = await this.validator.resolveCategoryName(
-          params.categoryName,
-          transaction.type
-        );
+        const category = await this.validator.resolveCategoryName(params.categoryName, transaction.type);
         resolvedData.categoryId = category.id;
         resolvedData.categoryName = category.name;
       }
@@ -197,6 +233,7 @@ export class DataMutationService {
       if (params.amount !== undefined) {
         this.validator.validatePositiveNumber(params.amount, 'Amount');
         resolvedData.amount = params.amount;
+        updates.push(`amount: ${params.amount.toFixed(2)}`);
       }
 
       if (params.date) {
@@ -205,54 +242,21 @@ export class DataMutationService {
 
       if (params.description !== undefined) {
         resolvedData.description = params.description;
+        if (params.description) updates.push(`description: ${params.description}`);
       }
 
       if (params.vaultType) {
-        resolvedData.vaultType = this.validator.validateEnum(
-          params.vaultType,
-          ['main', 'savings', 'held'] as const,
-          'Vault type'
-        );
+        resolvedData.vaultType = this.validator.validateEnum(params.vaultType, ['main', 'savings', 'held'] as const, 'Vault type');
       }
 
-      // Create summary
-      const updates = [];
-      if (params.amount) updates.push(`amount: ${params.amount.toFixed(2)}`);
-      if (params.categoryName) updates.push(`category: ${resolvedData.categoryName}`);
-      if (params.description) updates.push(`description: ${params.description}`);
-      const summary = `Update transaction - ${updates.join(', ')}`;
-
-      return this.createPendingAction(
-        WRITE_FUNCTION_NAMES.UPDATE_TRANSACTION,
-        'update',
-        'transaction',
-        params,
-        resolvedData,
-        summary
-      );
+      return this.createPendingAction(WRITE_FUNCTION_NAMES.UPDATE_TRANSACTION, 'update', 'transaction', params, resolvedData, `Update transaction - ${updates.join(', ')}`);
     } catch (error) {
       throw this.handleError(error, 'update transaction');
     }
   }
 
   async deleteTransactionAction(params: DeleteTransactionParams): Promise<PendingAction> {
-    try {
-      // Validate transaction exists
-      await this.validator.validateEntityExists('transaction', params.transactionId);
-
-      const summary = `Delete transaction${params.reason ? ` (${params.reason})` : ''}`;
-
-      return this.createPendingAction(
-        WRITE_FUNCTION_NAMES.DELETE_TRANSACTION,
-        'delete',
-        'transaction',
-        params,
-        { transactionId: params.transactionId },
-        summary
-      );
-    } catch (error) {
-      throw this.handleError(error, 'delete transaction');
-    }
+    return this.deleteAction(params, 'transaction', WRITE_FUNCTION_NAMES.DELETE_TRANSACTION, params.transactionId, (p) => ({ transactionId: p.transactionId }));
   }
 
   // ============================================================================
@@ -260,22 +264,10 @@ export class DataMutationService {
   // ============================================================================
 
   async createGoalAction(params: CreateGoalParams): Promise<PendingAction> {
-    try {
-      const validated = await this.validator.validateGoalInput(params);
-
-      const summary = `Create goal "${validated.name}" with target ${validated.targetAmount.toFixed(2)}`;
-
-      return this.createPendingAction(
-        WRITE_FUNCTION_NAMES.CREATE_GOAL,
-        'create',
-        'goal',
-        params,
-        validated,
-        summary
-      );
-    } catch (error) {
-      throw this.handleError(error, 'create goal');
-    }
+    return this.createAction(params, 'goal', WRITE_FUNCTION_NAMES.CREATE_GOAL,
+      (p) => this.validator.validateGoalInput(p),
+      (v) => `Create goal "${v.name}" with target ${v.targetAmount.toFixed(2)}`,
+    );
   }
 
   async updateGoalAction(params: UpdateGoalParams): Promise<PendingAction> {
@@ -283,7 +275,7 @@ export class DataMutationService {
       await this.validator.validateEntityExists('goal', params.goalId);
 
       const resolvedData: Record<string, any> = { goalId: params.goalId };
-      const updates = [];
+      const updates: string[] = [];
 
       if (params.name !== undefined) {
         this.validator.validateStringLength(params.name, 'Goal name', 1, 100);
@@ -298,85 +290,30 @@ export class DataMutationService {
       }
 
       if (params.fundingSource) {
-        resolvedData.fundingSource = this.validator.validateEnum(
-          params.fundingSource,
-          ['main', 'savings', 'both'] as const,
-          'Funding source'
-        );
+        resolvedData.fundingSource = this.validator.validateEnum(params.fundingSource, ['main', 'savings', 'both'] as const, 'Funding source');
         updates.push(`funding: ${params.fundingSource}`);
       }
 
-      const summary = `Update goal - ${updates.join(', ')}`;
-
-      return this.createPendingAction(
-        WRITE_FUNCTION_NAMES.UPDATE_GOAL,
-        'update',
-        'goal',
-        params,
-        resolvedData,
-        summary
-      );
+      return this.createPendingAction(WRITE_FUNCTION_NAMES.UPDATE_GOAL, 'update', 'goal', params, resolvedData, `Update goal - ${updates.join(', ')}`);
     } catch (error) {
       throw this.handleError(error, 'update goal');
     }
   }
 
   async updateGoalProgressAction(params: UpdateGoalProgressParams): Promise<PendingAction> {
-    try {
-      await this.validator.validateEntityExists('goal', params.goalId);
-      this.validator.validateNonNegativeNumber(params.currentAmount, 'Current amount');
-
-      const summary = `Update goal progress to ${params.currentAmount.toFixed(2)}`;
-
-      return this.createPendingAction(
-        WRITE_FUNCTION_NAMES.UPDATE_GOAL_PROGRESS,
-        'update',
-        'goal',
-        params,
-        params,
-        summary
-      );
-    } catch (error) {
-      throw this.handleError(error, 'update goal progress');
-    }
+    return this.simpleUpdateAction(params, 'goal', WRITE_FUNCTION_NAMES.UPDATE_GOAL_PROGRESS, params.goalId,
+      () => `Update goal progress to ${params.currentAmount.toFixed(2)}`,
+    );
   }
 
   async completeGoalAction(params: CompleteGoalParams): Promise<PendingAction> {
-    try {
-      await this.validator.validateEntityExists('goal', params.goalId);
-
-      const summary = 'Mark goal as completed';
-
-      return this.createPendingAction(
-        WRITE_FUNCTION_NAMES.COMPLETE_GOAL,
-        'update',
-        'goal',
-        params,
-        params,
-        summary
-      );
-    } catch (error) {
-      throw this.handleError(error, 'complete goal');
-    }
+    return this.simpleUpdateAction(params, 'goal', WRITE_FUNCTION_NAMES.COMPLETE_GOAL, params.goalId,
+      () => 'Mark goal as completed',
+    );
   }
 
   async deleteGoalAction(params: DeleteGoalParams): Promise<PendingAction> {
-    try {
-      await this.validator.validateEntityExists('goal', params.goalId);
-
-      const summary = `Delete goal${params.reason ? ` (${params.reason})` : ''}`;
-
-      return this.createPendingAction(
-        WRITE_FUNCTION_NAMES.DELETE_GOAL,
-        'delete',
-        'goal',
-        params,
-        { goalId: params.goalId },
-        summary
-      );
-    } catch (error) {
-      throw this.handleError(error, 'delete goal');
-    }
+    return this.deleteAction(params, 'goal', WRITE_FUNCTION_NAMES.DELETE_GOAL, params.goalId, (p) => ({ goalId: p.goalId }));
   }
 
   // ============================================================================
@@ -384,22 +321,10 @@ export class DataMutationService {
   // ============================================================================
 
   async createDebtAction(params: CreateDebtParams): Promise<PendingAction> {
-    try {
-      const validated = await this.validator.validateDebtInput(params);
-
-      const summary = `Record ${validated.amount.toFixed(2)} ${params.type} ${params.type === 'lent' ? 'to' : 'from'} ${validated.personName}`;
-
-      return this.createPendingAction(
-        WRITE_FUNCTION_NAMES.CREATE_DEBT,
-        'create',
-        'debt',
-        params,
-        validated,
-        summary
-      );
-    } catch (error) {
-      throw this.handleError(error, 'create debt');
-    }
+    return this.createAction(params, 'debt', WRITE_FUNCTION_NAMES.CREATE_DEBT,
+      (p) => this.validator.validateDebtInput(p),
+      (v) => `Record ${v.amount.toFixed(2)} ${params.type} ${params.type === 'lent' ? 'to' : 'from'} ${v.personName}`,
+    );
   }
 
   async updateDebtAction(params: UpdateDebtParams): Promise<PendingAction> {
@@ -407,7 +332,7 @@ export class DataMutationService {
       await this.validator.validateEntityExists('debt', params.debtId);
 
       const resolvedData: Record<string, any> = { debtId: params.debtId };
-      const updates = [];
+      const updates: string[] = [];
 
       if (params.personName !== undefined) {
         this.validator.validateStringLength(params.personName, 'Person name', 1, 100);
@@ -430,16 +355,7 @@ export class DataMutationService {
         resolvedData.description = params.description;
       }
 
-      const summary = `Update debt - ${updates.join(', ')}`;
-
-      return this.createPendingAction(
-        WRITE_FUNCTION_NAMES.UPDATE_DEBT,
-        'update',
-        'debt',
-        params,
-        resolvedData,
-        summary
-      );
+      return this.createPendingAction(WRITE_FUNCTION_NAMES.UPDATE_DEBT, 'update', 'debt', params, resolvedData, `Update debt - ${updates.join(', ')}`);
     } catch (error) {
       throw this.handleError(error, 'update debt');
     }
@@ -449,81 +365,31 @@ export class DataMutationService {
     try {
       await this.validator.validateEntityExists('debt', params.debtId);
       this.validator.validatePositiveNumber(params.paymentAmount, 'Payment amount');
-
-      const summary = `Record payment of ${params.paymentAmount.toFixed(2)} for debt`;
-
-      return this.createPendingAction(
-        WRITE_FUNCTION_NAMES.RECORD_DEBT_PAYMENT,
-        'update',
-        'debt',
-        params,
-        params,
-        summary
-      );
+      return this.createPendingAction(WRITE_FUNCTION_NAMES.RECORD_DEBT_PAYMENT, 'update', 'debt', params, params as any, `Record payment of ${params.paymentAmount.toFixed(2)} for debt`);
     } catch (error) {
       throw this.handleError(error, 'record debt payment');
     }
   }
 
   async markDebtAsPaidAction(params: MarkDebtAsPaidParams): Promise<PendingAction> {
-    try {
-      await this.validator.validateEntityExists('debt', params.debtId);
-
-      const summary = 'Mark debt as fully paid';
-
-      return this.createPendingAction(
-        WRITE_FUNCTION_NAMES.MARK_DEBT_AS_PAID,
-        'update',
-        'debt',
-        params,
-        params,
-        summary
-      );
-    } catch (error) {
-      throw this.handleError(error, 'mark debt as paid');
-    }
+    return this.simpleUpdateAction(params, 'debt', WRITE_FUNCTION_NAMES.MARK_DEBT_AS_PAID, params.debtId,
+      () => 'Mark debt as fully paid',
+    );
   }
 
   async deleteDebtAction(params: DeleteDebtParams): Promise<PendingAction> {
-    try {
-      await this.validator.validateEntityExists('debt', params.debtId);
-
-      const summary = `Delete debt${params.reason ? ` (${params.reason})` : ''}`;
-
-      return this.createPendingAction(
-        WRITE_FUNCTION_NAMES.DELETE_DEBT,
-        'delete',
-        'debt',
-        params,
-        { debtId: params.debtId },
-        summary
-      );
-    } catch (error) {
-      throw this.handleError(error, 'delete debt');
-    }
+    return this.deleteAction(params, 'debt', WRITE_FUNCTION_NAMES.DELETE_DEBT, params.debtId, (p) => ({ debtId: p.debtId }));
   }
 
   // ============================================================================
-  // Subscription Operations (continued in next message)
+  // Subscription Operations
   // ============================================================================
 
   async createSubscriptionAction(params: CreateSubscriptionParams): Promise<PendingAction> {
-    try {
-      const validated = await this.validator.validateSubscriptionInput(params);
-
-      const summary = `Create subscription "${validated.name}" - ${validated.amount.toFixed(2)} on day ${validated.billingDay}`;
-
-      return this.createPendingAction(
-        WRITE_FUNCTION_NAMES.CREATE_SUBSCRIPTION,
-        'create',
-        'subscription',
-        params,
-        validated,
-        summary
-      );
-    } catch (error) {
-      throw this.handleError(error, 'create subscription');
-    }
+    return this.createAction(params, 'subscription', WRITE_FUNCTION_NAMES.CREATE_SUBSCRIPTION,
+      (p) => this.validator.validateSubscriptionInput(p),
+      (v) => `Create subscription "${v.name}" - ${v.amount.toFixed(2)} on day ${v.billingDay}`,
+    );
   }
 
   async updateSubscriptionAction(params: UpdateSubscriptionParams): Promise<PendingAction> {
@@ -531,7 +397,7 @@ export class DataMutationService {
       await this.validator.validateEntityExists('subscription', params.subscriptionId);
 
       const resolvedData: Record<string, any> = { subscriptionId: params.subscriptionId };
-      const updates = [];
+      const updates: string[] = [];
 
       if (params.name !== undefined) {
         this.validator.validateStringLength(params.name, 'Subscription name', 1, 100);
@@ -563,57 +429,20 @@ export class DataMutationService {
         updates.push(`active: ${params.isActive}`);
       }
 
-      const summary = `Update subscription - ${updates.join(', ')}`;
-
-      return this.createPendingAction(
-        WRITE_FUNCTION_NAMES.UPDATE_SUBSCRIPTION,
-        'update',
-        'subscription',
-        params,
-        resolvedData,
-        summary
-      );
+      return this.createPendingAction(WRITE_FUNCTION_NAMES.UPDATE_SUBSCRIPTION, 'update', 'subscription', params, resolvedData, `Update subscription - ${updates.join(', ')}`);
     } catch (error) {
       throw this.handleError(error, 'update subscription');
     }
   }
 
   async toggleSubscriptionAction(params: ToggleSubscriptionParams): Promise<PendingAction> {
-    try {
-      await this.validator.validateEntityExists('subscription', params.subscriptionId);
-
-      const summary = `${params.isActive ? 'Activate' : 'Deactivate'} subscription`;
-
-      return this.createPendingAction(
-        WRITE_FUNCTION_NAMES.TOGGLE_SUBSCRIPTION,
-        'update',
-        'subscription',
-        params,
-        params,
-        summary
-      );
-    } catch (error) {
-      throw this.handleError(error, 'toggle subscription');
-    }
+    return this.simpleUpdateAction(params, 'subscription', WRITE_FUNCTION_NAMES.TOGGLE_SUBSCRIPTION, params.subscriptionId,
+      () => `${params.isActive ? 'Activate' : 'Deactivate'} subscription`,
+    );
   }
 
   async deleteSubscriptionAction(params: DeleteSubscriptionParams): Promise<PendingAction> {
-    try {
-      await this.validator.validateEntityExists('subscription', params.subscriptionId);
-
-      const summary = `Delete subscription${params.reason ? ` (${params.reason})` : ''}`;
-
-      return this.createPendingAction(
-        WRITE_FUNCTION_NAMES.DELETE_SUBSCRIPTION,
-        'delete',
-        'subscription',
-        params,
-        { subscriptionId: params.subscriptionId },
-        summary
-      );
-    } catch (error) {
-      throw this.handleError(error, 'delete subscription');
-    }
+    return this.deleteAction(params, 'subscription', WRITE_FUNCTION_NAMES.DELETE_SUBSCRIPTION, params.subscriptionId, (p) => ({ subscriptionId: p.subscriptionId }));
   }
 
   // ============================================================================
@@ -621,22 +450,10 @@ export class DataMutationService {
   // ============================================================================
 
   async createRecurringExpenseAction(params: CreateRecurringExpenseParams): Promise<PendingAction> {
-    try {
-      const validated = await this.validator.validateRecurringExpenseInput(params);
-
-      const summary = `Create recurring expense "${validated.name}" - ${validated.amount.toFixed(2)} ${params.frequency}`;
-
-      return this.createPendingAction(
-        WRITE_FUNCTION_NAMES.CREATE_RECURRING_EXPENSE,
-        'create',
-        'recurringExpense',
-        params,
-        validated,
-        summary
-      );
-    } catch (error) {
-      throw this.handleError(error, 'create recurring expense');
-    }
+    return this.createAction(params, 'recurringExpense', WRITE_FUNCTION_NAMES.CREATE_RECURRING_EXPENSE,
+      (p) => this.validator.validateRecurringExpenseInput(p),
+      (v) => `Create recurring expense "${v.name}" - ${v.amount.toFixed(2)} ${params.frequency}`,
+    );
   }
 
   async updateRecurringExpenseAction(params: UpdateRecurringExpenseParams): Promise<PendingAction> {
@@ -644,7 +461,7 @@ export class DataMutationService {
       await this.validator.validateEntityExists('recurringExpense', params.recurringExpenseId);
 
       const resolvedData: Record<string, any> = { recurringExpenseId: params.recurringExpenseId };
-      const updates = [];
+      const updates: string[] = [];
 
       if (params.name !== undefined) {
         this.validator.validateStringLength(params.name, 'Expense name', 1, 100);
@@ -666,11 +483,7 @@ export class DataMutationService {
       }
 
       if (params.frequency) {
-        resolvedData.frequency = this.validator.validateEnum(
-          params.frequency,
-          ['daily', 'weekly', 'monthly', 'yearly'] as const,
-          'Frequency'
-        );
+        resolvedData.frequency = this.validator.validateEnum(params.frequency, ['daily', 'weekly', 'monthly', 'yearly'] as const, 'Frequency');
         updates.push(`frequency: ${params.frequency}`);
       }
 
@@ -685,38 +498,14 @@ export class DataMutationService {
         updates.push(`active: ${params.isActive}`);
       }
 
-      const summary = `Update recurring expense - ${updates.join(', ')}`;
-
-      return this.createPendingAction(
-        WRITE_FUNCTION_NAMES.UPDATE_RECURRING_EXPENSE,
-        'update',
-        'recurringExpense',
-        params,
-        resolvedData,
-        summary
-      );
+      return this.createPendingAction(WRITE_FUNCTION_NAMES.UPDATE_RECURRING_EXPENSE, 'update', 'recurringExpense', params, resolvedData, `Update recurring expense - ${updates.join(', ')}`);
     } catch (error) {
       throw this.handleError(error, 'update recurring expense');
     }
   }
 
   async deleteRecurringExpenseAction(params: DeleteRecurringExpenseParams): Promise<PendingAction> {
-    try {
-      await this.validator.validateEntityExists('recurringExpense', params.recurringExpenseId);
-
-      const summary = `Delete recurring expense${params.reason ? ` (${params.reason})` : ''}`;
-
-      return this.createPendingAction(
-        WRITE_FUNCTION_NAMES.DELETE_RECURRING_EXPENSE,
-        'delete',
-        'recurringExpense',
-        params,
-        { recurringExpenseId: params.recurringExpenseId },
-        summary
-      );
-    } catch (error) {
-      throw this.handleError(error, 'delete recurring expense');
-    }
+    return this.deleteAction(params, 'recurringExpense', WRITE_FUNCTION_NAMES.DELETE_RECURRING_EXPENSE, params.recurringExpenseId, (p) => ({ recurringExpenseId: p.recurringExpenseId }));
   }
 
   // ============================================================================
@@ -724,22 +513,10 @@ export class DataMutationService {
   // ============================================================================
 
   async createCategoryAction(params: CreateCategoryParams): Promise<PendingAction> {
-    try {
-      const validated = await this.validator.validateCategoryInput(params);
-
-      const summary = `Create ${params.type} category "${validated.name}"`;
-
-      return this.createPendingAction(
-        WRITE_FUNCTION_NAMES.CREATE_CATEGORY,
-        'create',
-        'category',
-        params,
-        validated,
-        summary
-      );
-    } catch (error) {
-      throw this.handleError(error, 'create category');
-    }
+    return this.createAction(params, 'category', WRITE_FUNCTION_NAMES.CREATE_CATEGORY,
+      (p) => this.validator.validateCategoryInput(p),
+      (v) => `Create ${v.type} category "${v.name}"`,
+    );
   }
 
   async updateCategoryAction(params: UpdateCategoryParams): Promise<PendingAction> {
@@ -747,7 +524,7 @@ export class DataMutationService {
       await this.validator.validateEntityExists('category', params.categoryId);
 
       const resolvedData: Record<string, any> = { categoryId: params.categoryId };
-      const updates = [];
+      const updates: string[] = [];
 
       if (params.name !== undefined) {
         this.validator.validateStringLength(params.name, 'Category name', 1, 50);
@@ -765,16 +542,7 @@ export class DataMutationService {
         updates.push(`color: ${params.color}`);
       }
 
-      const summary = `Update category - ${updates.join(', ')}`;
-
-      return this.createPendingAction(
-        WRITE_FUNCTION_NAMES.UPDATE_CATEGORY,
-        'update',
-        'category',
-        params,
-        resolvedData,
-        summary
-      );
+      return this.createPendingAction(WRITE_FUNCTION_NAMES.UPDATE_CATEGORY, 'update', 'category', params, resolvedData, `Update category - ${updates.join(', ')}`);
     } catch (error) {
       throw this.handleError(error, 'update category');
     }
@@ -783,17 +551,7 @@ export class DataMutationService {
   async deleteCategoryAction(params: DeleteCategoryParams): Promise<PendingAction> {
     try {
       await this.validator.validateCategoryDeletion(params.categoryId);
-
-      const summary = 'Delete category';
-
-      return this.createPendingAction(
-        WRITE_FUNCTION_NAMES.DELETE_CATEGORY,
-        'delete',
-        'category',
-        params,
-        { categoryId: params.categoryId },
-        summary
-      );
+      return this.createPendingAction(WRITE_FUNCTION_NAMES.DELETE_CATEGORY, 'delete', 'category', params, { categoryId: params.categoryId }, 'Delete category');
     } catch (error) {
       throw this.handleError(error, 'delete category');
     }
@@ -804,148 +562,31 @@ export class DataMutationService {
   // ============================================================================
 
   async executeAction(actionId: string, providedAction?: PendingAction): Promise<ActionResult> {
-    // Use provided action if available, otherwise try to get from local Map
     const action = providedAction || this.pendingActions.get(actionId);
 
     if (!action) {
-      throw new AIOperationError(
-        AIOperationErrorType.ACTION_NOT_FOUND,
-        'Action not found',
-        'This action no longer exists. Please try again.'
-      );
+      throw new AIOperationError(AIOperationErrorType.ACTION_NOT_FOUND, 'Action not found', 'This action no longer exists. Please try again.');
     }
 
     if (action.status === 'expired') {
-      throw new AIOperationError(
-        AIOperationErrorType.ACTION_EXPIRED,
-        'Action expired',
-        'This action has expired. Would you like me to create it again?'
-      );
+      throw new AIOperationError(AIOperationErrorType.ACTION_EXPIRED, 'Action expired', 'This action has expired. Would you like me to create it again?');
     }
 
     if (action.status !== 'pending') {
-      throw new AIOperationError(
-        AIOperationErrorType.PERMISSION_DENIED,
-        `Action is ${action.status}`,
-        `This action is ${action.status} and cannot be executed.`
-      );
+      throw new AIOperationError(AIOperationErrorType.PERMISSION_DENIED, `Action is ${action.status}`, `This action is ${action.status} and cannot be executed.`);
     }
 
     try {
-      let entityId: string | undefined;
-
-      // Execute based on function name
-      switch (action.functionName) {
-        // Transactions
-        case WRITE_FUNCTION_NAMES.CREATE_TRANSACTION:
-          entityId = await this.executeCreateTransaction(action.resolvedData);
-          break;
-        case WRITE_FUNCTION_NAMES.UPDATE_TRANSACTION:
-          await this.executeUpdateTransaction(action.resolvedData);
-          entityId = action.resolvedData.transactionId;
-          break;
-        case WRITE_FUNCTION_NAMES.DELETE_TRANSACTION:
-          await this.transactionRepo.delete(action.resolvedData.transactionId);
-          break;
-
-        // Goals
-        case WRITE_FUNCTION_NAMES.CREATE_GOAL:
-          entityId = await this.executeCreateGoal(action.resolvedData);
-          break;
-        case WRITE_FUNCTION_NAMES.UPDATE_GOAL:
-          await this.goalRepo.update(action.resolvedData.goalId, action.resolvedData);
-          entityId = action.resolvedData.goalId;
-          break;
-        case WRITE_FUNCTION_NAMES.UPDATE_GOAL_PROGRESS:
-          await this.goalRepo.updateProgress(action.resolvedData.goalId, action.resolvedData.currentAmount);
-          entityId = action.resolvedData.goalId;
-          break;
-        case WRITE_FUNCTION_NAMES.COMPLETE_GOAL:
-          await this.goalRepo.markCompleted(action.resolvedData.goalId);
-          entityId = action.resolvedData.goalId;
-          break;
-        case WRITE_FUNCTION_NAMES.DELETE_GOAL:
-          await this.goalRepo.delete(action.resolvedData.goalId);
-          break;
-
-        // Debts
-        case WRITE_FUNCTION_NAMES.CREATE_DEBT:
-          entityId = await this.executeCreateDebt(action.resolvedData);
-          break;
-        case WRITE_FUNCTION_NAMES.UPDATE_DEBT:
-          await this.debtRepo.update(action.resolvedData.debtId, action.resolvedData);
-          entityId = action.resolvedData.debtId;
-          break;
-        case WRITE_FUNCTION_NAMES.RECORD_DEBT_PAYMENT:
-          await this.debtRepo.recordPayment(action.resolvedData.debtId, action.resolvedData.paymentAmount);
-          entityId = action.resolvedData.debtId;
-          break;
-        case WRITE_FUNCTION_NAMES.MARK_DEBT_AS_PAID:
-          await this.debtRepo.markAsPaid(action.resolvedData.debtId);
-          entityId = action.resolvedData.debtId;
-          break;
-        case WRITE_FUNCTION_NAMES.DELETE_DEBT:
-          await this.debtRepo.delete(action.resolvedData.debtId);
-          break;
-
-        // Subscriptions
-        case WRITE_FUNCTION_NAMES.CREATE_SUBSCRIPTION:
-          entityId = await this.executeCreateSubscription(action.resolvedData);
-          break;
-        case WRITE_FUNCTION_NAMES.UPDATE_SUBSCRIPTION:
-          await this.subscriptionRepo.update(action.resolvedData.subscriptionId, action.resolvedData);
-          entityId = action.resolvedData.subscriptionId;
-          break;
-        case WRITE_FUNCTION_NAMES.TOGGLE_SUBSCRIPTION:
-          await this.subscriptionRepo.update(action.resolvedData.subscriptionId, { isActive: action.resolvedData.isActive });
-          entityId = action.resolvedData.subscriptionId;
-          break;
-        case WRITE_FUNCTION_NAMES.DELETE_SUBSCRIPTION:
-          await this.subscriptionRepo.delete(action.resolvedData.subscriptionId);
-          break;
-
-        // Recurring Expenses
-        case WRITE_FUNCTION_NAMES.CREATE_RECURRING_EXPENSE:
-          entityId = await this.executeCreateRecurringExpense(action.resolvedData);
-          break;
-        case WRITE_FUNCTION_NAMES.UPDATE_RECURRING_EXPENSE:
-          await this.recurringRepo.update(action.resolvedData.recurringExpenseId, action.resolvedData);
-          entityId = action.resolvedData.recurringExpenseId;
-          break;
-        case WRITE_FUNCTION_NAMES.DELETE_RECURRING_EXPENSE:
-          await this.recurringRepo.delete(action.resolvedData.recurringExpenseId);
-          break;
-
-        // Categories
-        case WRITE_FUNCTION_NAMES.CREATE_CATEGORY:
-          entityId = await this.executeCreateCategory(action.resolvedData);
-          break;
-        case WRITE_FUNCTION_NAMES.UPDATE_CATEGORY:
-          await this.categoryRepo.update(action.resolvedData.categoryId, action.resolvedData);
-          entityId = action.resolvedData.categoryId;
-          break;
-        case WRITE_FUNCTION_NAMES.DELETE_CATEGORY:
-          await this.categoryRepo.delete(action.resolvedData.categoryId);
-          break;
-
-        default:
-          throw new AIOperationError(
-            AIOperationErrorType.PERMISSION_DENIED,
-            `Unknown function: ${action.functionName}`,
-            'Unknown operation.'
-          );
+      const handler = this.executeHandlers.get(action.functionName);
+      if (!handler) {
+        throw new AIOperationError(AIOperationErrorType.PERMISSION_DENIED, `Unknown function: ${action.functionName}`, 'Unknown operation.');
       }
 
-      // Mark action as confirmed
+      const entityId = await handler(action.resolvedData);
       action.status = 'confirmed';
       this.pendingActions.set(actionId, action);
 
-      return {
-        success: true,
-        actionId,
-        entityType: action.entityType,
-        entityId,
-      };
+      return { success: true, actionId, entityType: action.entityType, entityId };
     } catch (error) {
       action.status = 'failed';
       this.pendingActions.set(actionId, action);
@@ -979,7 +620,6 @@ export class DataMutationService {
     if (data.description !== undefined) updates.description = data.description;
     if (data.date !== undefined) updates.date = data.date;
     if (data.vaultType !== undefined) updates.vaultType = data.vaultType;
-
     await this.transactionRepo.update(data.transactionId, updates);
   }
 
@@ -1057,8 +697,7 @@ export class DataMutationService {
     if (error instanceof AIOperationError) {
       return error;
     }
-
-    console.error(`[DataMutationService] Error in ${operation}:`, error);
+    logger.error('[DataMutationService]', `Error in ${operation}`, error);
 
     return new AIOperationError(
       AIOperationErrorType.DATABASE_ERROR,

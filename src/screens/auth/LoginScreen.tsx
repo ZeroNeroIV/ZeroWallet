@@ -15,9 +15,11 @@ import type { StackNavigationProp } from '@react-navigation/stack';
 import type { AuthStackParamList } from '../../types/navigation';
 import { Input } from '../../components/forms/Input';
 import { Button } from '../../components/forms/Button';
-import { useAuthStore } from '../../store';
+import { useAuthStore } from '../../store/authStore';
 import { validateEmail, validatePassword } from '../../utils/validators';
-import { colors, spacing, typography, borderRadius } from '../../theme';
+import { colors } from '../../theme/colors';
+import { spacing, borderRadius } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
 
 type LoginScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'Login'>;

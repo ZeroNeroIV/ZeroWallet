@@ -1,258 +1,129 @@
-// Transaction Repository - Manages transaction database operations
+// Transaction Repository — extends BaseRepository
 import { v4 as uuidv4 } from 'uuid';
 import { executeSql } from '../index';
+import { BaseRepository } from '../BaseRepository';
 import type { Transaction, TransactionInput } from '../../types/models';
+import type { FieldMapping } from '../types';
 import { deleteTransactionImage } from '../../utils/imageStorage';
 
-export class TransactionRepository {
-  // ============================================
-  // Create Transaction
-  // ============================================
+const FIELD_MAPPINGS: FieldMapping[] = [
+  { field: 'accountId', column: 'account_id' },
+  { field: 'type', column: 'type' },
+  { field: 'amount', column: 'amount' },
+  { field: 'categoryId', column: 'category_id' },
+  { field: 'description', column: 'description' },
+  { field: 'date', column: 'date' },
+  { field: 'vaultType', column: 'vault_type' },
+  { field: 'isRecurring', column: 'is_recurring' },
+  { field: 'recurringExpenseId', column: 'recurring_expense_id' },
+  { field: 'subscriptionId', column: 'subscription_id' },
+  { field: 'imagePath', column: 'image_path' },
+  { field: 'currency', column: 'currency' },
+  { field: 'originalAmount', column: 'original_amount' },
+  { field: 'exchangeRate', column: 'exchange_rate' },
+  { field: 'convertedAmount', column: 'converted_amount' },
+];
 
-  async create(data: TransactionInput): Promise<Transaction> {
-    const id = uuidv4();
-    const now = Date.now();
+export class TransactionRepository extends BaseRepository<Transaction, TransactionInput> {
+  protected tableName = 'transactions';
+  protected fieldMappings = FIELD_MAPPINGS;
 
-    const transaction: Transaction = {
-      id,
-      accountId: data.accountId,
-      type: data.type,
-      amount: data.amount,
-      categoryId: data.categoryId,
-      description: data.description || '',
-      date: data.date,
-      vaultType: data.vaultType,
-      isRecurring: data.isRecurring || false,
-      recurringExpenseId: data.recurringExpenseId,
-      subscriptionId: data.subscriptionId,
-      imagePath: data.imagePath,
-      currency: data.currency || 'USD',
-      originalAmount: data.originalAmount,
-      exchangeRate: data.exchangeRate,
-      convertedAmount: data.convertedAmount,
-      createdAt: now,
-      updatedAt: now,
+  protected mapRow(row: Record<string, unknown>): Transaction {
+    return {
+      id: row.id as string,
+      accountId: row.account_id as string,
+      type: row.type as Transaction['type'],
+      amount: row.amount as number,
+      categoryId: row.category_id as string,
+      description: row.description as string,
+      date: row.date as number,
+      vaultType: row.vault_type as Transaction['vaultType'],
+      isRecurring: (row.is_recurring as number) === 1,
+      recurringExpenseId: row.recurring_expense_id as string | undefined,
+      subscriptionId: row.subscription_id as string | undefined,
+      imagePath: row.image_path as string | undefined,
+      currency: (row.currency as string) || 'USD',
+      originalAmount: row.original_amount as number | undefined,
+      exchangeRate: row.exchange_rate as number | undefined,
+      convertedAmount: row.converted_amount as number | undefined,
+      createdAt: row.created_at as number,
+      updatedAt: row.updated_at as number,
     };
-
-    await executeSql(
-      `INSERT INTO transactions (
-        id, account_id, type, amount, category_id, description, date,
-        vault_type, is_recurring, recurring_expense_id, subscription_id,
-        image_path, currency, original_amount, exchange_rate, converted_amount,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        transaction.id,
-        transaction.accountId,
-        transaction.type,
-        transaction.amount,
-        transaction.categoryId,
-        transaction.description,
-        transaction.date,
-        transaction.vaultType,
-        transaction.isRecurring ? 1 : 0,
-        transaction.recurringExpenseId || null,
-        transaction.subscriptionId || null,
-        transaction.imagePath || null,
-        transaction.currency,
-        transaction.originalAmount || null,
-        transaction.exchangeRate || null,
-        transaction.convertedAmount || null,
-        transaction.createdAt,
-        transaction.updatedAt,
-      ]
-    );
-
-    console.log('[TransactionRepo] Transaction created:', transaction.id);
-    return transaction;
   }
 
-  // ============================================
-  // Find Transaction by ID
-  // ============================================
-
-  async findById(id: string): Promise<Transaction | null> {
-    const rows = await executeSql<any>(
-      'SELECT * FROM transactions WHERE id = ?',
-      [id]
-    );
-
-    if (rows.length === 0) {
-      return null;
+  async findByAccount(accountId: string, limit?: number): Promise<Transaction[]> {
+    if (limit) {
+      return this.rawQuery(
+        'SELECT * FROM transactions WHERE account_id = ? ORDER BY date DESC, created_at DESC LIMIT ?',
+        [accountId, limit],
+      );
     }
-
-    const tx = this.mapRowToTransaction(rows[0]);
-    tx.images = await this.getImages(id);
-    return tx;
+    return this.rawQuery(
+      'SELECT * FROM transactions WHERE account_id = ? ORDER BY date DESC, created_at DESC',
+      [accountId],
+    );
   }
-
-  // ============================================
-  // Find Transactions by Account
-  // ============================================
-
-  async findByAccount(
-    accountId: string,
-    limit?: number
-  ): Promise<Transaction[]> {
-    const sql = limit
-      ? 'SELECT * FROM transactions WHERE account_id = ? ORDER BY date DESC, created_at DESC LIMIT ?'
-      : 'SELECT * FROM transactions WHERE account_id = ? ORDER BY date DESC, created_at DESC';
-
-    const params = limit ? [accountId, limit] : [accountId];
-
-    const rows = await executeSql<any>(sql, params);
-
-    return rows.map((row) => this.mapRowToTransaction(row));
-  }
-
-  // ============================================
-  // Find Transactions by Date Range
-  // ============================================
 
   async findByDateRange(
     accountId: string,
     startDate: number,
-    endDate: number
+    endDate: number,
   ): Promise<Transaction[]> {
-    const rows = await executeSql<any>(
-      `SELECT * FROM transactions
-       WHERE account_id = ? AND date >= ? AND date <= ?
-       ORDER BY date DESC, created_at DESC`,
-      [accountId, startDate, endDate]
+    return this.rawQuery(
+      'SELECT * FROM transactions WHERE account_id = ? AND date >= ? AND date <= ? ORDER BY date DESC, created_at DESC',
+      [accountId, startDate, endDate],
     );
-
-    return rows.map((row) => this.mapRowToTransaction(row));
   }
-
-  // ============================================
-  // Find Transactions by Category
-  // ============================================
 
   async findByCategory(categoryId: string): Promise<Transaction[]> {
-    const rows = await executeSql<any>(
+    return this.rawQuery(
       'SELECT * FROM transactions WHERE category_id = ? ORDER BY date DESC',
-      [categoryId]
+      [categoryId],
     );
-
-    return rows.map((row) => this.mapRowToTransaction(row));
   }
 
-  // ============================================
-  // Update Transaction
-  // ============================================
-
-  async update(id: string, updates: Partial<Transaction>): Promise<void> {
-    const now = Date.now();
-    const fields: string[] = [];
-    const values: any[] = [];
-
-    if (updates.amount !== undefined) {
-      fields.push('amount = ?');
-      values.push(updates.amount);
+  async findById(id: string): Promise<Transaction | null> {
+    const tx = await super.findById(id);
+    if (tx) {
+      tx.images = await this.getImages(id);
     }
-
-    if (updates.categoryId !== undefined) {
-      fields.push('category_id = ?');
-      values.push(updates.categoryId);
-    }
-
-    if (updates.description !== undefined) {
-      fields.push('description = ?');
-      values.push(updates.description);
-    }
-
-    if (updates.date !== undefined) {
-      fields.push('date = ?');
-      values.push(updates.date);
-    }
-
-    if (updates.vaultType !== undefined) {
-      fields.push('vault_type = ?');
-      values.push(updates.vaultType);
-    }
-
-    if (updates.imagePath !== undefined) {
-      fields.push('image_path = ?');
-      values.push(updates.imagePath);
-    }
-
-    if (updates.currency !== undefined) {
-      fields.push('currency = ?');
-      values.push(updates.currency);
-    }
-
-    if (updates.originalAmount !== undefined) {
-      fields.push('original_amount = ?');
-      values.push(updates.originalAmount);
-    }
-
-    if (updates.exchangeRate !== undefined) {
-      fields.push('exchange_rate = ?');
-      values.push(updates.exchangeRate);
-    }
-
-    if (updates.convertedAmount !== undefined) {
-      fields.push('converted_amount = ?');
-      values.push(updates.convertedAmount);
-    }
-
-    fields.push('updated_at = ?');
-    values.push(now);
-
-    values.push(id);
-
-    await executeSql(
-      `UPDATE transactions SET ${fields.join(', ')} WHERE id = ?`,
-      values
-    );
-
-    console.log('[TransactionRepo] Transaction updated:', id);
+    return tx;
   }
-
-  // ============================================
-  // Delete Transaction
-  // ============================================
 
   async delete(id: string): Promise<void> {
-    // Delete associated image if exists
     await deleteTransactionImage(id);
-
     await executeSql('DELETE FROM transactions WHERE id = ?', [id]);
-    console.log('[TransactionRepo] Transaction deleted:', id);
   }
-
-  // ============================================
-  // Get Monthly Stats
-  // ============================================
 
   async getMonthlyStats(
     accountId: string,
     year: number,
-    month: number
+    month: number,
   ): Promise<{
     totalIncome: number;
     totalExpense: number;
     netChange: number;
     transactionCount: number;
   }> {
-    // Get start and end of month
     const startDate = new Date(year, month - 1, 1).getTime();
     const endDate = new Date(year, month, 0, 23, 59, 59, 999).getTime();
 
-    const rows = await executeSql<any>(
+    const rows = await this.queryScalar<{
+      total_income: number;
+      total_expense: number;
+      transaction_count: number;
+    }>(
       `SELECT
         SUM(CASE WHEN type = 'income' THEN COALESCE(converted_amount, amount) ELSE 0 END) as total_income,
         SUM(CASE WHEN type = 'expense' THEN COALESCE(converted_amount, amount) ELSE 0 END) as total_expense,
         COUNT(*) as transaction_count
-       FROM transactions
-       WHERE account_id = ? AND date >= ? AND date <= ?`,
-      [accountId, startDate, endDate]
+       FROM transactions WHERE account_id = ? AND date >= ? AND date <= ?`,
+      [accountId, startDate, endDate],
     );
 
-    const row = rows[0];
+    const row = rows[0] || { total_income: 0, total_expense: 0, transaction_count: 0 };
     const totalIncome = row.total_income || 0;
     const totalExpense = row.total_expense || 0;
-
     return {
       totalIncome,
       totalExpense,
@@ -261,89 +132,44 @@ export class TransactionRepository {
     };
   }
 
-  // ============================================
-  // Get Category Breakdown
-  // ============================================
-
   async getCategoryBreakdown(
     accountId: string,
     startDate: number,
     endDate: number,
-    type: 'income' | 'expense'
-  ): Promise<
-    Array<{
-      categoryId: string;
-      totalAmount: number;
-      transactionCount: number;
-    }>
-  > {
-    const rows = await executeSql<any>(
+    type: 'income' | 'expense',
+  ): Promise<Array<{ categoryId: string; totalAmount: number; transactionCount: number }>> {
+    return this.queryScalar(
       `SELECT
-        category_id,
-        SUM(COALESCE(converted_amount, amount)) as total_amount,
-        COUNT(*) as transaction_count
+        category_id as categoryId,
+        SUM(COALESCE(converted_amount, amount)) as totalAmount,
+        COUNT(*) as transactionCount
        FROM transactions
        WHERE account_id = ? AND type = ? AND date >= ? AND date <= ?
-       GROUP BY category_id
-       ORDER BY total_amount DESC`,
-      [accountId, type, startDate, endDate]
+       GROUP BY category_id ORDER BY totalAmount DESC`,
+      [accountId, type, startDate, endDate],
     );
-
-    return rows.map((row) => ({
-      categoryId: row.category_id,
-      totalAmount: row.total_amount,
-      transactionCount: row.transaction_count,
-    }));
   }
-
-  // ============================================
-  // Helper: Map Database Row to Transaction
-  // ============================================
 
   async getImages(transactionId: string): Promise<string[]> {
     try {
-      const rows = await executeSql<any>(
+      const rows = await executeSql<{ image_path: string }>(
         'SELECT image_path FROM transaction_images WHERE transaction_id = ? ORDER BY sort_order ASC',
-        [transactionId]
+        [transactionId],
       );
-      return rows.map((r: any) => r.image_path as string);
+      return rows.map((r) => r.image_path);
     } catch {
       return [];
     }
   }
 
   async addImage(transactionId: string, imagePath: string, sortOrder: number): Promise<void> {
-    const id = uuidv4();
     await executeSql(
       'INSERT INTO transaction_images (id, transaction_id, image_path, sort_order, created_at) VALUES (?, ?, ?, ?, ?)',
-      [id, transactionId, imagePath, sortOrder, Date.now()]
+      [uuidv4(), transactionId, imagePath, sortOrder, Date.now()],
     );
   }
 
   async deleteImages(transactionId: string): Promise<void> {
     await executeSql('DELETE FROM transaction_images WHERE transaction_id = ?', [transactionId]);
-  }
-
-  private mapRowToTransaction(row: any): Transaction {
-    return {
-      id: row.id,
-      accountId: row.account_id,
-      type: row.type,
-      amount: row.amount,
-      categoryId: row.category_id,
-      description: row.description,
-      date: row.date,
-      vaultType: row.vault_type,
-      isRecurring: row.is_recurring === 1,
-      recurringExpenseId: row.recurring_expense_id,
-      subscriptionId: row.subscription_id,
-      imagePath: row.image_path,
-      currency: row.currency || 'USD',
-      originalAmount: row.original_amount,
-      exchangeRate: row.exchange_rate,
-      convertedAmount: row.converted_amount,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    };
   }
 }

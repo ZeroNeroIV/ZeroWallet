@@ -33,11 +33,12 @@ import { Input } from '../../components/forms/Input';
 import { Button } from '../../components/forms/Button';
 import { AmountInput } from '../../components/forms/AmountInput';
 import { CategoryPicker } from '../../components/forms/CategoryPicker';
-import { useAuthStore } from '../../store';
+import { useAuthStore } from '../../store/authStore';
 import { RecurringExpenseRepository } from '../../database/repositories/RecurringExpenseRepository';
 import { CategoryRepository } from '../../database/repositories/CategoryRepository';
 import { validateRequired } from '../../utils/validators';
-import { spacing, typography, borderRadius } from '../../theme';
+import { spacing, borderRadius } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import type { Category, VaultType, RecurringFrequency } from '../../types/models';
 import { useThemeColors } from '../../hooks/useThemeColors';
 

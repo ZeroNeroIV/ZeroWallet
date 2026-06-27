@@ -9,7 +9,8 @@ import Animated, {
     withTiming,
     interpolate,
 } from 'react-native-reanimated';
-import { spacing, typography } from '../../theme';
+import { spacing } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import type { Goal } from '../../types/models';
 import {

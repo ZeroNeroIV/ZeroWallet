@@ -7,7 +7,8 @@ import {
   FlatList,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { spacing, typography } from '../../theme';
+import { spacing } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import { BentoCard } from './BentoCard';
 import { Transaction, Category } from '../../types/models';
 import { format } from 'date-fns';

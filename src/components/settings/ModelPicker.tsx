@@ -24,7 +24,8 @@ import {
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { GEMINI_MODELS, TOKENS_EXPLANATION } from '../../constants/geminiModels';
 import type { GeminiModel } from '../../types/ai';
-import { spacing, typography, borderRadius } from '../../theme';
+import { spacing, borderRadius } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { lightHaptic, mediumHaptic } from '../../services/haptics/hapticFeedback';
 

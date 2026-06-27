@@ -11,6 +11,7 @@
 import { SubscriptionRepository } from '../../database/repositories/SubscriptionRepository';
 import { TransactionRepository } from '../../database/repositories/TransactionRepository';
 import { AccountRepository } from '../../database/repositories/AccountRepository';
+import { VaultType } from '../../domain/vault/VaultType';
 import { useAccountStore } from '../../store/accountStore';
 
 /**
@@ -139,20 +140,11 @@ export async function checkAndProcessSubscriptions(accountId: string): Promise<{
           totalAmount += subscription.amount;
         }
         
-        // Update vault balance
         const currentBalance = accountStore.balances[subscription.accountId];
         if (currentBalance) {
-          const updates: any = {};
+          const vt = VaultType.parse(subscription.vaultType);
           const totalDeduction = subscription.amount * missedCycles;
-          
-          if (subscription.vaultType === 'main') {
-            updates.mainBalance = currentBalance.mainBalance - totalDeduction;
-          } else if (subscription.vaultType === 'savings') {
-            updates.savingsBalance = currentBalance.savingsBalance - totalDeduction;
-          } else {
-            updates.heldBalance = currentBalance.heldBalance - totalDeduction;
-          }
-          accountStore.updateBalance(subscription.accountId, updates);
+          accountStore.updateBalance(subscription.accountId, vt.adjustBalance(currentBalance, -totalDeduction));
         }
         
         // Calculate next billing date

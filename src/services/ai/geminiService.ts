@@ -19,7 +19,7 @@ import type { AIConversationContext, GeminiModel } from '../../types/ai';
 import { DataQueryService } from './dataQueryService';
 import { DataMutationService } from './dataMutationService';
 import { buildSystemPrompt } from './systemPrompt';
-import { isWriteFunction } from '../../types/aiMutations';
+import { FUNCTION_DEFINITIONS, WRITE_FUNCTION_NAMES_SET } from './functionRegistry';
 
 interface GeminiMessage {
   role: 'user' | 'model';
@@ -39,6 +39,7 @@ export class GeminiService {
   private dataQuery: DataQueryService;
   private dataMutation: DataMutationService;
   private baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models';
+  private writeHandlers: Map<string, (params: Record<string, any>) => Promise<any>>;
 
   constructor(apiKey: string, accountId: string, userId: string, modelId: GeminiModel) {
     this.apiKey = apiKey;
@@ -47,6 +48,31 @@ export class GeminiService {
     this.modelId = modelId;
     this.dataQuery = new DataQueryService(accountId);
     this.dataMutation = new DataMutationService(accountId, userId);
+    this.writeHandlers = new Map([
+      ['createTransaction', this.dataMutation.createTransactionAction.bind(this.dataMutation)],
+      ['updateTransaction', this.dataMutation.updateTransactionAction.bind(this.dataMutation)],
+      ['deleteTransaction', this.dataMutation.deleteTransactionAction.bind(this.dataMutation)],
+      ['createGoal', this.dataMutation.createGoalAction.bind(this.dataMutation)],
+      ['updateGoal', this.dataMutation.updateGoalAction.bind(this.dataMutation)],
+      ['updateGoalProgress', this.dataMutation.updateGoalProgressAction.bind(this.dataMutation)],
+      ['completeGoal', this.dataMutation.completeGoalAction.bind(this.dataMutation)],
+      ['deleteGoal', this.dataMutation.deleteGoalAction.bind(this.dataMutation)],
+      ['createDebt', this.dataMutation.createDebtAction.bind(this.dataMutation)],
+      ['updateDebt', this.dataMutation.updateDebtAction.bind(this.dataMutation)],
+      ['recordDebtPayment', this.dataMutation.recordDebtPaymentAction.bind(this.dataMutation)],
+      ['markDebtAsPaid', this.dataMutation.markDebtAsPaidAction.bind(this.dataMutation)],
+      ['deleteDebt', this.dataMutation.deleteDebtAction.bind(this.dataMutation)],
+      ['createSubscription', this.dataMutation.createSubscriptionAction.bind(this.dataMutation)],
+      ['updateSubscription', this.dataMutation.updateSubscriptionAction.bind(this.dataMutation)],
+      ['toggleSubscription', this.dataMutation.toggleSubscriptionAction.bind(this.dataMutation)],
+      ['deleteSubscription', this.dataMutation.deleteSubscriptionAction.bind(this.dataMutation)],
+      ['createRecurringExpense', this.dataMutation.createRecurringExpenseAction.bind(this.dataMutation)],
+      ['updateRecurringExpense', this.dataMutation.updateRecurringExpenseAction.bind(this.dataMutation)],
+      ['deleteRecurringExpense', this.dataMutation.deleteRecurringExpenseAction.bind(this.dataMutation)],
+      ['createCategory', this.dataMutation.createCategoryAction.bind(this.dataMutation)],
+      ['updateCategory', this.dataMutation.updateCategoryAction.bind(this.dataMutation)],
+      ['deleteCategory', this.dataMutation.deleteCategoryAction.bind(this.dataMutation)],
+    ]);
   }
 
   /**
@@ -110,7 +136,7 @@ export class GeminiService {
 
     for (const call of functionCalls) {
       // Check if this is a write function
-      if (isWriteFunction(call.name)) {
+      if (WRITE_FUNCTION_NAMES_SET.has(call.name)) {
         // For write functions, create pending action instead of executing
         console.log('[GeminiService] Write function detected:', call.name);
         const result = await this.handleWriteFunction(call.name, call.args);
@@ -193,95 +219,11 @@ export class GeminiService {
     params: Record<string, any>
   ): Promise<{ pendingAction: any; error?: string }> {
     try {
-      let pendingAction;
-
-      // Route to appropriate mutation service method
-      switch (functionName) {
-        // Transactions
-        case 'createTransaction':
-          pendingAction = await this.dataMutation.createTransactionAction(params);
-          break;
-        case 'updateTransaction':
-          pendingAction = await this.dataMutation.updateTransactionAction(params);
-          break;
-        case 'deleteTransaction':
-          pendingAction = await this.dataMutation.deleteTransactionAction(params);
-          break;
-
-        // Goals
-        case 'createGoal':
-          pendingAction = await this.dataMutation.createGoalAction(params);
-          break;
-        case 'updateGoal':
-          pendingAction = await this.dataMutation.updateGoalAction(params);
-          break;
-        case 'updateGoalProgress':
-          pendingAction = await this.dataMutation.updateGoalProgressAction(params);
-          break;
-        case 'completeGoal':
-          pendingAction = await this.dataMutation.completeGoalAction(params);
-          break;
-        case 'deleteGoal':
-          pendingAction = await this.dataMutation.deleteGoalAction(params);
-          break;
-
-        // Debts
-        case 'createDebt':
-          pendingAction = await this.dataMutation.createDebtAction(params);
-          break;
-        case 'updateDebt':
-          pendingAction = await this.dataMutation.updateDebtAction(params);
-          break;
-        case 'recordDebtPayment':
-          pendingAction = await this.dataMutation.recordDebtPaymentAction(params);
-          break;
-        case 'markDebtAsPaid':
-          pendingAction = await this.dataMutation.markDebtAsPaidAction(params);
-          break;
-        case 'deleteDebt':
-          pendingAction = await this.dataMutation.deleteDebtAction(params);
-          break;
-
-        // Subscriptions
-        case 'createSubscription':
-          pendingAction = await this.dataMutation.createSubscriptionAction(params);
-          break;
-        case 'updateSubscription':
-          pendingAction = await this.dataMutation.updateSubscriptionAction(params);
-          break;
-        case 'toggleSubscription':
-          pendingAction = await this.dataMutation.toggleSubscriptionAction(params);
-          break;
-        case 'deleteSubscription':
-          pendingAction = await this.dataMutation.deleteSubscriptionAction(params);
-          break;
-
-        // Recurring Expenses
-        case 'createRecurringExpense':
-          pendingAction = await this.dataMutation.createRecurringExpenseAction(params);
-          break;
-        case 'updateRecurringExpense':
-          pendingAction = await this.dataMutation.updateRecurringExpenseAction(params);
-          break;
-        case 'deleteRecurringExpense':
-          pendingAction = await this.dataMutation.deleteRecurringExpenseAction(params);
-          break;
-
-        // Categories
-        case 'createCategory':
-          pendingAction = await this.dataMutation.createCategoryAction(params);
-          break;
-        case 'updateCategory':
-          pendingAction = await this.dataMutation.updateCategoryAction(params);
-          break;
-        case 'deleteCategory':
-          pendingAction = await this.dataMutation.deleteCategoryAction(params);
-          break;
-
-        default:
-          throw new Error(`Unknown write function: ${functionName}`);
+      const handler = this.writeHandlers.get(functionName);
+      if (!handler) {
+        throw new Error(`Unknown write function: ${functionName}`);
       }
-
+      const pendingAction = await handler(params);
       return { pendingAction };
     } catch (error: any) {
       console.error(`[GeminiService] Error in write function ${functionName}:`, error);
@@ -415,509 +357,8 @@ export class GeminiService {
     return messages;
   }
 
-  /**
-   * Get function definitions for Gemini
-   */
   private getFunctionDefinitions() {
-    return [
-      {
-        name: 'getRecentTransactions',
-        description: 'Get recent transactions (max 10)',
-        parameters: {
-          type: 'object',
-          properties: {
-            limit: {
-              type: 'number',
-              description: 'Number of transactions to retrieve (1-10)',
-            },
-            type: {
-              type: 'string',
-              enum: ['income', 'expense'],
-              description: 'Filter by transaction type',
-            },
-          },
-        },
-      },
-      {
-        name: 'getMonthlyStats',
-        description: 'Get income/expense statistics for a specific month',
-        parameters: {
-          type: 'object',
-          properties: {
-            year: {
-              type: 'number',
-              description: 'Year (e.g., 2026)',
-            },
-            month: {
-              type: 'number',
-              description: 'Month (1-12)',
-            },
-          },
-          required: ['year', 'month'],
-        },
-      },
-      {
-        name: 'getCategoryBreakdown',
-        description: 'Get spending/income breakdown by category for a date range',
-        parameters: {
-          type: 'object',
-          properties: {
-            startDate: {
-              type: 'string',
-              description: 'Start date in ISO format (YYYY-MM-DD)',
-            },
-            endDate: {
-              type: 'string',
-              description: 'End date in ISO format (YYYY-MM-DD)',
-            },
-            type: {
-              type: 'string',
-              enum: ['income', 'expense'],
-              description: 'Type of transactions to analyze',
-            },
-          },
-          required: ['startDate', 'endDate', 'type'],
-        },
-      },
-      {
-        name: 'getAccountBalance',
-        description: 'Get current account balance across all vaults',
-        parameters: {
-          type: 'object',
-          properties: {},
-        },
-      },
-      {
-        name: 'getActiveGoals',
-        description: 'Get all active savings goals',
-        parameters: {
-          type: 'object',
-          properties: {},
-        },
-      },
-      {
-        name: 'getDebtStats',
-        description: 'Get lending/borrowing statistics and active debts',
-        parameters: {
-          type: 'object',
-          properties: {},
-        },
-      },
-      {
-        name: 'getActiveSubscriptions',
-        description: 'Get all active monthly subscriptions',
-        parameters: {
-          type: 'object',
-          properties: {},
-        },
-      },
-      {
-        name: 'getRecurringExpenses',
-        description: 'Get all scheduled recurring expenses',
-        parameters: {
-          type: 'object',
-          properties: {},
-        },
-      },
-
-      // ============ WRITE FUNCTIONS (CRUD Operations) ============
-      // Transactions
-      {
-        name: 'createTransaction',
-        description: 'Create a new income or expense transaction. REQUIRES USER CONFIRMATION.',
-        parameters: {
-          type: 'object',
-          properties: {
-            type: {
-              type: 'string',
-              enum: ['income', 'expense'],
-              description: 'Transaction type',
-            },
-            amount: {
-              type: 'number',
-              description: 'Transaction amount (positive number)',
-            },
-            categoryName: {
-              type: 'string',
-              description: 'Category name (will be resolved to category ID)',
-            },
-            description: {
-              type: 'string',
-              description: 'Optional description or notes',
-            },
-            date: {
-              type: 'string',
-              description: 'Optional date in YYYY-MM-DD format (defaults to today)',
-            },
-            vaultType: {
-              type: 'string',
-              enum: ['main', 'savings', 'held'],
-              description: 'Which vault to affect (defaults to main)',
-            },
-          },
-          required: ['type', 'amount', 'categoryName'],
-        },
-      },
-      {
-        name: 'updateTransaction',
-        description: 'Update an existing transaction. REQUIRES USER CONFIRMATION.',
-        parameters: {
-          type: 'object',
-          properties: {
-            transactionId: {
-              type: 'string',
-              description: 'ID of transaction to update',
-            },
-            amount: { type: 'number', description: 'New amount' },
-            categoryName: { type: 'string', description: 'New category name' },
-            description: { type: 'string', description: 'New description' },
-            date: { type: 'string', description: 'New date (YYYY-MM-DD)' },
-            vaultType: {
-              type: 'string',
-              enum: ['main', 'savings', 'held'],
-              description: 'New vault type',
-            },
-          },
-          required: ['transactionId'],
-        },
-      },
-      {
-        name: 'deleteTransaction',
-        description: 'Delete a transaction. REQUIRES USER CONFIRMATION.',
-        parameters: {
-          type: 'object',
-          properties: {
-            transactionId: { type: 'string', description: 'ID of transaction to delete' },
-            reason: { type: 'string', description: 'Optional reason for deletion' },
-          },
-          required: ['transactionId'],
-        },
-      },
-
-      // Goals
-      {
-        name: 'createGoal',
-        description: 'Create a new savings goal. REQUIRES USER CONFIRMATION.',
-        parameters: {
-          type: 'object',
-          properties: {
-            name: { type: 'string', description: 'Goal name' },
-            targetAmount: { type: 'number', description: 'Target amount to save' },
-            fundingSource: {
-              type: 'string',
-              enum: ['main', 'savings', 'both'],
-              description: 'Which vaults fund this goal (defaults to savings)',
-            },
-            icon: { type: 'string', description: 'Optional icon name' },
-            color: { type: 'string', description: 'Optional hex color' },
-          },
-          required: ['name', 'targetAmount'],
-        },
-      },
-      {
-        name: 'updateGoal',
-        description: 'Update a goal. REQUIRES USER CONFIRMATION.',
-        parameters: {
-          type: 'object',
-          properties: {
-            goalId: { type: 'string', description: 'ID of goal to update' },
-            name: { type: 'string', description: 'New name' },
-            targetAmount: { type: 'number', description: 'New target amount' },
-            fundingSource: {
-              type: 'string',
-              enum: ['main', 'savings', 'both'],
-              description: 'New funding source',
-            },
-          },
-          required: ['goalId'],
-        },
-      },
-      {
-        name: 'updateGoalProgress',
-        description: 'Update the current amount saved for a goal. REQUIRES USER CONFIRMATION.',
-        parameters: {
-          type: 'object',
-          properties: {
-            goalId: { type: 'string', description: 'ID of goal' },
-            currentAmount: { type: 'number', description: 'New current amount' },
-          },
-          required: ['goalId', 'currentAmount'],
-        },
-      },
-      {
-        name: 'completeGoal',
-        description: 'Mark a goal as completed. REQUIRES USER CONFIRMATION.',
-        parameters: {
-          type: 'object',
-          properties: {
-            goalId: { type: 'string', description: 'ID of goal to complete' },
-          },
-          required: ['goalId'],
-        },
-      },
-      {
-        name: 'deleteGoal',
-        description: 'Delete a goal. REQUIRES USER CONFIRMATION.',
-        parameters: {
-          type: 'object',
-          properties: {
-            goalId: { type: 'string', description: 'ID of goal to delete' },
-            reason: { type: 'string', description: 'Optional reason' },
-          },
-          required: ['goalId'],
-        },
-      },
-
-      // Debts
-      {
-        name: 'createDebt',
-        description: 'Record money lent or borrowed. REQUIRES USER CONFIRMATION.',
-        parameters: {
-          type: 'object',
-          properties: {
-            type: {
-              type: 'string',
-              enum: ['lent', 'borrowed'],
-              description: 'lent = money owed to me, borrowed = money I owe',
-            },
-            personName: { type: 'string', description: 'Name of person' },
-            amount: { type: 'number', description: 'Amount' },
-            dueDate: { type: 'string', description: 'Optional due date (YYYY-MM-DD)' },
-            description: { type: 'string', description: 'Optional description' },
-          },
-          required: ['type', 'personName', 'amount'],
-        },
-      },
-      {
-        name: 'updateDebt',
-        description: 'Update debt details. REQUIRES USER CONFIRMATION.',
-        parameters: {
-          type: 'object',
-          properties: {
-            debtId: { type: 'string', description: 'ID of debt' },
-            personName: { type: 'string', description: 'New person name' },
-            amount: { type: 'number', description: 'New amount' },
-            dueDate: { type: 'string', description: 'New due date (YYYY-MM-DD)' },
-            description: { type: 'string', description: 'New description' },
-          },
-          required: ['debtId'],
-        },
-      },
-      {
-        name: 'recordDebtPayment',
-        description: 'Record a payment toward a debt. REQUIRES USER CONFIRMATION.',
-        parameters: {
-          type: 'object',
-          properties: {
-            debtId: { type: 'string', description: 'ID of debt' },
-            paymentAmount: { type: 'number', description: 'Payment amount' },
-          },
-          required: ['debtId', 'paymentAmount'],
-        },
-      },
-      {
-        name: 'markDebtAsPaid',
-        description: 'Mark a debt as fully paid/settled. REQUIRES USER CONFIRMATION.',
-        parameters: {
-          type: 'object',
-          properties: {
-            debtId: { type: 'string', description: 'ID of debt' },
-          },
-          required: ['debtId'],
-        },
-      },
-      {
-        name: 'deleteDebt',
-        description: 'Delete a debt record. REQUIRES USER CONFIRMATION.',
-        parameters: {
-          type: 'object',
-          properties: {
-            debtId: { type: 'string', description: 'ID of debt to delete' },
-            reason: { type: 'string', description: 'Optional reason' },
-          },
-          required: ['debtId'],
-        },
-      },
-
-      // Subscriptions
-      {
-        name: 'createSubscription',
-        description: 'Add a new monthly subscription. REQUIRES USER CONFIRMATION.',
-        parameters: {
-          type: 'object',
-          properties: {
-            name: { type: 'string', description: 'Subscription name' },
-            amount: { type: 'number', description: 'Monthly amount' },
-            categoryName: { type: 'string', description: 'Category name' },
-            billingDay: {
-              type: 'number',
-              description: 'Day of month for billing (1-31)',
-            },
-            vaultType: {
-              type: 'string',
-              enum: ['main', 'savings', 'held'],
-              description: 'Which vault to deduct from (defaults to main)',
-            },
-          },
-          required: ['name', 'amount', 'categoryName', 'billingDay'],
-        },
-      },
-      {
-        name: 'updateSubscription',
-        description: 'Update subscription details. REQUIRES USER CONFIRMATION.',
-        parameters: {
-          type: 'object',
-          properties: {
-            subscriptionId: { type: 'string', description: 'ID of subscription' },
-            name: { type: 'string', description: 'New name' },
-            amount: { type: 'number', description: 'New amount' },
-            categoryName: { type: 'string', description: 'New category' },
-            billingDay: { type: 'number', description: 'New billing day (1-31)' },
-            isActive: { type: 'boolean', description: 'Active status' },
-          },
-          required: ['subscriptionId'],
-        },
-      },
-      {
-        name: 'toggleSubscription',
-        description: 'Activate or deactivate a subscription. REQUIRES USER CONFIRMATION.',
-        parameters: {
-          type: 'object',
-          properties: {
-            subscriptionId: { type: 'string', description: 'ID of subscription' },
-            isActive: { type: 'boolean', description: 'New active status' },
-          },
-          required: ['subscriptionId', 'isActive'],
-        },
-      },
-      {
-        name: 'deleteSubscription',
-        description: 'Remove a subscription. REQUIRES USER CONFIRMATION.',
-        parameters: {
-          type: 'object',
-          properties: {
-            subscriptionId: { type: 'string', description: 'ID of subscription to delete' },
-            reason: { type: 'string', description: 'Optional reason' },
-          },
-          required: ['subscriptionId'],
-        },
-      },
-
-      // Recurring Expenses
-      {
-        name: 'createRecurringExpense',
-        description: 'Add a new recurring expense. REQUIRES USER CONFIRMATION.',
-        parameters: {
-          type: 'object',
-          properties: {
-            name: { type: 'string', description: 'Expense name' },
-            amount: { type: 'number', description: 'Amount per occurrence' },
-            categoryName: { type: 'string', description: 'Category name' },
-            frequency: {
-              type: 'string',
-              enum: ['daily', 'weekly', 'monthly', 'yearly'],
-              description: 'How often it recurs',
-            },
-            interval: {
-              type: 'number',
-              description: 'Every X frequency units (e.g., interval=2, frequency=weekly = every 2 weeks)',
-            },
-            startDate: {
-              type: 'string',
-              description: 'Start date (YYYY-MM-DD)',
-            },
-            vaultType: {
-              type: 'string',
-              enum: ['main', 'savings', 'held'],
-              description: 'Which vault to deduct from',
-            },
-            autoDeduct: {
-              type: 'boolean',
-              description: 'Auto-create transaction on occurrence',
-            },
-          },
-          required: ['name', 'amount', 'categoryName', 'frequency', 'interval', 'startDate'],
-        },
-      },
-      {
-        name: 'updateRecurringExpense',
-        description: 'Update recurring expense details. REQUIRES USER CONFIRMATION.',
-        parameters: {
-          type: 'object',
-          properties: {
-            recurringExpenseId: { type: 'string', description: 'ID of recurring expense' },
-            name: { type: 'string', description: 'New name' },
-            amount: { type: 'number', description: 'New amount' },
-            categoryName: { type: 'string', description: 'New category' },
-            frequency: {
-              type: 'string',
-              enum: ['daily', 'weekly', 'monthly', 'yearly'],
-              description: 'New frequency',
-            },
-            interval: { type: 'number', description: 'New interval' },
-            isActive: { type: 'boolean', description: 'Active status' },
-          },
-          required: ['recurringExpenseId'],
-        },
-      },
-      {
-        name: 'deleteRecurringExpense',
-        description: 'Remove a recurring expense. REQUIRES USER CONFIRMATION.',
-        parameters: {
-          type: 'object',
-          properties: {
-            recurringExpenseId: { type: 'string', description: 'ID of recurring expense to delete' },
-            reason: { type: 'string', description: 'Optional reason' },
-          },
-          required: ['recurringExpenseId'],
-        },
-      },
-
-      // Categories
-      {
-        name: 'createCategory',
-        description: 'Create a new custom category. REQUIRES USER CONFIRMATION.',
-        parameters: {
-          type: 'object',
-          properties: {
-            name: { type: 'string', description: 'Category name' },
-            type: {
-              type: 'string',
-              enum: ['income', 'expense'],
-              description: 'Category type',
-            },
-            icon: { type: 'string', description: 'Optional icon name' },
-            color: { type: 'string', description: 'Optional hex color' },
-          },
-          required: ['name', 'type'],
-        },
-      },
-      {
-        name: 'updateCategory',
-        description: 'Update category details. REQUIRES USER CONFIRMATION.',
-        parameters: {
-          type: 'object',
-          properties: {
-            categoryId: { type: 'string', description: 'ID of category' },
-            name: { type: 'string', description: 'New name' },
-            icon: { type: 'string', description: 'New icon' },
-            color: { type: 'string', description: 'New color' },
-          },
-          required: ['categoryId'],
-        },
-      },
-      {
-        name: 'deleteCategory',
-        description: 'Delete a custom category (cannot delete default categories). REQUIRES USER CONFIRMATION.',
-        parameters: {
-          type: 'object',
-          properties: {
-            categoryId: { type: 'string', description: 'ID of category to delete' },
-          },
-          required: ['categoryId'],
-        },
-      },
-    ];
+    return FUNCTION_DEFINITIONS;
   }
 
   /**

@@ -15,6 +15,7 @@
 
 import { TransactionRepository } from '../../database/repositories/TransactionRepository';
 import { AccountRepository } from '../../database/repositories/AccountRepository';
+import { VaultType } from '../../domain/vault/VaultType';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useAccountStore } from '../../store/accountStore';
 import { useAuthStore } from '../../store/authStore';
@@ -169,18 +170,10 @@ export async function checkAndProcessAutoSalary(): Promise<{ processed: boolean;
       totalAmountAdded += salarySettings.amount;
     }
 
-    // Update vault balance with total amount
     const currentBalance = accountStore.balances[currentAccountId];
     if (currentBalance) {
-      const updates: any = {};
-      if (salarySettings.targetVault === 'main') {
-        updates.mainBalance = currentBalance.mainBalance + totalAmountAdded;
-      } else if (salarySettings.targetVault === 'savings') {
-        updates.savingsBalance = currentBalance.savingsBalance + totalAmountAdded;
-      } else {
-        updates.heldBalance = currentBalance.heldBalance + totalAmountAdded;
-      }
-      accountStore.updateBalance(currentAccountId, updates);
+      const vt = VaultType.parse(salarySettings.targetVault);
+      accountStore.updateBalance(currentAccountId, vt.adjustBalance(currentBalance, totalAmountAdded));
     }
 
     // Calculate next payment date (1st of next month from current date)
