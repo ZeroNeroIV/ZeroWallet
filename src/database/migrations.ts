@@ -53,6 +53,10 @@ async function applyMigration(
       await migration_v5(database);
       break;
 
+    case 6:
+      await migration_v6(database);
+      break;
+
     default:
       console.warn(`[Migrations] No migration defined for version ${version}`);
   }
@@ -169,5 +173,45 @@ async function migration_v5(database: any): Promise<void> {
     console.log('[Migration v5] transaction_images table created');
   } catch (error) {
     console.warn('[Migration v5] Error:', error);
+  }
+}
+
+/**
+ * Migration v6: Add budgets table + goal contribution-planning columns
+ */
+async function migration_v6(database: any): Promise<void> {
+  try {
+    await database.executeSql(`
+      CREATE TABLE IF NOT EXISTS budgets (
+        id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL,
+        category_id TEXT NOT NULL,
+        month TEXT NOT NULL,
+        amount_limit REAL NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+        FOREIGN KEY (category_id) REFERENCES categories(id),
+        UNIQUE(account_id, category_id, month)
+      );
+    `);
+    await database.executeSql('CREATE INDEX IF NOT EXISTS idx_budgets_account ON budgets(account_id);');
+    await database.executeSql('CREATE INDEX IF NOT EXISTS idx_budgets_month ON budgets(month);');
+    await database.executeSql('CREATE INDEX IF NOT EXISTS idx_budgets_category ON budgets(category_id);');
+    console.log('[Migration v6] budgets table created');
+  } catch (error) {
+    console.warn('[Migration v6] Error creating budgets table:', error);
+  }
+
+  try {
+    await database.executeSql(`ALTER TABLE goals ADD COLUMN monthly_contribution REAL;`);
+  } catch (error) {
+    console.warn('[Migration v6] monthly_contribution column may already exist:', error);
+  }
+
+  try {
+    await database.executeSql(`ALTER TABLE goals ADD COLUMN target_date INTEGER;`);
+  } catch (error) {
+    console.warn('[Migration v6] target_date column may already exist:', error);
   }
 }

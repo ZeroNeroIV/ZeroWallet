@@ -76,4 +76,5 @@ export type MainStackParamList = {
   AISettings: undefined;
   ChatScreen: undefined;
   AllSectionsScreen: undefined;
+  BudgetScreen: undefined;
 };

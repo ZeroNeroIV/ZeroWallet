@@ -17,6 +17,7 @@ import {
     calculateGoalPercentage,
     getProgressColor,
     getRemainingAmount,
+    projectGoalPayoff,
 } from '../../utils/goalUtils';
 
 interface GoalCardProps {
@@ -36,6 +37,7 @@ export const GoalCard: React.FC<GoalCardProps> = ({
     const percentage = calculateGoalPercentage(goal);
     const progressColor = getProgressColor(percentage);
     const remaining = getRemainingAmount(goal);
+    const payoff = projectGoalPayoff(goal);
 
     // Animation for progress bar
     const progressAnim = useSharedValue(0);
@@ -156,6 +158,19 @@ export const GoalCard: React.FC<GoalCardProps> = ({
                                 )}
                             </View>
                         </View>
+
+                        {!goal.isCompleted && payoff.monthsRemaining !== null && payoff.monthsRemaining > 0 && (
+                            <View style={styles.payoffRow}>
+                                <MaterialCommunityIcons
+                                    name="calendar-check"
+                                    size={14}
+                                    color={themeColors.textSecondary}
+                                />
+                                <Text style={styles.payoffText}>
+                                    On pace in {payoff.monthsRemaining === 1 ? '1 month' : `${payoff.monthsRemaining} months`}
+                                </Text>
+                            </View>
+                        )}
                     </>
                 )}
 
@@ -280,6 +295,16 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
             borderRadius: 8,
         },
         noTargetText: {
+            ...typography.caption,
+            color: themeColors.textSecondary,
+        },
+        payoffRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: spacing.xs,
+            marginTop: spacing.sm,
+        },
+        payoffText: {
             ...typography.caption,
             color: themeColors.textSecondary,
         },

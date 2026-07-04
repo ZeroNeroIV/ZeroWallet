@@ -150,6 +150,33 @@ export const validateGoalInput = (
 };
 
 /**
+ * Project when a goal will be reached based on its planned monthly contribution.
+ * Returns nulls when there's no target amount or no monthly contribution set.
+ */
+export const projectGoalPayoff = (
+    goal: Goal
+): { monthsRemaining: number | null; etaDate: Date | null; reached: boolean } => {
+    if (!goal.targetAmount) {
+        return { monthsRemaining: null, etaDate: null, reached: false };
+    }
+
+    const remaining = getRemainingAmount(goal);
+    if (remaining <= 0) {
+        return { monthsRemaining: 0, etaDate: new Date(), reached: true };
+    }
+
+    if (!goal.monthlyContribution || goal.monthlyContribution <= 0) {
+        return { monthsRemaining: null, etaDate: null, reached: false };
+    }
+
+    const monthsRemaining = Math.ceil(remaining / goal.monthlyContribution);
+    const etaDate = new Date();
+    etaDate.setMonth(etaDate.getMonth() + monthsRemaining);
+
+    return { monthsRemaining, etaDate, reached: false };
+};
+
+/**
  * Sort goals by priority (nearest to completion first)
  */
 export const sortGoalsByProgress = (goals: Goal[]): Goal[] => {

@@ -103,9 +103,19 @@ export default function CategoriesScreen() {
     });
   };
 
-  const handleDeleteCategory = (category: Category) => {
+  const handleDeleteCategory = async (category: Category) => {
     if (category.isDefault) {
       Alert.alert('Cannot Delete', 'Default categories cannot be deleted');
+      return;
+    }
+
+    const categoryRepo = new CategoryRepository();
+    const usageCount = await categoryRepo.getUsageCount(category.id);
+    if (usageCount > 0) {
+      Alert.alert(
+        'Category In Use',
+        `"${category.name}" is used by ${usageCount} transaction${usageCount === 1 ? '' : 's'}. Reassign or delete those transactions first so your numbers don't silently disappear.`
+      );
       return;
     }
 
@@ -119,7 +129,6 @@ export default function CategoriesScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const categoryRepo = new CategoryRepository();
               await categoryRepo.delete(category.id);
               Alert.alert('Success', 'Category deleted successfully');
               loadCategories();

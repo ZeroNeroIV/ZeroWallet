@@ -13,6 +13,8 @@ const FIELD_MAPPINGS: FieldMapping[] = [
   { field: 'color', column: 'color' },
   { field: 'isCompleted', column: 'is_completed' },
   { field: 'completedAt', column: 'completed_at' },
+  { field: 'monthlyContribution', column: 'monthly_contribution' },
+  { field: 'targetDate', column: 'target_date' },
 ];
 
 export class GoalRepository extends BaseRepository<Goal, GoalInput> {
@@ -31,6 +33,8 @@ export class GoalRepository extends BaseRepository<Goal, GoalInput> {
       color: row.color as string,
       isCompleted: (row.is_completed as number) === 1,
       completedAt: row.completed_at as number | null,
+      monthlyContribution: (row.monthly_contribution as number) ?? null,
+      targetDate: (row.target_date as number) ?? null,
       createdAt: row.created_at as number,
       updatedAt: row.updated_at as number,
     };

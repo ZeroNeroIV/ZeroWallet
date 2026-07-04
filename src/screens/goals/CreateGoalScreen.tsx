@@ -16,6 +16,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { Input } from '../../components/forms/Input';
 import { AmountInput } from '../../components/forms/AmountInput';
 import { Button } from '../../components/forms/Button';
+import { DatePicker } from '../../components/forms/DatePicker';
 import { useAuthStore } from '../../store/authStore';
 import { GoalRepository } from '../../database/repositories/GoalRepository';
 import { validateGoalInput, getFundingSourceIcon } from '../../utils/goalUtils';
@@ -53,6 +54,11 @@ export default function CreateGoalScreen() {
     const [name, setName] = useState('');
     const [hasTargetAmount, setHasTargetAmount] = useState(true);
     const [targetAmount, setTargetAmount] = useState('');
+    const [currentAmount, setCurrentAmount] = useState(0);
+    const [hasContributionPlan, setHasContributionPlan] = useState(false);
+    const [monthlyContribution, setMonthlyContribution] = useState('');
+    const [hasTargetDate, setHasTargetDate] = useState(false);
+    const [targetDate, setTargetDate] = useState(new Date());
     const [fundingSource, setFundingSource] = useState<GoalFundingSource>('both');
     const [selectedIcon, setSelectedIcon] = useState(GOAL_ICONS[0]);
     const [selectedColor, setSelectedColor] = useState(GOAL_COLORS[0]);
@@ -60,6 +66,23 @@ export default function CreateGoalScreen() {
 
     const goalRepo = new GoalRepository();
     const styles = useMemo(() => createStyles(themeColors), [themeColors]);
+
+    const payoffPreview = useMemo(() => {
+        const target = parseFloat(targetAmount);
+        const monthly = parseFloat(monthlyContribution);
+        if (!target || target <= 0 || !monthly || monthly <= 0) return null;
+
+        const remaining = Math.max(target - currentAmount, 0);
+        if (remaining <= 0) return "You've already reached this target!";
+
+        const monthsRemaining = Math.ceil(remaining / monthly);
+        const etaDate = new Date();
+        etaDate.setMonth(etaDate.getMonth() + monthsRemaining);
+
+        const monthLabel = monthsRemaining === 1 ? '1 month' : `${monthsRemaining} months`;
+        const etaLabel = etaDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        return `On pace to reach this in ${monthLabel} (~${etaLabel})`;
+    }, [targetAmount, monthlyContribution, currentAmount]);
 
     useEffect(() => {
         if (isEditMode && goalId) {
@@ -76,9 +99,14 @@ export default function CreateGoalScreen() {
                 setName(goal.name);
                 setHasTargetAmount(goal.targetAmount !== null);
                 setTargetAmount(goal.targetAmount?.toString() || '');
+                setCurrentAmount(goal.currentAmount);
                 setFundingSource(goal.fundingSource);
                 setSelectedIcon(goal.icon);
                 setSelectedColor(goal.color);
+                setHasContributionPlan(goal.monthlyContribution !== null);
+                setMonthlyContribution(goal.monthlyContribution?.toString() || '');
+                setHasTargetDate(goal.targetDate !== null);
+                if (goal.targetDate) setTargetDate(new Date(goal.targetDate));
             } else {
                 Alert.alert('Error', 'Goal not found');
                 navigation.goBack();
@@ -97,10 +125,17 @@ export default function CreateGoalScreen() {
         }
 
         const targetAmountValue = hasTargetAmount ? parseFloat(targetAmount) || null : null;
+        const monthlyContributionValue =
+            hasTargetAmount && hasContributionPlan ? parseFloat(monthlyContribution) || null : null;
+        const targetDateValue = hasTargetAmount && hasTargetDate ? targetDate.getTime() : null;
 
         const validation = validateGoalInput(name, targetAmountValue, fundingSource);
         if (!validation.valid) {
             Alert.alert('Validation Error', validation.error);
+            return;
+        }
+        if (hasContributionPlan && (!monthlyContributionValue || monthlyContributionValue <= 0)) {
+            Alert.alert('Validation Error', 'Monthly contribution must be greater than 0');
             return;
         }
 
@@ -114,6 +149,8 @@ export default function CreateGoalScreen() {
                     fundingSource,
                     icon: selectedIcon,
                     color: selectedColor,
+                    monthlyContribution: monthlyContributionValue,
+                    targetDate: targetDateValue,
                 });
 
                 Alert.alert('Success', 'Goal updated successfully', [
@@ -127,6 +164,8 @@ export default function CreateGoalScreen() {
                     fundingSource,
                     icon: selectedIcon,
                     color: selectedColor,
+                    monthlyContribution: monthlyContributionValue,
+                    targetDate: targetDateValue,
                 });
 
                 Alert.alert('Success', 'Goal created successfully', [
@@ -185,6 +224,64 @@ export default function CreateGoalScreen() {
                     onChangeText={setTargetAmount}
                     placeholder="0.00"
                 />
+            )}
+
+            {/* Contribution Plan (conditional on target amount) */}
+            {hasTargetAmount && (
+                <View style={styles.section}>
+                    <View style={styles.toggleRow}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.sectionTitle}>Plan Monthly Contributions</Text>
+                            <Text style={styles.sectionSubtitle}>
+                                Set how much you plan to add each month and see a payoff estimate
+                            </Text>
+                        </View>
+                        <Switch
+                            value={hasContributionPlan}
+                            onValueChange={setHasContributionPlan}
+                            trackColor={{ false: themeColors.border, true: themeColors.primary + '60' }}
+                            thumbColor={hasContributionPlan ? themeColors.primary : themeColors.textSecondary}
+                        />
+                    </View>
+
+                    {hasContributionPlan && (
+                        <>
+                            <AmountInput
+                                label="Monthly Contribution"
+                                value={monthlyContribution}
+                                onChangeText={setMonthlyContribution}
+                                placeholder="0.00"
+                            />
+
+                            {payoffPreview && (
+                                <View style={styles.previewBanner}>
+                                    <MaterialCommunityIcons name="calendar-check" size={18} color={themeColors.primary} />
+                                    <Text style={styles.previewBannerText}>{payoffPreview}</Text>
+                                </View>
+                            )}
+
+                            <View style={styles.toggleRow}>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={styles.sectionSubtitle}>Set a target date instead</Text>
+                                </View>
+                                <Switch
+                                    value={hasTargetDate}
+                                    onValueChange={setHasTargetDate}
+                                    trackColor={{ false: themeColors.border, true: themeColors.primary + '60' }}
+                                    thumbColor={hasTargetDate ? themeColors.primary : themeColors.textSecondary}
+                                />
+                            </View>
+                            {hasTargetDate && (
+                                <DatePicker
+                                    label="Target Date"
+                                    value={targetDate}
+                                    onChange={setTargetDate}
+                                    minimumDate={new Date()}
+                                />
+                            )}
+                        </>
+                    )}
+                </View>
             )}
 
             {/* Funding Source */}
@@ -313,6 +410,21 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
+        },
+        previewBanner: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: spacing.sm,
+            backgroundColor: themeColors.primary + '15',
+            borderRadius: borderRadius.md,
+            padding: spacing.sm,
+            marginTop: -spacing.sm,
+            marginBottom: spacing.md,
+        },
+        previewBannerText: {
+            ...typography.caption,
+            color: themeColors.text,
+            flex: 1,
         },
         sectionTitle: {
             ...typography.h3,

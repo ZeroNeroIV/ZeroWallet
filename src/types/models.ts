@@ -267,16 +267,54 @@ export interface Goal {
   color: string; // Hex color for theming
   isCompleted: boolean; // True when goal is reached
   completedAt: number | null; // Unix timestamp when completed
+  monthlyContribution: number | null; // Planned monthly contribution (e.g., Emergency Fund target/mo)
+  targetDate: number | null; // Unix timestamp of target completion date
   createdAt: number;
   updatedAt: number;
 }
 
 export type GoalInput = Omit<
   Goal,
-  'id' | 'createdAt' | 'updatedAt' | 'currentAmount' | 'isCompleted' | 'completedAt'
+  | 'id'
+  | 'createdAt'
+  | 'updatedAt'
+  | 'currentAmount'
+  | 'isCompleted'
+  | 'completedAt'
+  | 'monthlyContribution'
+  | 'targetDate'
 > & {
   currentAmount?: number; // Optional initial amount
+  monthlyContribution?: number | null;
+  targetDate?: number | null;
 };
+
+// ============================================
+// Budgets
+// ============================================
+
+export interface Budget {
+  id: string; // UUID
+  accountId: string; // FK to Account
+  categoryId: string; // FK to Category (expense categories)
+  month: string; // 'YYYY-MM'
+  amountLimit: number; // Monthly spending cap for this category
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type BudgetInput = Omit<Budget, 'id' | 'createdAt' | 'updatedAt'>;
+
+export interface BudgetProgress {
+  categoryId: string;
+  categoryName: string;
+  categoryIcon: string;
+  categoryColor: string;
+  amountLimit: number;
+  spent: number;
+  remaining: number;
+  percentage: number; // 0-100+ (uncapped so over-budget is visible)
+}
 
 // ============================================
 // Debts

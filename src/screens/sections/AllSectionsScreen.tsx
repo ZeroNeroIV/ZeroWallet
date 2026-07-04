@@ -38,6 +38,14 @@ export const AllSectionsScreen: React.FC = () => {
 
   const sections: SectionItem[] = useMemo(() => [
     {
+      id: 'budget',
+      title: 'Budget',
+      description: 'Set monthly spending caps per category',
+      icon: 'chart-donut',
+      iconColor: themeColors.warning,
+      route: 'BudgetScreen',
+    },
+    {
       id: 'goals',
       title: 'Goals',
       description: 'Manage your financial goals',

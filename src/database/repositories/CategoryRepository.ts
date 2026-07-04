@@ -68,7 +68,19 @@ export class CategoryRepository extends BaseRepository<Category> {
     if (category?.isDefault) {
       throw new Error('Cannot delete default category');
     }
+    const usage = await this.getUsageCount(id);
+    if (usage > 0) {
+      throw new Error('Category is in use by transactions');
+    }
     await executeSql('DELETE FROM categories WHERE id = ?', [id]);
+  }
+
+  async getUsageCount(id: string): Promise<number> {
+    const rows = await executeSql<{ count: number }>(
+      'SELECT COUNT(*) as count FROM transactions WHERE category_id = ?',
+      [id],
+    );
+    return rows[0]?.count || 0;
   }
 
   async findSalaryCategory(userId: string): Promise<Category | null> {

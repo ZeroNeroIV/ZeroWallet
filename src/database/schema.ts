@@ -1,6 +1,6 @@
 // SQLite Database Schema Definitions
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 // ============================================
 // Table Creation SQL
@@ -123,9 +123,26 @@ export const CREATE_GOALS_TABLE = `
     color TEXT NOT NULL,
     is_completed INTEGER NOT NULL DEFAULT 0,
     completed_at INTEGER,
+    monthly_contribution REAL,
+    target_date INTEGER,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+  );
+`;
+
+export const CREATE_BUDGETS_TABLE = `
+  CREATE TABLE IF NOT EXISTS budgets (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    category_id TEXT NOT NULL,
+    month TEXT NOT NULL,
+    amount_limit REAL NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+    FOREIGN KEY (category_id) REFERENCES categories(id),
+    UNIQUE(account_id, category_id, month)
   );
 `;
 
@@ -198,6 +215,11 @@ export const CREATE_INDEXES = [
   'CREATE INDEX IF NOT EXISTS idx_debts_status ON debts(status);',
   'CREATE INDEX IF NOT EXISTS idx_debts_due_date ON debts(due_date);',
   'CREATE INDEX IF NOT EXISTS idx_debts_type ON debts(type);',
+
+  // Budgets indexes
+  'CREATE INDEX IF NOT EXISTS idx_budgets_account ON budgets(account_id);',
+  'CREATE INDEX IF NOT EXISTS idx_budgets_month ON budgets(month);',
+  'CREATE INDEX IF NOT EXISTS idx_budgets_category ON budgets(category_id);',
 ];
 
 // ============================================
@@ -214,4 +236,5 @@ export const ALL_TABLES = [
   CREATE_RECURRING_EXPENSES_TABLE,
   CREATE_GOALS_TABLE,
   CREATE_DEBTS_TABLE,
+  CREATE_BUDGETS_TABLE,
 ];
