@@ -27,6 +27,7 @@ import DebtDetailsScreen from '../screens/debts/DebtDetailsScreen';
 import AISettingsScreen from '../screens/settings/AISettingsScreen';
 import ChatScreen from '../screens/chat/ChatScreen';
 import AllSectionsScreen from '../screens/sections/AllSectionsScreen';
+import TransferScreen from '../screens/accounts/TransferScreen';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { TouchableOpacity, Alert } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -246,6 +247,11 @@ export function MainNavigator() {
         name="AllSectionsScreen"
         component={AllSectionsScreen}
         options={{ title: 'All Sections' }}
+      />
+      <Stack.Screen
+        name="Transfer"
+        component={TransferScreen}
+        options={{ title: 'Transfer', presentation: 'modal' }}
       />
     </Stack.Navigator>
   );

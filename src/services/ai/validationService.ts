@@ -43,6 +43,7 @@ import {
 
 export class ValidationService {
   private accountId: string;
+  private userId: string;
   private categoryRepo: CategoryRepository;
   private transactionRepo: TransactionRepository;
   private goalRepo: GoalRepository;
@@ -50,8 +51,9 @@ export class ValidationService {
   private subscriptionRepo: SubscriptionRepository;
   private recurringRepo: RecurringExpenseRepository;
 
-  constructor(accountId: string) {
+  constructor(accountId: string, userId: string) {
     this.accountId = accountId;
+    this.userId = userId;
     this.categoryRepo = new CategoryRepository();
     this.transactionRepo = new TransactionRepository();
     this.goalRepo = new GoalRepository();
@@ -127,9 +129,7 @@ export class ValidationService {
   ): Promise<{ id: string; name: string }> {
     try {
       // Get user's categories (includes default categories)
-      const categories = await this.categoryRepo.findByUser(
-        this.accountId.split('-')[0]
-      ); // Assuming userId is part of accountId
+      const categories = await this.categoryRepo.findByUser(this.userId);
 
       // Filter by type
       const matchingCategories = categories.filter(
@@ -481,9 +481,7 @@ export class ValidationService {
     );
 
     // Check for duplicate category name
-    const categories = await this.categoryRepo.findByUser(
-      this.accountId.split('-')[0]
-    );
+    const categories = await this.categoryRepo.findByUser(this.userId);
     const duplicate = categories.find(
       (cat) =>
         cat.type === type &&

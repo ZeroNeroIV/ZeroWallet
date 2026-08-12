@@ -6,6 +6,8 @@ import { DebtRepository } from '../../database/repositories/DebtRepository';
 import { SubscriptionRepository } from '../../database/repositories/SubscriptionRepository';
 import { RecurringExpenseRepository } from '../../database/repositories/RecurringExpenseRepository';
 import { CategoryRepository } from '../../database/repositories/CategoryRepository';
+import { calculateVaultBalances } from '../../utils/balanceCalculator';
+import { useAccountStore } from '../../store/accountStore';
 import { logger } from '../../utils/logger';
 import {
   AIOperationError,
@@ -58,7 +60,7 @@ export class DataMutationService {
   constructor(accountId: string, userId: string) {
     this.accountId = accountId;
     this.userId = userId;
-    this.validator = new ValidationService(accountId);
+    this.validator = new ValidationService(accountId, userId);
     this.pendingActions = new Map();
 
     this.transactionRepo = new TransactionRepository();
@@ -583,6 +585,10 @@ export class DataMutationService {
       }
 
       const entityId = await handler(action.resolvedData);
+
+      // Sync MMKV store with recalculated balances from DB
+      await this.syncBalance();
+
       action.status = 'confirmed';
       this.pendingActions.set(actionId, action);
 
@@ -687,6 +693,21 @@ export class DataMutationService {
       isDefault: false,
     });
     return category.id;
+  }
+
+  // ============================================================================
+  // Balance Sync (recalculate from DB and update MMKV store)
+  // ============================================================================
+
+  private async syncBalance(): Promise<void> {
+    try {
+      const transactions = await this.transactionRepo.findByAccount(this.accountId);
+      const balances = calculateVaultBalances(transactions);
+      const accountStore = useAccountStore.getState();
+      accountStore.updateBalance(this.accountId, balances);
+    } catch (error) {
+      logger.error('[DataMutationService] Failed to sync balance:', error);
+    }
   }
 
   // ============================================================================

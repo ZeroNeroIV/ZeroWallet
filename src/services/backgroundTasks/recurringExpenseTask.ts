@@ -192,6 +192,16 @@ export async function checkAndProcessRecurringExpenses(accountId: string): Promi
             year: 'numeric' 
           });
           
+          // Idempotency: skip if transaction already exists for this date
+          const alreadyProcessed = await transactionRepo.existsByRecurringExpenseAndDate(
+            expense.id,
+            occurrenceDate.getTime()
+          );
+          if (alreadyProcessed) {
+            console.log(`[RecurringExpenseTask] Skipping ${expense.name} - transaction already exists for ${dateStr}`);
+            continue;
+          }
+          
           // Create expense transaction
           await transactionRepo.create({
             accountId: expense.accountId,

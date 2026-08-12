@@ -172,4 +172,62 @@ export class TransactionRepository extends BaseRepository<Transaction, Transacti
   async deleteImages(transactionId: string): Promise<void> {
     await executeSql('DELETE FROM transaction_images WHERE transaction_id = ?', [transactionId]);
   }
+
+  async existsBySubscriptionAndDate(subscriptionId: string, date: number): Promise<boolean> {
+    const rows = await executeSql<{ count: number }>(
+      "SELECT COUNT(*) as count FROM transactions WHERE subscription_id = ? AND date >= ? AND date < ?",
+      [subscriptionId, date, date + 24 * 60 * 60 * 1000],
+    );
+    return (rows[0]?.count ?? 0) > 0;
+  }
+
+  async existsByRecurringExpenseAndDate(recurringExpenseId: string, date: number): Promise<boolean> {
+    const rows = await executeSql<{ count: number }>(
+      "SELECT COUNT(*) as count FROM transactions WHERE recurring_expense_id = ? AND date >= ? AND date < ?",
+      [recurringExpenseId, date, date + 24 * 60 * 60 * 1000],
+    );
+    return (rows[0]?.count ?? 0) > 0;
+  }
+
+  async transferBetweenAccounts(params: {
+    fromAccountId: string;
+    toAccountId: string;
+    amount: number;
+    fromVaultType: string;
+    toVaultType: string;
+    description?: string;
+    currency?: string;
+  }): Promise<{ fromTransactionId: string; toTransactionId: string }> {
+    const now = Date.now();
+    const description = params.description || `Transfer between accounts`;
+
+    // Create expense transaction on source account
+    const fromTx = await this.create({
+      accountId: params.fromAccountId,
+      type: 'expense',
+      amount: params.amount,
+      categoryId: '',
+      description: `Transfer out: ${description}`,
+      date: now,
+      vaultType: params.fromVaultType as Transaction['vaultType'],
+      currency: params.currency || 'USD',
+    });
+
+    // Create income transaction on destination account
+    const toTx = await this.create({
+      accountId: params.toAccountId,
+      type: 'income',
+      amount: params.amount,
+      categoryId: '',
+      description: `Transfer in: ${description}`,
+      date: now,
+      vaultType: params.toVaultType as Transaction['vaultType'],
+      currency: params.currency || 'USD',
+    });
+
+    return {
+      fromTransactionId: fromTx.id,
+      toTransactionId: toTx.id,
+    };
+  }
 }

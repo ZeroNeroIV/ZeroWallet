@@ -122,6 +122,16 @@ export async function checkAndProcessSubscriptions(accountId: string): Promise<{
             startDate.getDate()
           );
           
+          // Idempotency: skip if transaction already exists for this date
+          const alreadyProcessed = await transactionRepo.existsBySubscriptionAndDate(
+            subscription.id,
+            billingDate.getTime()
+          );
+          if (alreadyProcessed) {
+            console.log(`[SubscriptionTask] Skipping ${subscription.name} - transaction already exists for ${billingDate.toDateString()}`);
+            continue;
+          }
+          
           const monthName = billingDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
           
           // Create expense transaction

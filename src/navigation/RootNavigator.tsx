@@ -83,7 +83,10 @@ export function RootNavigator() {
         await requestNotificationPermission();
 
         // 4. Run missed tasks check (catch up on missed salary, subscriptions, etc.)
-        await runMissedTasks();
+        const currentAccountId = useAuthStore.getState().currentAccountId;
+        if (currentAccountId) {
+          await runMissedTasks(currentAccountId);
+        }
 
         // 5. Schedule daily nudge and periodic nudges
         await scheduleDailyNudge();
@@ -132,7 +135,10 @@ export function RootNavigator() {
         nextAppState === 'active'
       ) {
         console.log('[App] App came to foreground - running background tasks');
-        runAllBackgroundTasks();
+        const foregroundAccountId = useAuthStore.getState().currentAccountId;
+        if (foregroundAccountId) {
+          runAllBackgroundTasks(foregroundAccountId);
+        }
 
         // Check if need biometric auth on foreground (only if not already showing)
         if (isAuthenticated && securitySettings.isEnabled && !needsBiometricAuth) {

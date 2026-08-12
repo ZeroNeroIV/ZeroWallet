@@ -36,6 +36,10 @@ export const ActionButtons: React.FC = React.memo(() => {
     navigation.navigate('AddTransaction', { type: 'income' });
   }, [navigation]);
 
+  const handleTransferPress = useCallback(() => {
+    navigation.navigate('Transfer');
+  }, [navigation]);
+
   return (
     <View style={styles.container}>
       {/* Send Button */}
@@ -64,6 +68,20 @@ export const ActionButtons: React.FC = React.memo(() => {
           color={themeColors.primary}
         />
         <Text style={styles.buttonText}>RECEIVE</Text>
+      </TouchableOpacity>
+
+      {/* Transfer Button */}
+      <TouchableOpacity
+        style={styles.button}
+        onPress={handleTransferPress}
+        activeOpacity={0.7}
+      >
+        <MaterialCommunityIcons
+          name="bank-transfer"
+          size={20}
+          color={themeColors.primary}
+        />
+        <Text style={styles.buttonText}>TRANSFER</Text>
       </TouchableOpacity>
     </View>
   );

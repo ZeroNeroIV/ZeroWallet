@@ -27,6 +27,7 @@ import {
   checkNotificationPermission,
 } from '../notifications/notificationService';
 import { useAccountStore } from '../../store/accountStore';
+import { useAuthStore } from '../../store/authStore';
 
 // ============================================
 // Run All Background Tasks
@@ -199,7 +200,10 @@ export function schedulePeriodicTaskRunner(intervalMinutes: number = 60): NodeJS
 
   const intervalId = setInterval(() => {
     console.log('[BackgroundTasks] Running periodic task check...');
-    runAllBackgroundTasks();
+    const accountId = useAuthStore.getState().currentAccountId;
+    if (accountId) {
+      runAllBackgroundTasks(accountId);
+    }
   }, intervalMs);
 
   return intervalId;
