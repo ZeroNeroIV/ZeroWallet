@@ -6,6 +6,7 @@ import {
   RefreshControl,
   Animated,
   Alert,
+  Text,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -42,7 +43,7 @@ export const DashboardScreen: React.FC = () => {
   const [data, setData] = useState<DashboardData | null>(null);
   const [analyticsTab, setAnalyticsTab] = useState<'income' | 'expense' | 'combined'>('combined');
 
-  const fadeAnim = useState(() => new Animated.Value(1))[0];
+  const fadeAnim = useRef(new Animated.Value(1)).current;
   const scrollY = useRef(new Animated.Value(0)).current;
   const lastScrollY = useRef(0);
   const headerTranslateY = useRef(new Animated.Value(0)).current;
@@ -69,7 +70,7 @@ export const DashboardScreen: React.FC = () => {
     const result = await svc.loadAll();
     setData(result);
     Animated.timing(fadeAnim, {
-      toValue: 1, duration: 200, useNativeDriver: true,
+      toValue: 1, duration: 300, useNativeDriver: true,
     }).start();
   };
 

@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Alert,
   RefreshControl,
+  Animated,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -39,6 +40,7 @@ export default function AccountsListScreen() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [animateOut, setAnimateOut] = useState(0);
 
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
 
@@ -60,6 +62,7 @@ export default function AccountsListScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      setAnimateOut(prev => prev + 1);
       loadAccounts();
     }, [currentUser?.id])
   );
@@ -93,7 +96,9 @@ export default function AccountsListScreen() {
     const balance = getAccountBalance(item.id);
 
     return (
-      <View style={[styles.accountCard, isCurrent && styles.accountCardActive]}>
+      <Animated.View
+        style={[styles.accountCard, isCurrent && styles.accountCardActive, { opacity: animateOut % 2 === 0 ? 1 : 0.9 }]}
+      >
         <TouchableOpacity
           style={styles.accountTouchable}
           onPress={() => handleSwitchAccount(item.id)}
@@ -139,7 +144,7 @@ export default function AccountsListScreen() {
         >
           <Icon name="cog-outline" size={22} color={themeColors.textSecondary} />
         </TouchableOpacity>
-      </View>
+      </Animated.View>
     );
   };
 
@@ -203,14 +208,18 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) => StyleSh
     marginBottom: spacing.md,
     borderWidth: 2,
     borderColor: 'transparent',
+    overflow: 'hidden',
+  },
+  accountCardActive: {
+    borderColor: colors.semantic.success,
+    backgroundColor: colors.semantic.successLight,
+    marginHorizontal: -4,
+    paddingHorizontal: spacing.md + 4,
   },
   accountTouchable: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-  },
-  accountCardActive: {
-    borderColor: colors.semantic.success,
   },
   iconContainer: {
     width: 56,
@@ -219,6 +228,7 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) => StyleSh
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: spacing.md,
+    flexShrink: 0,
   },
   accountInfo: {
     flex: 1,

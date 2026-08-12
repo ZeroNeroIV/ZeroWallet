@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, StyleSheet, Dimensions, TouchableOpacity, Animated } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = (SCREEN_WIDTH - 24 * 2 - 12) / 2; // lg margins + gap/2
@@ -23,6 +23,7 @@ const FALLBACK_COLORS = ['#4FC3F7', '#4DB6AC', '#FFB74D', '#CE93D8', '#EF9A9A', 
 
 export const SpendingDonutChart: React.FC<SpendingDonutChartProps> = ({ data, totalSpend }) => {
   const themeColors = useThemeColors();
+  const [pressedIndex, setPressedIndex] = useState<number | null>(null);
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
 
   const pieData = useMemo(() => {
@@ -36,6 +37,10 @@ export const SpendingDonutChart: React.FC<SpendingDonutChartProps> = ({ data, to
 
   const top4 = data.slice(0, 4);
 
+  const handlePress = (index: number) => {
+    setPressedIndex(prev => prev === index ? null : index);
+  };
+
   return (
     <View style={styles.card}>
       <Text style={styles.title}>Spending</Text>
@@ -47,12 +52,19 @@ export const SpendingDonutChart: React.FC<SpendingDonutChartProps> = ({ data, to
           radius={48}
           innerRadius={30}
           centerLabelComponent={() => (
-            <Text style={styles.centerLabel}>
+            <Animated.Text style={[
+              styles.centerLabel,
+              pressedIndex !== null && { transform: [{ scale: pressedIndex === 0 ? 1.2 : 1 }] },
+            ]}>
               {totalSpend > 0 ? `${((top4[0]?.amount ?? 0) / totalSpend * 100).toFixed(0)}%` : ''}
-            </Text>
+            </Animated.Text>
           )}
           isAnimated
           animationDuration={700}
+          onPress={(params) => {
+            const index = pieData.findIndex(p => p.value === params.value);
+            if (index >= 0) handlePress(index);
+          }}
         />
 
         {/* Legend */}
@@ -61,11 +73,16 @@ export const SpendingDonutChart: React.FC<SpendingDonutChartProps> = ({ data, to
             const pct = totalSpend > 0 ? ((item.amount / totalSpend) * 100).toFixed(0) : '0';
             const color = item.color || FALLBACK_COLORS[i % FALLBACK_COLORS.length];
             return (
-              <View key={item.name} style={styles.legendRow}>
+              <TouchableOpacity
+                key={item.name}
+                style={styles.legendRow}
+                onPress={() => handlePress(i)}
+                activeOpacity={0.7}
+              >
                 <View style={[styles.dot, { backgroundColor: color }]} />
                 <Text style={styles.catName} numberOfLines={1}>{item.name}</Text>
                 <Text style={styles.pct}>{pct}%</Text>
-              </View>
+              </TouchableOpacity>
             );
           })}
         </View>

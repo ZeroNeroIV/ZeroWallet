@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, StyleSheet, Dimensions, TouchableOpacity, Animated } from 'react-native';
 import { BarChart } from 'react-native-gifted-charts';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -19,8 +19,12 @@ interface IncomeExpenseChartProps {
   data: MonthDataPoint[];
 }
 
+const FALLBACK_INCOME_COLOR = '#4FC3F7';
+const FALLBACK_EXPENSE_COLOR = '#FFB74D';
+
 export const IncomeExpenseChart: React.FC<IncomeExpenseChartProps> = ({ data }) => {
   const themeColors = useThemeColors();
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
 
   const barData = useMemo(() => {
@@ -29,15 +33,15 @@ export const IncomeExpenseChart: React.FC<IncomeExpenseChartProps> = ({ data }) 
       result.push({
         value: point.income,
         label: point.month,
-        frontColor: '#4FC3F7',
-        gradientColor: '#0288D1',
+        frontColor: themeColors.primary,
+        gradientColor: themeColors.primaryDark || '#0288D1',
         spacing: 4,
         labelTextStyle: { color: themeColors.textSecondary, fontSize: 10 },
       });
       result.push({
         value: point.expense,
-        frontColor: '#4DB6AC',
-        gradientColor: '#00796B',
+        frontColor: themeColors.errorLight || '#FFD166',
+        gradientColor: themeColors.errorDark || '#FF8A65',
         spacing: i < data.length - 1 ? 18 : 0,
         labelTextStyle: { color: themeColors.textSecondary, fontSize: 10 },
       });
@@ -53,19 +57,17 @@ export const IncomeExpenseChart: React.FC<IncomeExpenseChartProps> = ({ data }) 
   return (
     <View style={styles.card}>
       <View style={styles.header}>
-        <Text style={styles.title}>
-          Income vs Expenses
-        </Text>
+        <Text style={styles.title}>Income vs Expenses</Text>
         <View style={styles.legend}>
-          <View style={[styles.legendDot, { backgroundColor: '#4FC3F7' }]} />
-          <View style={[styles.legendDot, { backgroundColor: '#4DB6AC' }]} />
+          <View style={[styles.legendDot, { backgroundColor: themeColors.primary }]} />
+          <View style={[styles.legendDot, { backgroundColor: themeColors.error }]} />
         </View>
       </View>
 
       <BarChart
         key={data.map(d => `${d.income}-${d.expense}`).join('|')}
         data={barData}
-        barWidth={16}
+        barWidth={14}
         isAnimated
         animationDuration={600}
         width={CHART_WIDTH}
@@ -79,11 +81,18 @@ export const IncomeExpenseChart: React.FC<IncomeExpenseChartProps> = ({ data }) 
         rulesColor={themeColors.border + '60'}
         rulesType="solid"
         showGradient
-        barBorderRadius={4}
+        barBorderRadius={6}
         backgroundColor="transparent"
         hideYAxisText={false}
         initialSpacing={8}
         endSpacing={8}
+        onPress={(params) => {
+          const section = data.findIndex(d => Math.abs(d.income - params.value) < 50 || Math.abs(d.expense - params.value) < 50);
+          if (section >= 0) setHoverIndex(section);
+        }}
+        onHover={(isHovering, sectionIndex) => {
+          // Could add tooltip/feedback here
+        }}
       />
     </View>
   );

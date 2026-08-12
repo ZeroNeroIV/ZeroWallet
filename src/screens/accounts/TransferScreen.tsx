@@ -6,6 +6,7 @@ import {
   ScrollView,
   Alert,
   TouchableOpacity,
+  Animated,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -42,8 +43,9 @@ export default function TransferScreen() {
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ amount?: string; to?: string }>({});
+  const [selectionAnim] = useState(() => new Animated.Value(1));
 
-  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
+  const styles = useMemo(() => createStyles(themeColors, selectionAnim), [themeColors]);
 
   useEffect(() => {
     loadAccounts();
@@ -136,15 +138,15 @@ export default function TransferScreen() {
     onPress: () => void,
     balance: number,
   ) => (
-    <TouchableOpacity
+    <Animated.View
       key={account.id}
       style={[
         styles.accountCard,
         isSelected && styles.accountCardSelected,
         { borderColor: isSelected ? account.color : themeColors.border },
+        { opacity: isSelected ? selectionAnim : 1 },
       ]}
       onPress={onPress}
-      activeOpacity={0.7}
     >
       <View style={[styles.accountIcon, { backgroundColor: account.color + '20' }]}>
         <Icon name={account.icon} size={24} color={account.color} />
@@ -158,7 +160,7 @@ export default function TransferScreen() {
       {isSelected && (
         <Icon name="check-circle" size={24} color={account.color} />
       )}
-    </TouchableOpacity>
+    </Animated.View>
   );
 
   if (accounts.length < 2) {
@@ -276,7 +278,7 @@ export default function TransferScreen() {
   );
 }
 
-const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
+const createStyles = (themeColors: ReturnType<typeof useThemeColors>, selectionAnim: Animated.Value) =>
   StyleSheet.create({
     container: {
       flex: 1,
@@ -303,7 +305,9 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
       marginBottom: spacing.sm,
     },
     accountCardSelected: {
-      borderWidth: 2,
+      borderWidth: 4,
+      borderColor: themeColors.primary,
+      transform: [{ scale: selectionAnim }],
     },
     accountIcon: {
       width: 48,
