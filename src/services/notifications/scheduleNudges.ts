@@ -299,7 +299,7 @@ export async function scheduleSubscriptionReminder(
       timestamp: triggerDate.getTime(),
     };
 
-    const dayText = daysUntil === 1 ? 'tomorrow' : `in ${daysUntil} days`;
+    const dayText = daysUntil <= 0 ? 'today' : daysUntil === 1 ? 'tomorrow' : `in ${daysUntil} days`;
 
     await notifee.createTriggerNotification(
       {
@@ -375,7 +375,7 @@ export async function scheduleRecurringReminder(
       timestamp: triggerDate.getTime(),
     };
 
-    const dayText = daysUntil === 1 ? 'tomorrow' : `in ${daysUntil} days`;
+    const dayText = daysUntil <= 0 ? 'today' : daysUntil === 1 ? 'tomorrow' : `in ${daysUntil} days`;
 
     await notifee.createTriggerNotification(
       {
@@ -437,11 +437,19 @@ export async function scheduleSalaryReminder(): Promise<void> {
     const triggerDate = new Date(nextPayday);
     triggerDate.setHours(9, 0, 0, 0);
 
-    // If this payday's morning passed, aim at the following month
+    // If this payday's morning passed, aim at the following month.
+    // getNextPayDate can still return 9 AM today when payday is today but
+    // morning already passed, so keep advancing until the trigger is ahead.
     if (triggerDate.getTime() <= Date.now()) {
-      const { getNextPayDate } = await import('../backgroundTasks/autoSalaryTask');
+      const { getNextPayDate, advanceOneMonth } = await import('../backgroundTasks/autoSalaryTask');
       const upcoming = getNextPayDate(new Date(), payDay);
       upcoming.setHours(9, 0, 0, 0);
+      let guard = 0;
+      while (upcoming.getTime() <= Date.now() && guard < 24) {
+        const advanced = advanceOneMonth(upcoming, payDay);
+        upcoming.setTime(advanced.getTime());
+        guard += 1;
+      }
       triggerDate.setTime(upcoming.getTime());
     }
 
@@ -511,8 +519,9 @@ export async function scheduleDueReminders(accountId: string): Promise<void> {
       const subs = await new SubscriptionRepository().findActiveByAccount(accountId);
       const daysBefore = Math.max(0, notificationSettings.subscriptionDaysBefore);
       for (const sub of subs) {
-        const daysUntil = Math.ceil((sub.nextProcessing - now) / msPerDay);
-        if (daysUntil >= 1 && daysUntil <= Math.max(1, daysBefore)) {
+        const daysUntil = Math.max(0, Math.ceil((sub.nextProcessing - now) / msPerDay));
+        // daysBefore = 0 means same-day only; N means N days ahead or sooner
+        if (daysUntil <= daysBefore) {
           await scheduleSubscriptionReminder(sub.id, sub.name, sub.amount, daysUntil);
         }
       }
@@ -523,13 +532,42 @@ export async function scheduleDueReminders(accountId: string): Promise<void> {
       const expenses = await new RecurringExpenseRepository().findActiveByAccount(accountId);
       const daysBefore = Math.max(0, notificationSettings.recurringDaysBefore);
       for (const expense of expenses) {
-        const daysUntil = Math.ceil((expense.nextOccurrence - now) / msPerDay);
-        if (daysUntil >= 1 && daysUntil <= Math.max(1, daysBefore)) {
+        const daysUntil = Math.max(0, Math.ceil((expense.nextOccurrence - now) / msPerDay));
+        if (daysUntil <= daysBefore) {
           await scheduleRecurringReminder(expense.id, expense.name, expense.amount, daysUntil);
         }
       }
     }
   } catch (error) {
     console.error('[ScheduleNudges] Failed to schedule due reminders:', error);
+  }
+}
+
+/**
+ * Purpose: Cancel all due-date reminders so turning a toggle off (or
+ * shrinking the window) doesn't leave stale triggers that still fire
+ */
+export async function cancelDueReminders(
+  accountId: string,
+  kind: 'subscription' | 'recurring' | 'all' = 'all',
+): Promise<void> {
+  try {
+    if (kind === 'subscription' || kind === 'all') {
+      const { SubscriptionRepository } = await import('../../database/repositories/SubscriptionRepository');
+      const subs = await new SubscriptionRepository().findActiveByAccount(accountId);
+      for (const sub of subs) {
+        await notifee.cancelNotification(`subscription-reminder-${sub.id}`);
+      }
+    }
+    if (kind === 'recurring' || kind === 'all') {
+      const { RecurringExpenseRepository } = await import('../../database/repositories/RecurringExpenseRepository');
+      const expenses = await new RecurringExpenseRepository().findActiveByAccount(accountId);
+      for (const expense of expenses) {
+        await notifee.cancelNotification(`recurring-reminder-${expense.id}`);
+      }
+    }
+    console.log('[ScheduleNudges] Due reminders cancelled:', kind);
+  } catch (error) {
+    console.error('[ScheduleNudges] Failed to cancel due reminders:', error);
   }
 }

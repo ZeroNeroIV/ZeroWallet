@@ -25,6 +25,7 @@ const defaultNotificationSettings = {
   periodicNudgesEnabled: false,
   lowBalanceAlertEnabled: true,
   lowBalanceThreshold: 50,
+  lowBalanceLastAlert: {},
   subscriptionRemindersEnabled: true,
   subscriptionDaysBefore: 2,
   recurringRemindersEnabled: true,
@@ -161,7 +162,7 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: 'settings-storage',
       storage: mmkvStorage,
-      version: 2,
+      version: 3,
       migrate: (persistedState: any, version: number) => {
         // Migrate old model names to new ones
         if (persistedState?.aiSettings?.selectedModel) {
@@ -178,6 +179,14 @@ export const useSettingsStore = create<SettingsState>()(
           }
         }
 
+        // v3: low-balance alert throttle timestamps
+        if (version < 3) {
+          const n3 = persistedState?.notificationSettings;
+          if (n3 && n3.lowBalanceLastAlert === undefined) {
+            n3.lowBalanceLastAlert = {};
+          }
+        }
+
         // v2: salary payday + merged smart-nudge settings
         if (version < 2) {
           if (persistedState?.salarySettings && persistedState.salarySettings.payDay === undefined) {
@@ -191,6 +200,7 @@ export const useSettingsStore = create<SettingsState>()(
               periodicNudgesEnabled: n.periodicNudgesEnabled ?? false,
               lowBalanceAlertEnabled: n.lowBalanceAlertEnabled ?? true,
               lowBalanceThreshold: n.lowBalanceThreshold ?? 50,
+              lowBalanceLastAlert: n.lowBalanceLastAlert ?? {},
               subscriptionRemindersEnabled:
                 n.subscriptionRemindersEnabled ?? n.subscriptionReminders ?? true,
               subscriptionDaysBefore: n.subscriptionDaysBefore ?? 2,

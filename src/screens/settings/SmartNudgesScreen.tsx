@@ -39,6 +39,7 @@ import {
   scheduleSalaryReminder,
   cancelSalaryReminder,
   scheduleDueReminders,
+  cancelDueReminders,
 } from '../../services/notifications/scheduleNudges';
 import { useAuthStore } from '../../store/authStore';
 
@@ -63,6 +64,12 @@ const SmartNudgesScreen = () => {
   const refreshDue = () => {
     if (currentAccountId) {
       scheduleDueReminders(currentAccountId);
+    }
+  };
+
+  const clearDue = (kind: 'subscription' | 'recurring') => {
+    if (currentAccountId) {
+      cancelDueReminders(currentAccountId, kind);
     }
   };
 
@@ -116,13 +123,21 @@ const SmartNudgesScreen = () => {
   const toggleSubscriptions = (value: boolean) => {
     lightHaptic();
     updateNotificationSettings({ subscriptionRemindersEnabled: value });
-    refreshDue();
+    if (value) {
+      refreshDue();
+    } else {
+      clearDue('subscription');
+    }
   };
 
   const toggleRecurring = (value: boolean) => {
     lightHaptic();
     updateNotificationSettings({ recurringRemindersEnabled: value });
-    refreshDue();
+    if (value) {
+      refreshDue();
+    } else {
+      clearDue('recurring');
+    }
   };
 
   const changeDays = (key: 'subscriptionDaysBefore' | 'recurringDaysBefore', delta: number) => {

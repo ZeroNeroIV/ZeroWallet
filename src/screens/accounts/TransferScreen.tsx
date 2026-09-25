@@ -68,7 +68,10 @@ export default function TransferScreen() {
   const fromAccount = accounts.find((a) => a.id === fromAccountId);
   const toAccount = accounts.find((a) => a.id === toAccountId);
   const fromBalance = fromAccountId ? balances[fromAccountId] : null;
-  const maxAmount = fromBalance ? fromBalance.availableBalance : 0;
+  // Transfers debit the source account's main (Investment) wallet, so the
+  // limit is the main balance — not the available balance (which also
+  // counts savings and would allow overdrawing main into the negative).
+  const maxAmount = fromBalance ? Math.max(0, fromBalance.mainBalance) : 0;
 
   const handleTransfer = async () => {
     setErrors({});

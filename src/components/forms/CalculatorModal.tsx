@@ -127,7 +127,7 @@ export const CalculatorModal: React.FC<CalculatorModalProps> = ({
       return;
     }
 
-    // Format to 2 decimal places
+    // Format to 3 decimal places
     const formattedValue = finalResult.toFixed(3);
     onConfirm(formattedValue);
   };

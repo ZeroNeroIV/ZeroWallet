@@ -396,7 +396,7 @@ export async function showSubscriptionReminder(
     const hasPermission = await checkNotificationPermission();
     if (!hasPermission) return;
 
-    const dayText = daysUntil === 1 ? 'tomorrow' : `in ${daysUntil} days`;
+    const dayText = daysUntil <= 0 ? 'today' : daysUntil === 1 ? 'tomorrow' : `in ${daysUntil} days`;
 
     return await notifee.displayNotification({
       title: '📅 Upcoming Subscription',

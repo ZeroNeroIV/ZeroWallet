@@ -104,12 +104,24 @@ export const TransactionHistoryScreen: React.FC = () => {
       setLoading(true);
       const all = await transactionRepo.findByAccount(currentAccountId);
       const cats = await categoryRepo.findByUser(currentUser.id);
-      const withCat: TransactionWithCategory[] = all
-        .map(t => {
-          const cat = cats.find((c: Category) => c.id === t.categoryId);
-          return cat ? { ...t, category: cat } : null;
-        })
-        .filter((t): t is TransactionWithCategory => t !== null);
+      // Never hide transactions: orphaned category ids (e.g. from an old
+      // backup) render under an Unknown placeholder instead of vanishing
+      const withCat: TransactionWithCategory[] = all.map(t => {
+        const cat = cats.find((c: Category) => c.id === t.categoryId);
+        return {
+          ...t,
+          category: cat ?? {
+            id: t.categoryId,
+            userId: currentUser.id,
+            name: 'Unknown',
+            type: t.type,
+            icon: 'help-circle',
+            color: '#999',
+            isDefault: false,
+            createdAt: 0,
+          },
+        };
+      });
 
       withCat.sort((a, b) => b.date - a.date);
       setTransactions(withCat);

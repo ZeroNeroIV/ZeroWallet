@@ -173,6 +173,7 @@ export interface NotificationSettings {
   periodicNudgesEnabled: boolean; // every-4-hours nudges
   lowBalanceAlertEnabled: boolean;
   lowBalanceThreshold: number; // alert when any wallet drops below this
+  lowBalanceLastAlert: Record<string, number>; // wallet key -> last alert timestamp (24h throttle)
   subscriptionRemindersEnabled: boolean;
   subscriptionDaysBefore: number; // days before billing to remind (0-7)
   recurringRemindersEnabled: boolean;

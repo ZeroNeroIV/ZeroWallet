@@ -143,6 +143,17 @@ export const AddTransactionScreen: React.FC = () => {
         : categories;
       const match = allCategories.find((c) => c.id === txn.categoryId);
       if (match) {
+        // Transfer legs come in matched pairs across accounts — editing one
+        // side alone would unbalance the pair, so block it and point at
+        // delete + re-transfer instead
+        if (match.name === 'Transfer') {
+          Alert.alert(
+            'Cannot Edit Transfer',
+            'Transfer transactions come in linked pairs. Delete this transfer and create a new one instead.',
+            [{ text: 'OK', onPress: () => navigation.goBack() }]
+          );
+          return;
+        }
         setSelectedCategory(match);
       } else {
         // Orphaned category (e.g. deleted): keep form usable, user picks anew
@@ -322,7 +333,8 @@ export const AddTransactionScreen: React.FC = () => {
    */
   const resolveConversion = async (
     numAmount: number,
-    accountCurrency: string
+    accountCurrency: string,
+    forceFresh = false
   ): Promise<{
     finalConvertedAmount: number;
     finalExchangeRate: number | undefined;
@@ -339,7 +351,9 @@ export const AddTransactionScreen: React.FC = () => {
 
     if (selectedCurrency !== accountCurrency) {
       console.log('[AddTransaction] Currencies differ - conversion needed');
-      if (!convertedAmount || !exchangeRate) {
+      // forceFresh guards edit mode: cached rate/amount belong to the
+      // ORIGINAL amount and must not be reused after the user changes it
+      if (!convertedAmount || !exchangeRate || forceFresh) {
         console.log('[AddTransaction] No conversion data cached - converting now...');
         try {
           const conversion = await convertCurrency(
@@ -485,6 +499,12 @@ export const AddTransactionScreen: React.FC = () => {
       Alert.alert('Error', 'No account selected');
       return;
     }
+    // In edit mode the original must be loaded first — otherwise the save
+    // would fall through and create a duplicate transaction
+    if (isEditMode && !originalTransaction) {
+      Alert.alert('Please wait', 'Still loading the transaction to edit.');
+      return;
+    }
 
     setLoading(true);
 
@@ -492,7 +512,14 @@ export const AddTransactionScreen: React.FC = () => {
       const numAmount = parseFloat(amount);
       const accountCurrency = currentAccount.currency;
 
-      const conversion = await resolveConversion(numAmount, accountCurrency);
+      // In edit mode the cached conversion belongs to the original amount:
+      // re-convert live whenever amount or currency changed since loading
+      const conversionStale =
+        isEditMode &&
+        !!originalTransaction &&
+        (numAmount !== originalTransaction.amount ||
+          selectedCurrency !== originalTransaction.currency);
+      const conversion = await resolveConversion(numAmount, accountCurrency, conversionStale);
       if (!conversion) {
         setLoading(false);
         return;

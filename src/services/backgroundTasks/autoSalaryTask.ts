@@ -72,7 +72,7 @@ function getNextFirstOfMonth(fromDate: Date = new Date()): number {
  * Purpose: Advance a payday by one month, keeping the same pay day
  * (clamped to shorter months, e.g. 31st → Feb 28th)
  */
-function advanceOneMonth(payday: Date, payDay: number): Date {
+export function advanceOneMonth(payday: Date, payDay: number): Date {
   const next = new Date(payday.getFullYear(), payday.getMonth() + 1, 1);
   return payDateForMonth(next.getFullYear(), next.getMonth(), payDay);
 }

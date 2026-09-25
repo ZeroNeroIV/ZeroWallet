@@ -182,9 +182,20 @@ export class DashboardService {
       const transactions = await this.transactionRepo.findByAccount(this.accountId, 5);
       const categories = await this.categoryRepo.findByUser(this.userId);
       const catMap = new Map(categories.map(c => [c.id, c]));
-      return transactions
-        .map(t => ({ ...t, category: catMap.get(t.categoryId)! }))
-        .filter((t): t is TransactionWithCat => !!t.category);
+      // Never hide transactions: orphaned category ids render as Unknown
+      return transactions.map(t => ({
+        ...t,
+        category: catMap.get(t.categoryId) ?? {
+          id: t.categoryId,
+          userId: this.userId,
+          name: 'Unknown',
+          type: t.type,
+          icon: 'help-circle',
+          color: '#999',
+          isDefault: false,
+          createdAt: 0,
+        },
+      }));
     } catch (error) {
       logger.error('[DashboardService] loadRecentTransactions error:', error);
       return [];
@@ -258,8 +269,11 @@ export class DashboardService {
       for (const t of txns) {
         if (t.type !== 'expense') continue;
         const amt = t.convertedAmount ?? t.amount;
-        const cat = catMap.get(t.categoryId);
-        if (!cat) continue;
+        const cat = catMap.get(t.categoryId) ?? {
+          id: t.categoryId,
+          name: 'Unknown',
+          color: '#999',
+        };
         const existing = spendMap.get(cat.id);
         if (existing) existing.amount += amt;
         else spendMap.set(cat.id, { name: cat.name, amount: amt, color: cat.color });

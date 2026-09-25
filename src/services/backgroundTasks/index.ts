@@ -156,35 +156,49 @@ export async function runMissedTasks(accountId: string): Promise<void> {
  *   - Returns (Promise<void>): Completes when check is done
  * 
  * Side effects:
- *   - Sends low balance notifications if balance < $50
+ *   - Sends low balance notifications below the configured threshold
+ *   - Throttled to one alert per wallet per 24 hours
  */
+const LOW_BALANCE_ALERT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
 async function checkLowBalanceWarnings(): Promise<void> {
   try {
-    const { notificationSettings } = useSettingsStore.getState();
+    const settingsStore = useSettingsStore.getState();
+    const { notificationSettings } = settingsStore;
     if (!notificationSettings.lowBalanceAlertEnabled) {
       return;
     }
     const threshold = notificationSettings.lowBalanceThreshold;
+    const lastAlert = notificationSettings.lowBalanceLastAlert ?? {};
+    const now = Date.now();
+    let stamped = false;
+    const updated = { ...lastAlert };
 
     const accountStore = useAccountStore.getState();
     const { balances } = accountStore;
 
-    // Check each account's wallets
+    // Check each account's wallets (throttled: at most one alert per wallet per day)
     for (const [accountId, balance] of Object.entries(balances)) {
-      // Check investment wallet
-      if (balance.mainBalance < threshold && balance.mainBalance > 0) {
-        await showLowBalanceWarning('main', balance.mainBalance);
+      const checks = [
+        { key: 'main', value: balance.mainBalance },
+        { key: 'savings', value: balance.savingsBalance },
+        { key: 'held', value: balance.heldBalance },
+      ];
+      for (const check of checks) {
+        if (check.value < threshold && check.value > 0) {
+          const stampKey = `${accountId}:${check.key}`;
+          if (now - (updated[stampKey] ?? 0) < LOW_BALANCE_ALERT_COOLDOWN_MS) {
+            continue;
+          }
+          await showLowBalanceWarning(check.key, check.value);
+          updated[stampKey] = now;
+          stamped = true;
+        }
       }
+    }
 
-      // Check savings wallet
-      if (balance.savingsBalance < threshold && balance.savingsBalance > 0) {
-        await showLowBalanceWarning('savings', balance.savingsBalance);
-      }
-
-      // Check recurring wallet
-      if (balance.heldBalance < threshold && balance.heldBalance > 0) {
-        await showLowBalanceWarning('held', balance.heldBalance);
-      }
+    if (stamped) {
+      settingsStore.updateNotificationSettings({ lowBalanceLastAlert: updated });
     }
   } catch (error) {
     console.error('[BackgroundTasks] Error checking low balance:', error);
