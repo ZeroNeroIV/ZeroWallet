@@ -21,6 +21,8 @@ export type MainStackParamList = {
   Dashboard: undefined;
   AddTransaction: {
     type?: 'income' | 'expense';
+    initialDate?: number;
+    transactionId?: string;
   } | undefined;
   TransactionHistory: undefined;
   TransactionDetails: {

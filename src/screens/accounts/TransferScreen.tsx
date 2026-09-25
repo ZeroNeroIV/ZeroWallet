@@ -95,17 +95,23 @@ export default function TransferScreen() {
     }
 
     if (numAmount > maxAmount) {
-      setErrors({ amount: `Insufficient balance. Available: ${maxAmount.toFixed(2)}` });
+      setErrors({ amount: `Insufficient balance. Available: ${maxAmount.toFixed(3)}` });
       return;
     }
 
     setLoading(true);
 
     try {
+      if (!currentUser) {
+        Alert.alert('Error', 'User not found');
+        setLoading(false);
+        return;
+      }
       const txRepo = new TransactionRepository();
       const result = await txRepo.transferBetweenAccounts({
         fromAccountId,
         toAccountId,
+        userId: currentUser.id,
         amount: numAmount,
         fromVaultType: 'main',
         toVaultType: 'main',
@@ -121,7 +127,7 @@ export default function TransferScreen() {
 
       Alert.alert(
         'Transfer Complete',
-        `${numAmount.toFixed(2)} ${fromAccount?.currency || 'USD'} transferred from ${fromAccount?.name} to ${toAccount?.name}`,
+        `${numAmount.toFixed(3)} ${fromAccount?.currency || 'USD'} transferred from ${fromAccount?.name} to ${toAccount?.name}`,
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
     } catch (error) {
@@ -138,29 +144,33 @@ export default function TransferScreen() {
     onPress: () => void,
     balance: number,
   ) => (
-    <Animated.View
+    <TouchableOpacity
       key={account.id}
-      style={[
-        styles.accountCard,
-        isSelected && styles.accountCardSelected,
-        { borderColor: isSelected ? account.color : themeColors.border },
-        { opacity: isSelected ? selectionAnim : 1 },
-      ]}
+      activeOpacity={0.7}
       onPress={onPress}
     >
-      <View style={[styles.accountIcon, { backgroundColor: account.color + '20' }]}>
-        <Icon name={account.icon} size={24} color={account.color} />
-      </View>
-      <View style={styles.accountInfo}>
-        <Text style={styles.accountName}>{account.name}</Text>
-        <Text style={styles.accountBalance}>
-          {balance.toFixed(2)} {account.currency}
-        </Text>
-      </View>
-      {isSelected && (
-        <Icon name="check-circle" size={24} color={account.color} />
-      )}
-    </Animated.View>
+      <Animated.View
+        style={[
+          styles.accountCard,
+          isSelected && styles.accountCardSelected,
+          { borderColor: isSelected ? account.color : themeColors.border },
+          { opacity: isSelected ? selectionAnim : 1 },
+        ]}
+      >
+        <View style={[styles.accountIcon, { backgroundColor: account.color + '20' }]}>
+          <Icon name={account.icon} size={24} color={account.color} />
+        </View>
+        <View style={styles.accountInfo}>
+          <Text style={styles.accountName}>{account.name}</Text>
+          <Text style={styles.accountBalance}>
+            {balance.toFixed(3)} {account.currency}
+          </Text>
+        </View>
+        {isSelected && (
+          <Icon name="check-circle" size={24} color={account.color} />
+        )}
+      </Animated.View>
+    </TouchableOpacity>
   );
 
   if (accounts.length < 2) {
@@ -207,10 +217,10 @@ export default function TransferScreen() {
         {fromBalance && (
           <TouchableOpacity
             style={styles.maxButton}
-            onPress={() => setAmount(maxAmount.toFixed(2))}
+            onPress={() => setAmount(maxAmount.toFixed(3))}
           >
             <Text style={styles.maxButtonText}>
-              MAX: {maxAmount.toFixed(2)}
+              MAX: {maxAmount.toFixed(3)}
             </Text>
           </TouchableOpacity>
         )}
@@ -258,7 +268,7 @@ export default function TransferScreen() {
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Amount</Text>
             <Text style={styles.summaryAmount}>
-              {parseFloat(amount).toFixed(2)} {fromAccount.currency}
+              {parseFloat(amount).toFixed(3)} {fromAccount.currency}
             </Text>
           </View>
         </View>

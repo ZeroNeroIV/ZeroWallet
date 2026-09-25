@@ -1,21 +1,37 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+/**
+ * Purpose: Redesigned transaction history with search, filters, monthly
+ * summary, list + calendar views
+ *
+ * Inputs:
+ *   - None (navigation screen)
+ *
+ * Outputs:
+ *   - Returns (JSX.Element): Filterable history with working add/edit/delete
+ *
+ * Side effects:
+ *   - Loads transactions + categories from database on focus
+ *   - Navigates to add/edit/details screens
+ *   - Deletes transactions and reverses their balance effect
+ */
+
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   RefreshControl,
   Alert,
-  FlatList,
   TouchableOpacity,
   ScrollView,
+  TextInput,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { TransactionItem } from '../../components/transactions/TransactionItem';
-import { spacing } from '../../theme/spacing';
+import { spacing, borderRadius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { borderRadius } from '../../theme/spacing';
 import { MainStackParamList } from '../../types/navigation';
 import { Transaction, Category } from '../../types/models';
 import { useAuthStore } from '../../store/authStore';
@@ -29,6 +45,12 @@ type Nav = StackNavigationProp<MainStackParamList, 'TransactionHistory'>;
 interface TransactionWithCategory extends Transaction {
   category: Category;
 }
+
+type Row =
+  | { type: 'header'; label: string; key: string }
+  | { type: 'item'; tx: TransactionWithCategory; key: string };
+
+type TypeFilter = 'all' | 'income' | 'expense';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -56,6 +78,11 @@ export const TransactionHistoryScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [accountCurrency, setAccountCurrency] = useState('USD');
   const [view, setView] = useState<'list' | 'calendar'>('list');
+
+  // filters
+  const [query, setQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
+  const [monthFilter, setMonthFilter] = useState<{ year: number; month: number } | null>(null);
 
   // calendar state
   const today = new Date();
@@ -100,11 +127,17 @@ export const TransactionHistoryScreen: React.FC = () => {
     }
   };
 
+  const balanceAmountOf = (t: TransactionWithCategory) => t.convertedAmount || t.amount;
+
   const handleDelete = async (t: TransactionWithCategory) => {
     try {
       await transactionRepo.delete(t.id);
-      const amt = t.convertedAmount || t.amount;
-      t.type === 'income' ? subtractFromVault(t.vaultType, amt) : addToVault(t.vaultType, amt);
+      const amt = balanceAmountOf(t);
+      if (t.type === 'income') {
+        subtractFromVault(t.vaultType, amt);
+      } else {
+        addToVault(t.vaultType, amt);
+      }
       await loadTransactions();
       Alert.alert('Success', 'Transaction deleted');
     } catch {
@@ -115,27 +148,75 @@ export const TransactionHistoryScreen: React.FC = () => {
   const handlePress = (t: TransactionWithCategory) =>
     navigation.navigate('TransactionDetails', { transactionId: t.id });
 
-  const handleAdd = (dateStr?: string) => {
-    navigation.navigate('AddTransaction', {});
+  const handleEdit = (t: TransactionWithCategory) =>
+    navigation.navigate('AddTransaction', { transactionId: t.id });
+
+  const handleAdd = (initialDate?: number) => {
+    navigation.navigate('AddTransaction', initialDate ? { initialDate } : {});
   };
 
-  // ── list view data ────────────────────────────────────────────────────────
+  const formatMoney = useCallback((value: number) => {
+    const formatted = Math.abs(value).toLocaleString('en-US', {
+      minimumFractionDigits: 3,
+      maximumFractionDigits: 3,
+    });
+    return accountCurrency === 'USD' ? `$${formatted}` : `${formatted} ${accountCurrency}`;
+  }, [accountCurrency]);
 
-  const groupedData = useMemo(() => {
-    const result: Array<{ type: 'header'; label: string } | { type: 'item'; tx: TransactionWithCategory }> = [];
+  // ── filtering + summary ───────────────────────────────────────────────────
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return transactions.filter(t => {
+      if (typeFilter !== 'all' && t.type !== typeFilter) return false;
+      if (monthFilter) {
+        const d = new Date(t.date);
+        if (d.getFullYear() !== monthFilter.year || d.getMonth() !== monthFilter.month) return false;
+      }
+      if (q) {
+        const haystack = `${t.description || ''} ${t.category.name} ${t.amount}`.toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [transactions, query, typeFilter, monthFilter]);
+
+  const summary = useMemo(() => {
+    let income = 0;
+    let expense = 0;
+    for (const t of filtered) {
+      const amt = balanceAmountOf(t);
+      if (t.type === 'income') income += amt;
+      else expense += amt;
+    }
+    return { income, expense, net: income - expense, count: filtered.length };
+  }, [filtered]);
+
+  // ── list view rows ────────────────────────────────────────────────────────
+
+  const rows = useMemo<Row[]>(() => {
+    const result: Row[] = [];
     let lastDate = '';
-    for (const t of transactions) {
+    for (const t of filtered) {
       const label = new Date(t.date).toLocaleDateString('en-US', {
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
       });
       if (label !== lastDate) {
-        result.push({ type: 'header', label });
+        result.push({ type: 'header', label, key: `h-${label}` });
         lastDate = label;
       }
-      result.push({ type: 'item', tx: t });
+      result.push({ type: 'item', tx: t, key: `t-${t.id}` });
     }
     return result;
-  }, [transactions]);
+  }, [filtered]);
+
+  const stickyIndices = useMemo(() => {
+    const indices: number[] = [];
+    rows.forEach((r, i) => {
+      if (r.type === 'header') indices.push(i);
+    });
+    return indices;
+  }, [rows]);
 
   // ── calendar view data ────────────────────────────────────────────────────
 
@@ -160,18 +241,30 @@ export const TransactionHistoryScreen: React.FC = () => {
     return { first, total };
   }, [calYear, calMonth]);
 
-  const prevMonth = () => {
-    if (calMonth === 0) { setCalMonth(11); setCalYear(y => y - 1); }
-    else setCalMonth(m => m - 1);
+  const shiftCalMonth = (delta: number) => {
+    const next = new Date(calYear, calMonth + delta, 1);
+    setCalYear(next.getFullYear());
+    setCalMonth(next.getMonth());
   };
-  const nextMonth = () => {
-    if (calMonth === 11) { setCalMonth(0); setCalYear(y => y + 1); }
-    else setCalMonth(m => m + 1);
+
+  const shiftFilterMonth = (delta: number) => {
+    if (!monthFilter) {
+      const now = new Date();
+      const next = new Date(now.getFullYear(), now.getMonth() + delta, 1);
+      setMonthFilter({ year: next.getFullYear(), month: next.getMonth() });
+      return;
+    }
+    const next = new Date(monthFilter.year, monthFilter.month + delta, 1);
+    setMonthFilter({ year: next.getFullYear(), month: next.getMonth() });
   };
+
+  const monthFilterLabel = monthFilter
+    ? `${MONTHS[monthFilter.month]} ${monthFilter.year}`
+    : 'All time';
 
   // ── render helpers ────────────────────────────────────────────────────────
 
-  const renderListItem = ({ item }: { item: typeof groupedData[0] }) => {
+  const renderRow = ({ item }: { item: Row }) => {
     if (item.type === 'header') {
       return (
         <View style={styles.dateHeader}>
@@ -180,21 +273,40 @@ export const TransactionHistoryScreen: React.FC = () => {
       );
     }
     return (
-      <TransactionItem
-        transaction={item.tx}
-        category={item.tx.category}
-        onPress={() => handlePress(item.tx)}
-        onEdit={() => {}}
-        onDelete={() => handleDelete(item.tx)}
-        accountCurrency={accountCurrency}
-      />
+      <View style={styles.itemWrap}>
+        <TransactionItem
+          transaction={item.tx}
+          category={item.tx.category}
+          onPress={() => handlePress(item.tx)}
+          onEdit={() => handleEdit(item.tx)}
+          onDelete={() => handleDelete(item.tx)}
+          accountCurrency={accountCurrency}
+        />
+      </View>
+    );
+  };
+
+  const renderTypeChip = (value: TypeFilter, label: string, icon: string) => {
+    const active = typeFilter === value;
+    return (
+      <TouchableOpacity
+        style={[styles.chip, active && styles.chipActive]}
+        onPress={() => setTypeFilter(value)}
+        activeOpacity={0.7}
+      >
+        <MaterialCommunityIcons
+          name={icon as any}
+          size={16}
+          color={active ? '#fff' : themeColors.textSecondary}
+        />
+        <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+      </TouchableOpacity>
     );
   };
 
   const renderCalendar = () => {
     const cells: React.ReactNode[] = [];
 
-    // blank cells before first day
     for (let i = 0; i < calDays.first; i++) {
       cells.push(<View key={`blank-${i}`} style={styles.calCell} />);
     }
@@ -229,7 +341,6 @@ export const TransactionHistoryScreen: React.FC = () => {
       );
     }
 
-    // group into rows of 7
     const rows: React.ReactNode[] = [];
     for (let i = 0; i < cells.length; i += 7) {
       rows.push(
@@ -248,10 +359,38 @@ export const TransactionHistoryScreen: React.FC = () => {
     });
   }, [selectedDate]);
 
+  const selectedDateTimestamp = useMemo(() => {
+    const [y, m, d] = selectedDate.split('-').map(Number);
+    return new Date(y, m - 1, d, 12, 0, 0, 0).getTime();
+  }, [selectedDate]);
+
   // ── main render ───────────────────────────────────────────────────────────
 
   return (
     <View style={styles.container}>
+
+      {/* Summary card */}
+      <View style={styles.summaryCard}>
+        <View style={styles.summaryCol}>
+          <Text style={styles.summaryLabel}>Income</Text>
+          <Text style={[styles.summaryValue, styles.incomeText]}>+{formatMoney(summary.income)}</Text>
+        </View>
+        <View style={styles.summaryDivider} />
+        <View style={styles.summaryCol}>
+          <Text style={styles.summaryLabel}>Expenses</Text>
+          <Text style={[styles.summaryValue, styles.expenseText]}>-{formatMoney(summary.expense)}</Text>
+        </View>
+        <View style={styles.summaryDivider} />
+        <View style={styles.summaryCol}>
+          <Text style={styles.summaryLabel}>Net ({summary.count})</Text>
+          <Text style={[
+            styles.summaryValue,
+            summary.net >= 0 ? styles.incomeText : styles.expenseText,
+          ]}>
+            {summary.net >= 0 ? '+' : '-'}{formatMoney(summary.net)}
+          </Text>
+        </View>
+      </View>
 
       {/* View toggle */}
       <View style={styles.toggleRow}>
@@ -286,30 +425,82 @@ export const TransactionHistoryScreen: React.FC = () => {
 
       {/* ── LIST VIEW ── */}
       {view === 'list' && (
-        <FlatList
-          data={groupedData}
-          renderItem={renderListItem}
-          keyExtractor={(item, i) =>
-            item.type === 'header' ? `h-${item.label}` : `t-${item.tx.id}`
-          }
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => { setRefreshing(true); loadTransactions(); }}
-              tintColor={themeColors.primary}
+        <>
+          {/* Search */}
+          <View style={styles.searchRow}>
+            <MaterialCommunityIcons name="magnify" size={20} color={themeColors.textSecondary} />
+            <TextInput
+              style={styles.searchInput}
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search description, category, amount…"
+              placeholderTextColor={themeColors.textSecondary}
+              returnKeyType="search"
             />
-          }
-          ListEmptyComponent={
-            !loading ? (
-              <View style={styles.empty}>
-                <MaterialCommunityIcons name="receipt" size={48} color={themeColors.textSecondary} />
-                <Text style={styles.emptyTitle}>No Transactions Yet</Text>
-                <Text style={styles.emptyText}>Tap + to add your first transaction</Text>
-              </View>
-            ) : null
-          }
-          contentContainerStyle={groupedData.length === 0 ? styles.emptyContainer : undefined}
-        />
+            {query.length > 0 && (
+              <TouchableOpacity onPress={() => setQuery('')} hitSlop={8}>
+                <MaterialCommunityIcons name="close-circle" size={20} color={themeColors.textSecondary} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Type filter chips */}
+          <View style={styles.chipRow}>
+            {renderTypeChip('all', 'All', 'view-list')}
+            {renderTypeChip('income', 'Income', 'arrow-down-bold')}
+            {renderTypeChip('expense', 'Expenses', 'arrow-up-bold')}
+          </View>
+
+          {/* Month filter */}
+          <View style={styles.monthRow}>
+            <TouchableOpacity onPress={() => shiftFilterMonth(-1)} style={styles.monthArrow} hitSlop={8}>
+              <MaterialCommunityIcons name="chevron-left" size={24} color={themeColors.text} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setMonthFilter(null)} activeOpacity={0.7}>
+              <Text style={styles.monthText}>{monthFilterLabel}</Text>
+              {monthFilter && <Text style={styles.monthReset}>Tap for all time</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => shiftFilterMonth(1)} style={styles.monthArrow} hitSlop={8}>
+              <MaterialCommunityIcons name="chevron-right" size={24} color={themeColors.text} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.listWrap}>
+            <FlashList
+              data={rows}
+              renderItem={renderRow}
+              keyExtractor={(item) => item.key}
+              estimatedItemSize={86}
+              stickyHeaderIndices={stickyIndices}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={() => { setRefreshing(true); loadTransactions(); }}
+                  tintColor={themeColors.primary}
+                />
+              }
+              ListEmptyComponent={
+                !loading ? (
+                  <View style={styles.empty}>
+                    <MaterialCommunityIcons
+                      name={query || typeFilter !== 'all' || monthFilter ? 'magnify-close' : 'receipt'}
+                      size={48}
+                      color={themeColors.textSecondary}
+                    />
+                    <Text style={styles.emptyTitle}>
+                      {query || typeFilter !== 'all' || monthFilter ? 'No Matches' : 'No Transactions Yet'}
+                    </Text>
+                    <Text style={styles.emptyText}>
+                      {query || typeFilter !== 'all' || monthFilter
+                        ? 'Try a different search or filter'
+                        : 'Tap + to add your first transaction'}
+                    </Text>
+                  </View>
+                ) : null
+              }
+            />
+          </View>
+        </>
       )}
 
       {/* ── CALENDAR VIEW ── */}
@@ -317,11 +508,11 @@ export const TransactionHistoryScreen: React.FC = () => {
         <ScrollView style={{ flex: 1 }}>
           {/* Month nav */}
           <View style={styles.monthNav}>
-            <TouchableOpacity onPress={prevMonth} style={styles.navArrow}>
+            <TouchableOpacity onPress={() => shiftCalMonth(-1)} style={styles.navArrow}>
               <MaterialCommunityIcons name="chevron-left" size={28} color={themeColors.text} />
             </TouchableOpacity>
             <Text style={styles.monthLabel}>{MONTHS[calMonth]} {calYear}</Text>
-            <TouchableOpacity onPress={nextMonth} style={styles.navArrow}>
+            <TouchableOpacity onPress={() => shiftCalMonth(1)} style={styles.navArrow}>
               <MaterialCommunityIcons name="chevron-right" size={28} color={themeColors.text} />
             </TouchableOpacity>
           </View>
@@ -344,7 +535,7 @@ export const TransactionHistoryScreen: React.FC = () => {
               <Text style={styles.selectedDateLabel}>{formattedSelected}</Text>
               <TouchableOpacity
                 style={styles.addBtn}
-                onPress={() => handleAdd(selectedDate)}
+                onPress={() => handleAdd(selectedDateTimestamp)}
               >
                 <MaterialCommunityIcons name="plus" size={20} color="#fff" />
                 <Text style={styles.addBtnText}>Add</Text>
@@ -358,27 +549,30 @@ export const TransactionHistoryScreen: React.FC = () => {
               </View>
             ) : (
               selectedTxs.map(t => (
-                <TransactionItem
-                  key={t.id}
-                  transaction={t}
-                  category={t.category}
-                  onPress={() => handlePress(t)}
-                  onEdit={() => {}}
-                  onDelete={() => handleDelete(t)}
-                  accountCurrency={accountCurrency}
-                />
+                <View key={t.id} style={styles.itemWrap}>
+                  <TransactionItem
+                    transaction={t}
+                    category={t.category}
+                    onPress={() => handlePress(t)}
+                    onEdit={() => handleEdit(t)}
+                    onDelete={() => handleDelete(t)}
+                    accountCurrency={accountCurrency}
+                  />
+                </View>
               ))
             )}
           </View>
         </ScrollView>
       )}
 
-      {/* FAB for list view */}
-      {view === 'list' && (
-        <TouchableOpacity style={[styles.fab, { backgroundColor: themeColors.primary }]} onPress={() => handleAdd()}>
-          <MaterialCommunityIcons name="plus" size={28} color="#fff" />
-        </TouchableOpacity>
-      )}
+      {/* FAB */}
+      <TouchableOpacity
+        style={[styles.fab, { backgroundColor: themeColors.primary }]}
+        onPress={() => handleAdd(view === 'calendar' ? selectedDateTimestamp : undefined)}
+        activeOpacity={0.8}
+      >
+        <MaterialCommunityIcons name="plus" size={28} color="#fff" />
+      </TouchableOpacity>
     </View>
   );
 };
@@ -389,10 +583,93 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: themeColors.background },
 
+    // summary
+    summaryCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: themeColors.surface,
+      marginHorizontal: spacing.md,
+      marginTop: spacing.md,
+      borderRadius: borderRadius.lg,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.sm,
+      borderWidth: 1,
+      borderColor: themeColors.border,
+    },
+    summaryCol: { flex: 1, alignItems: 'center', gap: 2 },
+    summaryLabel: { ...typography.caption, color: themeColors.textSecondary, fontWeight: '600' },
+    summaryValue: { ...typography.body, fontWeight: '700', color: themeColors.text },
+    incomeText: { color: themeColors.success },
+    expenseText: { color: themeColors.error },
+    summaryDivider: { width: 1, alignSelf: 'stretch', backgroundColor: themeColors.border },
+
+    // search
+    searchRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: themeColors.surface,
+      marginHorizontal: spacing.md,
+      marginTop: spacing.sm,
+      borderRadius: borderRadius.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderWidth: 1,
+      borderColor: themeColors.border,
+      gap: spacing.sm,
+    },
+    searchInput: {
+      ...typography.body,
+      flex: 1,
+      color: themeColors.text,
+      paddingVertical: 0,
+    },
+
+    // chips
+    chipRow: {
+      flexDirection: 'row',
+      paddingHorizontal: spacing.md,
+      marginTop: spacing.sm,
+      gap: spacing.sm,
+    },
+    chip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderRadius: borderRadius.round,
+      backgroundColor: themeColors.surface,
+      borderWidth: 1,
+      borderColor: themeColors.border,
+      gap: 4,
+    },
+    chipActive: {
+      backgroundColor: themeColors.primary,
+      borderColor: themeColors.primary,
+    },
+    chipText: { ...typography.bodySmall, color: themeColors.textSecondary, fontWeight: '600' },
+    chipTextActive: { color: '#fff' },
+
+    // month filter
+    monthRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+    },
+    monthArrow: { padding: spacing.xs },
+    monthText: { ...typography.body, color: themeColors.text, fontWeight: '700', textAlign: 'center' },
+    monthReset: { ...typography.caption, color: themeColors.primary, textAlign: 'center' },
+
+    // list
+    listWrap: { flex: 1 },
+    itemWrap: { paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
+
     // toggle
     toggleRow: {
       flexDirection: 'row',
-      margin: spacing.md,
+      marginHorizontal: spacing.md,
+      marginTop: spacing.sm,
       backgroundColor: themeColors.surface,
       borderRadius: borderRadius.md,
       padding: 4,
@@ -411,7 +688,7 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
     toggleLabel: { ...typography.bodySmall, color: themeColors.textSecondary, fontWeight: '600' },
     toggleLabelActive: { color: '#fff' },
 
-    // list view
+    // sticky date headers
     dateHeader: {
       backgroundColor: themeColors.surface,
       paddingHorizontal: spacing.lg,
@@ -426,7 +703,6 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
       textTransform: 'uppercase',
       letterSpacing: 0.5,
     },
-    emptyContainer: { flex: 1 },
     empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: spacing.sm },
     emptyTitle: { ...typography.h3, color: themeColors.text },
     emptyText: { ...typography.body, color: themeColors.textSecondary, textAlign: 'center' },

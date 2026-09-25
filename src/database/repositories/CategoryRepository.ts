@@ -78,6 +78,29 @@ export class CategoryRepository extends BaseRepository<Category> {
     );
     return rows[0] || null;
   }
+
+  /**
+   * Purpose: Find the user's Transfer category, creating it on demand
+   *
+   * Transfer transactions must point at a real category, otherwise they
+   * become invisible in every list (category lookup fails). The category
+   * is marked default so it cannot be deleted.
+   */
+  async ensureTransferCategory(userId: string, type: CategoryType): Promise<Category> {
+    const rows = await this.rawQuery(
+      'SELECT * FROM categories WHERE user_id = ? AND type = ? AND name = ?',
+      [userId, type, 'Transfer'],
+    );
+    if (rows[0]) return rows[0];
+    return this.create({
+      userId,
+      name: 'Transfer',
+      type,
+      icon: 'bank-transfer',
+      color: '#118AB2',
+      isDefault: true,
+    });
+  }
 }
 
 export async function createDefaultCategories(userId: string): Promise<void> {

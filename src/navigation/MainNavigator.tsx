@@ -80,10 +80,13 @@ export function MainNavigator() {
       <Stack.Screen
         name="AddTransaction"
         component={AddTransactionScreen}
-        options={{
-          title: 'Add Transaction',
+        options={({ route }) => ({
+          title:
+            route.params && 'transactionId' in route.params && route.params.transactionId
+              ? 'Edit Transaction'
+              : 'Add Transaction',
           presentation: 'modal',
-        }}
+        })}
       />
       <Stack.Screen
         name="TransactionHistory"

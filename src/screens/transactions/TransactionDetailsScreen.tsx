@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   Image,
 } from 'react-native';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { CategoryIcon } from '../../components/transactions/CategoryIcon';
@@ -17,7 +17,8 @@ import { ImageViewer } from '../../components/common/ImageViewer';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { MainStackParamList } from '../../types/navigation';
-import { Transaction, Category } from '../../types/models';
+import { Transaction, Category, VaultType } from '../../types/models';
+import { walletShortName } from '../../utils/wallets';
 import { useVaultStore } from '../../store/vaultStore';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { TransactionRepository } from '../../database/repositories/TransactionRepository';
@@ -57,6 +58,13 @@ export const TransactionDetailsScreen: React.FC = () => {
   useEffect(() => {
     loadTransaction();
   }, [transactionId]);
+
+  // Reload when returning from the edit screen
+  useFocusEffect(
+    useCallback(() => {
+      loadTransaction();
+    }, [transactionId])
+  );
 
   const loadTransaction = async () => {
     try {
@@ -151,7 +159,14 @@ export const TransactionDetailsScreen: React.FC = () => {
   };
 
   const getVaultLabel = (vault: string) => {
+    if (vault === 'main' || vault === 'savings' || vault === 'held') {
+      return walletShortName(vault as VaultType);
+    }
     return vault.charAt(0).toUpperCase() + vault.slice(1);
+  };
+
+  const handleEdit = () => {
+    navigation.navigate('AddTransaction', { transactionId });
   };
 
   if (loading || !transaction) {
@@ -235,7 +250,7 @@ export const TransactionDetailsScreen: React.FC = () => {
           />
           <DetailRow
             icon="wallet"
-            label="Vault"
+            label="Wallet"
             value={getVaultLabel(transaction.vaultType)}
           />
           <DetailRow
@@ -261,6 +276,11 @@ export const TransactionDetailsScreen: React.FC = () => {
 
         {/* Actions Section */}
         <View style={styles.actionsSection}>
+          <Button
+            title="Edit Transaction"
+            onPress={handleEdit}
+            leftIcon={<MaterialCommunityIcons name="pencil" size={20} color="#FFF" />}
+          />
           <Button
             title="Delete Transaction"
             onPress={handleDelete}

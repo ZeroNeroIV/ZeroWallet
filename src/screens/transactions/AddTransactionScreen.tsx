@@ -23,7 +23,7 @@ import { CurrencyConversionModal } from '../../components/transactions/CurrencyC
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { MainStackParamList } from '../../types/navigation';
-import { Category, VaultType, TransactionInput, Account } from '../../types/models';
+import { Category, VaultType, Transaction, TransactionInput, Account } from '../../types/models';
 import { useAuthStore } from '../../store/authStore';
 import { useVaultStore } from '../../store/vaultStore';
 import { useThemeColors } from '../../hooks/useThemeColors';
@@ -55,6 +55,9 @@ export const AddTransactionScreen: React.FC = () => {
   const { addToVault, subtractFromVault } = useVaultStore();
   const themeColors = useThemeColors();
 
+  const editTransactionId = route.params?.transactionId;
+  const isEditMode = !!editTransactionId;
+
   const [type, setType] = useState<'income' | 'expense'>(
     route.params?.type || 'expense'
   );
@@ -62,8 +65,12 @@ export const AddTransactionScreen: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<Category | undefined>();
   const [categories, setCategories] = useState<Category[]>([]);
   const [description, setDescription] = useState('');
-  const [date, setDate] = useState(new Date());
+  const [date, setDate] = useState(
+    route.params?.initialDate ? new Date(route.params.initialDate) : new Date()
+  );
   const [vaultType, setVaultType] = useState<VaultType>('main');
+  const [originalTransaction, setOriginalTransaction] = useState<Transaction | null>(null);
+  const [loadingOriginal, setLoadingOriginal] = useState(isEditMode);
   const [selectedImageUris, setSelectedImageUris] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({
@@ -102,6 +109,54 @@ export const AddTransactionScreen: React.FC = () => {
   useEffect(() => {
     loadCategories();
   }, [currentAccountId, currentUser]);
+
+  // Load original transaction in edit mode and prefill the form
+  useEffect(() => {
+    if (isEditMode && editTransactionId) {
+      loadOriginalTransaction(editTransactionId);
+    }
+  }, [editTransactionId, currentAccountId]);
+
+  const loadOriginalTransaction = async (id: string) => {
+    setLoadingOriginal(true);
+    try {
+      const txn = await transactionRepo.findById(id);
+      if (!txn) {
+        Alert.alert('Error', 'Transaction not found', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+        return;
+      }
+      setOriginalTransaction(txn);
+      setType(txn.type);
+      setAmount(txn.amount.toFixed(3));
+      setDescription(txn.description || '');
+      setDate(new Date(txn.date));
+      setVaultType(txn.vaultType);
+      setSelectedCurrency(txn.currency || 'USD');
+      if (txn.exchangeRate) setExchangeRate(txn.exchangeRate);
+      if (txn.convertedAmount) setConvertedAmount(txn.convertedAmount);
+
+      // Resolve category once categories are available
+      const allCategories = currentUser
+        ? await categoryRepo.findByUser(currentUser.id)
+        : categories;
+      const match = allCategories.find((c) => c.id === txn.categoryId);
+      if (match) {
+        setSelectedCategory(match);
+      } else {
+        // Orphaned category (e.g. deleted): keep form usable, user picks anew
+        setSelectedCategory(undefined);
+      }
+    } catch (error) {
+      console.error('[AddTransaction] Failed to load transaction for edit:', error);
+      Alert.alert('Error', 'Failed to load transaction', [
+        { text: 'OK', onPress: () => navigation.goBack() },
+      ]);
+    } finally {
+      setLoadingOriginal(false);
+    }
+  };
 
   useEffect(() => {
     console.log('[AddTransaction] Type changed to:', type);
@@ -261,6 +316,169 @@ export const AddTransactionScreen: React.FC = () => {
     return !newErrors.amount && !newErrors.category;
   };
 
+  /**
+   * Purpose: Resolve the balance-relevant converted amount for the form state
+   * Returns null (after alerting) when conversion fails.
+   */
+  const resolveConversion = async (
+    numAmount: number,
+    accountCurrency: string
+  ): Promise<{
+    finalConvertedAmount: number;
+    finalExchangeRate: number | undefined;
+    finalOriginalAmount: number | undefined;
+  } | null> => {
+    console.log('[AddTransaction] Starting conversion check:');
+    console.log('[AddTransaction] Amount:', numAmount);
+    console.log('[AddTransaction] Selected currency:', selectedCurrency);
+    console.log('[AddTransaction] Account currency:', accountCurrency);
+
+    let finalConvertedAmount = numAmount;
+    let finalExchangeRate: number | undefined;
+    let finalOriginalAmount: number | undefined;
+
+    if (selectedCurrency !== accountCurrency) {
+      console.log('[AddTransaction] Currencies differ - conversion needed');
+      if (!convertedAmount || !exchangeRate) {
+        console.log('[AddTransaction] No conversion data cached - converting now...');
+        try {
+          const conversion = await convertCurrency(
+            numAmount,
+            selectedCurrency,
+            accountCurrency
+          );
+          finalConvertedAmount = conversion.convertedAmount;
+          finalExchangeRate = conversion.exchangeRate;
+          finalOriginalAmount = numAmount;
+          console.log('[AddTransaction] Auto-converted:', {
+            from: `${numAmount} ${selectedCurrency}`,
+            to: `${finalConvertedAmount} ${accountCurrency}`,
+            rate: finalExchangeRate
+          });
+        } catch (error) {
+          console.error('[AddTransaction] Conversion failed:', error);
+          Alert.alert(
+            'Error',
+            'Failed to convert currency. Please check your internet connection.'
+          );
+          return null;
+        }
+      } else {
+        console.log('[AddTransaction] Using cached conversion data');
+        finalConvertedAmount = convertedAmount;
+        finalExchangeRate = exchangeRate;
+        finalOriginalAmount = numAmount;
+        console.log('[AddTransaction] Cached conversion:', {
+          from: `${numAmount} ${selectedCurrency}`,
+          to: `${finalConvertedAmount} ${accountCurrency}`,
+          rate: finalExchangeRate
+        });
+      }
+    } else {
+      console.log('[AddTransaction] Same currency - no conversion needed');
+    }
+
+    console.log('[AddTransaction] Final amounts:', {
+      originalAmount: finalOriginalAmount,
+      convertedAmount: finalConvertedAmount,
+      balanceUpdateAmount: finalConvertedAmount
+    });
+
+    return { finalConvertedAmount, finalExchangeRate, finalOriginalAmount };
+  };
+
+  /** Reverse a transaction's balance effect (used by delete/edit flows) */
+  const reverseBalanceEffect = (
+    txnType: 'income' | 'expense',
+    txnVault: VaultType,
+    balanceAmount: number
+  ) => {
+    if (txnType === 'income') {
+      subtractFromVault(txnVault, balanceAmount);
+    } else {
+      addToVault(txnVault, balanceAmount);
+    }
+  };
+
+  /** Apply a transaction's balance effect (used by create/edit flows) */
+  const applyBalanceEffect = (
+    txnType: 'income' | 'expense',
+    txnVault: VaultType,
+    balanceAmount: number
+  ) => {
+    if (txnType === 'income') {
+      addToVault(txnVault, balanceAmount);
+    } else {
+      subtractFromVault(txnVault, balanceAmount);
+    }
+  };
+
+  /**
+   * Purpose: Update an existing transaction and correct the wallet balance
+   * by reversing the old effect first, then applying the new one. This stays
+   * correct when type, wallet or amount all change at once.
+   */
+  const handleUpdate = async (
+    original: Transaction,
+    numAmount: number,
+    finalConvertedAmount: number,
+    finalExchangeRate: number | undefined,
+    finalOriginalAmount: number | undefined
+  ) => {
+    try {
+      // Reverse the original balance effect
+      const oldBalanceAmount = original.convertedAmount || original.amount;
+      reverseBalanceEffect(original.type, original.vaultType, oldBalanceAmount);
+
+      // Persist the updated fields
+      await transactionRepo.update(original.id, {
+        type,
+        amount: numAmount,
+        categoryId: selectedCategory!.id,
+        description,
+        date: date.getTime(),
+        vaultType,
+        currency: selectedCurrency,
+        originalAmount: finalOriginalAmount,
+        exchangeRate: finalExchangeRate,
+        convertedAmount: finalConvertedAmount !== numAmount ? finalConvertedAmount : undefined,
+      } as Partial<Transaction>);
+
+      // Append any newly attached receipt images (offset keeps filenames unique)
+      const existingImages = await transactionRepo.getImages(original.id);
+      for (let i = 0; i < selectedImageUris.length; i++) {
+        try {
+          const { originalPath } = await compressAndSaveImage(
+            selectedImageUris[i],
+            `${original.id}_${existingImages.length + i}`
+          );
+          await transactionRepo.addImage(original.id, originalPath, existingImages.length + i);
+        } catch (error) {
+          console.error('[AddTransaction] Failed to save image:', error);
+        }
+      }
+
+      // Apply the new balance effect
+      applyBalanceEffect(type, vaultType, finalConvertedAmount);
+
+      Alert.alert(
+        'Success',
+        `${type === 'income' ? 'Income' : 'Expense'} updated successfully`,
+        [
+          {
+            text: 'OK',
+            onPress: () => navigation.goBack(),
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('[AddTransaction] Error updating transaction:', error);
+      Alert.alert('Error', 'Failed to update transaction');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!validate()) return;
     if (!currentAccountId || !currentAccount) {
@@ -271,6 +489,28 @@ export const AddTransactionScreen: React.FC = () => {
     setLoading(true);
 
     try {
+      const numAmount = parseFloat(amount);
+      const accountCurrency = currentAccount.currency;
+
+      const conversion = await resolveConversion(numAmount, accountCurrency);
+      if (!conversion) {
+        setLoading(false);
+        return;
+      }
+      const { finalConvertedAmount, finalExchangeRate, finalOriginalAmount } = conversion;
+
+      // Edit mode: update existing transaction + correct the balance
+      if (isEditMode && originalTransaction) {
+        await handleUpdate(
+          originalTransaction,
+          numAmount,
+          finalConvertedAmount,
+          finalExchangeRate,
+          finalOriginalAmount
+        );
+        return;
+      }
+
       // Generate transaction ID first (needed for image storage)
       const transactionId = uuidv4();
       const savedImagePaths: string[] = [];
@@ -289,70 +529,6 @@ export const AddTransactionScreen: React.FC = () => {
       }
 
       const imagePath = savedImagePaths[0];
-
-      const numAmount = parseFloat(amount);
-      const accountCurrency = currentAccount.currency;
-
-      console.log('[AddTransaction] Starting conversion check:');
-      console.log('[AddTransaction] Amount:', numAmount);
-      console.log('[AddTransaction] Selected currency:', selectedCurrency);
-      console.log('[AddTransaction] Account currency:', accountCurrency);
-
-      // Handle currency conversion
-      let finalConvertedAmount = numAmount;
-      let finalExchangeRate: number | undefined;
-      let finalOriginalAmount: number | undefined;
-
-      if (selectedCurrency !== accountCurrency) {
-        console.log('[AddTransaction] Currencies differ - conversion needed');
-        // Different currency - need to convert
-        if (!convertedAmount || !exchangeRate) {
-          console.log('[AddTransaction] No conversion data cached - converting now...');
-          // No conversion data yet, convert now
-          try {
-            const conversion = await convertCurrency(
-              numAmount,
-              selectedCurrency,
-              accountCurrency
-            );
-            finalConvertedAmount = conversion.convertedAmount;
-            finalExchangeRate = conversion.exchangeRate;
-            finalOriginalAmount = numAmount;
-            console.log('[AddTransaction] Auto-converted:', {
-              from: `${numAmount} ${selectedCurrency}`,
-              to: `${finalConvertedAmount} ${accountCurrency}`,
-              rate: finalExchangeRate
-            });
-          } catch (error) {
-            console.error('[AddTransaction] Conversion failed:', error);
-            Alert.alert(
-              'Error',
-              'Failed to convert currency. Please check your internet connection.'
-            );
-            setLoading(false);
-            return;
-          }
-        } else {
-          console.log('[AddTransaction] Using cached conversion data');
-          // Use existing conversion data
-          finalConvertedAmount = convertedAmount;
-          finalExchangeRate = exchangeRate;
-          finalOriginalAmount = numAmount;
-          console.log('[AddTransaction] Cached conversion:', {
-            from: `${numAmount} ${selectedCurrency}`,
-            to: `${finalConvertedAmount} ${accountCurrency}`,
-            rate: finalExchangeRate
-          });
-        }
-      } else {
-        console.log('[AddTransaction] Same currency - no conversion needed');
-      }
-
-      console.log('[AddTransaction] Final amounts:', {
-        originalAmount: finalOriginalAmount,
-        convertedAmount: finalConvertedAmount,
-        balanceUpdateAmount: finalConvertedAmount
-      });
 
       const transactionData: TransactionInput = {
         accountId: currentAccountId,
@@ -389,11 +565,7 @@ export const AddTransactionScreen: React.FC = () => {
       console.log(`[AddTransaction] Updating ${vaultType} vault: ${type === 'income' ? 'Adding' : 'Subtracting'} ${balanceAmount} ${currentAccount.currency}`);
       console.log(`[AddTransaction] Balance update - Using amount: ${balanceAmount}`);
 
-      if (type === 'income') {
-        addToVault(vaultType, balanceAmount);
-      } else {
-        subtractFromVault(vaultType, balanceAmount);
-      }
+      applyBalanceEffect(type, vaultType, balanceAmount);
 
       // Log balance after update
       const afterBalance = useAccountStore.getState().balances[currentAccountId];
@@ -627,9 +799,9 @@ export const AddTransactionScreen: React.FC = () => {
       {/* Save Button */}
       <View style={styles.footer}>
         <Button
-          title={`Add ${type === 'income' ? 'Income' : 'Expense'}`}
+          title={isEditMode ? `Update ${type === 'income' ? 'Income' : 'Expense'}` : `Add ${type === 'income' ? 'Income' : 'Expense'}`}
           onPress={handleSave}
-          loading={loading}
+          loading={loading || loadingOriginal}
         />
       </View>
 
