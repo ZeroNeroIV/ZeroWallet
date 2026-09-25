@@ -18,6 +18,8 @@ jobs:
   version:
     name: Bump version
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       version: ${{ steps.bump.outputs.version }}
       versionCode: ${{ steps.bump.outputs.versionCode }}
