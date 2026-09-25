@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      architectures:
+        description: 'ABIs to build (comma-separated, e.g. arm64-v8a or armeabi-v7a,arm64-v8a,x86,x86_64)'
+        default: 'arm64-v8a'
+        required: false
 
 jobs:
   build:
@@ -28,6 +33,9 @@ jobs:
           java-version: 17
           distribution: temurin
 
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
@@ -43,8 +51,15 @@ jobs:
           echo "tag=v${VERSION}-${SHORT_SHA}" >> $GITHUB_OUTPUT
           echo "name=v${VERSION} (${SHORT_SHA})" >> $GITHUB_OUTPUT
 
+      # Single-ABI build: one arch avoids bundling 4 copies of every
+      # native lib (Hermes, Reanimated, Skia, MMKV, ...), cutting the APK
+      # from ~120MB to ~30-40MB and skipping 3/4 of native compilation.
+      # arm64-v8a covers virtually all modern phones. Use the
+      # workflow_dispatch input for other archs (emulators, old devices).
       - name: Build Release APK
-        run: cd android && ./gradlew assembleRelease --no-daemon
+        run: |
+          ARCHS="${{ inputs.architectures }}"
+          cd android && ./gradlew assembleRelease -PreactNativeArchitectures=${ARCHS:-arm64-v8a} --no-daemon
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -55,6 +70,7 @@ jobs:
             **Version:** ${{ steps.version.outputs.version }}
             **Commit:** ${{ github.sha }}
             **Message:** ${{ github.event.head_commit.message }}
+            **Arch:** ${{ inputs.architectures || 'arm64-v8a' }} (single-ABI build for small APK size)
           files: android/app/build/outputs/apk/release/app-release.apk
           token: ${{ secrets.GITHUB_TOKEN }}
           make_latest: true
