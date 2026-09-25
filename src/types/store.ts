@@ -103,6 +103,7 @@ export interface UIState {
   activeBottomSheet: string | null;
   showFAB: boolean;
   error: string | null;
+  isBalanceHidden: boolean;
 
   // Actions
   setLoading: (loading: boolean) => void;
@@ -111,4 +112,6 @@ export interface UIState {
   setShowFAB: (show: boolean) => void;
   setError: (error: string | null) => void;
   clearError: () => void;
+  toggleBalanceHidden: () => void;
+  setBalanceHidden: (hidden: boolean) => void;
 }

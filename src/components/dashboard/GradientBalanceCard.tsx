@@ -15,12 +15,13 @@
  */
 
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { useUIStore } from '../../store/uiStore';
 
 interface GradientBalanceCardProps {
   totalBalance: number;
@@ -39,8 +40,13 @@ export const GradientBalanceCard: React.FC<GradientBalanceCardProps> = React.mem
 }) => {
   const themeColors = useThemeColors();
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
+  const isBalanceHidden = useUIStore((state) => state.isBalanceHidden);
+  const toggleBalanceHidden = useUIStore((state) => state.toggleBalanceHidden);
 
   const formatAmount = (amount: number) => {
+    if (isBalanceHidden) {
+      return '••••••';
+    }
     const sign = amount < 0 ? '-' : '';
     const formatted = Math.abs(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     if (accountCurrency === 'USD') {
@@ -74,7 +80,22 @@ export const GradientBalanceCard: React.FC<GradientBalanceCardProps> = React.mem
       <View style={styles.content}>
         {/* Total Balance Section */}
         <View style={styles.totalSection}>
-          <Text style={styles.label}>TOTAL BALANCE</Text>
+          <View style={styles.totalHeader}>
+            <Text style={styles.label}>TOTAL BALANCE</Text>
+            <TouchableOpacity
+              style={styles.eyeButton}
+              onPress={toggleBalanceHidden}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={isBalanceHidden ? 'Show balances' : 'Hide balances'}
+            >
+              <MaterialCommunityIcons
+                name={isBalanceHidden ? 'eye-off' : 'eye'}
+                size={20}
+                color={themeColors.textSecondary}
+              />
+            </TouchableOpacity>
+          </View>
           <Text style={styles.totalBalance}>{formatAmount(totalBalance)}</Text>
         </View>
 
@@ -143,6 +164,15 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) => StyleSh
   },
   totalSection: {
     gap: spacing.xs,
+  },
+  totalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  eyeButton: {
+    padding: spacing.xs,
+    borderRadius: 8,
   },
   label: {
     ...typography.overline,

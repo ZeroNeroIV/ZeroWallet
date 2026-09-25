@@ -32,6 +32,13 @@ export const config = {
     maxWriteOpsPerMinute: 10,
     maxContextMessages: 100,
     defaultFallback: 'I apologize, but I was unable to generate a response.',
+    categorization: {
+      temperature: 0.2,
+      maxOutputTokens: 256,
+      autoThreshold: 0.8,
+      suggestThreshold: 0.55,
+      lowConfidenceNewCategoryThreshold: 0.4,
+    },
   },
 
   // UI defaults

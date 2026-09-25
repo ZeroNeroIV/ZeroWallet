@@ -175,11 +175,6 @@ export function RootNavigator() {
     return <IntroScreen />;
   }
 
-  // Show biometric lock if authenticated but not yet verified
-  if (isAuthenticated && needsBiometricAuth) {
-    return <BiometricLockScreen onAuthenticated={handleBiometricAuthenticated} />;
-  }
-
   const navigationTheme = {
     dark: isDark,
     colors: {
@@ -193,20 +188,41 @@ export function RootNavigator() {
     fonts: DefaultTheme.fonts,
   };
 
+  // Keep NavigationContainer mounted so navigation state is preserved
+  // when the biometric lock appears on resume. The lock renders as an
+  // overlay on top. A cold start still mounts fresh at the default
+  // initial route (Dashboard), so closing the app resets to home.
+  const showLockOverlay = isAuthenticated && needsBiometricAuth;
+
   return (
-    <NavigationContainer theme={navigationTheme} linking={linking}>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {isAuthenticated ? (
-          <Stack.Screen name="Main" component={MainNavigator} />
-        ) : (
-          <Stack.Screen name="Auth" component={AuthNavigator} />
-        )}
-      </Stack.Navigator>
-    </NavigationContainer>
+    <View style={styles.rootContainer}>
+      <NavigationContainer theme={navigationTheme} linking={linking}>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          {isAuthenticated ? (
+            <Stack.Screen name="Main" component={MainNavigator} />
+          ) : (
+            <Stack.Screen name="Auth" component={AuthNavigator} />
+          )}
+        </Stack.Navigator>
+      </NavigationContainer>
+      {showLockOverlay && (
+        <View style={styles.lockOverlay}>
+          <BiometricLockScreen onAuthenticated={handleBiometricAuthenticated} />
+        </View>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  rootContainer: {
+    flex: 1,
+  },
+  lockOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 999,
+    elevation: 999,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',

@@ -13,6 +13,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
   activeBottomSheet: null,
   showFAB: true,
   error: null,
+  isBalanceHidden: false,
 
   // Actions
   setLoading: (loading) => {
@@ -39,5 +40,15 @@ export const useUIStore = create<UIState>()((set, get) => ({
 
   clearError: () => {
     set({ error: null });
+  },
+
+  toggleBalanceHidden: () => {
+    set((state) => ({
+      isBalanceHidden: !state.isBalanceHidden,
+    }));
+  },
+
+  setBalanceHidden: (hidden) => {
+    set({ isBalanceHidden: hidden });
   },
 }));

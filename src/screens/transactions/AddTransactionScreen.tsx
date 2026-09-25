@@ -34,6 +34,9 @@ import { ImagePickerButton } from '../../components/forms/ImagePickerButton';
 import { compressAndSaveImage, deleteTransactionImage } from '../../utils/imageStorage';
 import { convertCurrency } from '../../services/currencyService';
 import { formatCurrency } from '../../constants/currencies';
+import { CategorySuggestionBanner } from '../../components/transactions/CategorySuggestionBanner';
+import { useAutoCategorize } from '../../hooks/useAutoCategorize';
+import { useSettingsStore } from '../../store/settingsStore';
 
 type AddTransactionScreenNavigationProp = StackNavigationProp<
   MainStackParamList,
@@ -79,6 +82,17 @@ export const AddTransactionScreen: React.FC = () => {
   const categoryRepo = new CategoryRepository();
   const transactionRepo = new TransactionRepository();
   const accountRepo = new AccountRepository();
+  const aiConfigured = useSettingsStore((s) => s.aiSettings.isConfigured);
+
+  const {
+    suggestion: categorySuggestion,
+    loading: suggestLoading,
+    error: suggestError,
+    suggest: suggestCategory,
+    clear: clearCategorySuggestion,
+    resolve: resolveCategorySuggestion,
+  } = useAutoCategorize(type);
+  const [creatingCategory, setCreatingCategory] = useState(false);
 
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
 
@@ -167,6 +181,44 @@ export const AddTransactionScreen: React.FC = () => {
     setConvertedAmount(result.convertedAmount);
     setExchangeRate(result.exchangeRate);
     console.log('[AddTransaction] Conversion complete:', result);
+  };
+
+  const handleAutoCategorize = async () => {
+    if (!description.trim()) {
+      Alert.alert('Add a description', 'Type a description first so Laya can suggest a category.');
+      return;
+    }
+    const numericAmount = parseFloat(amount);
+    await suggestCategory(description, Number.isFinite(numericAmount) ? numericAmount : undefined, categories);
+  };
+
+  const handleApplySuggestedMatch = (categoryId: string) => {
+    const match = categories.find((c) => c.id === categoryId);
+    if (match) {
+      setSelectedCategory(match);
+      setErrors((prev) => ({ ...prev, category: '' }));
+    }
+    clearCategorySuggestion();
+  };
+
+  const handleCreateSuggestedCategory = async () => {
+    if (!categorySuggestion || categorySuggestion.kind !== 'create_new') return;
+    setCreatingCategory(true);
+    try {
+      const created = await resolveCategorySuggestion(categorySuggestion, categories);
+      if (created) {
+        await loadCategories();
+        setSelectedCategory(created);
+        setErrors((prev) => ({ ...prev, category: '' }));
+        clearCategorySuggestion();
+        Alert.alert('Category created', `"${created.name}" was created and selected.`);
+      }
+    } catch (error) {
+      console.error('[AddTransaction] Failed to create suggested category:', error);
+      Alert.alert('Error', 'Failed to create the suggested category');
+    } finally {
+      setCreatingCategory(false);
+    }
   };
 
   const validate = () => {
@@ -360,6 +412,7 @@ export const AddTransactionScreen: React.FC = () => {
               onPress={() => {
                 setType('expense');
                 setSelectedCategory(undefined);
+                clearCategorySuggestion();
               }}
             >
               <Text
@@ -379,6 +432,7 @@ export const AddTransactionScreen: React.FC = () => {
               onPress={() => {
                 setType('income');
                 setSelectedCategory(undefined);
+                clearCategorySuggestion();
               }}
             >
               <Text
@@ -410,6 +464,35 @@ export const AddTransactionScreen: React.FC = () => {
             label="Category"
             error={errors.category}
           />
+
+          {/* Laya auto-categorize */}
+          <TouchableOpacity
+            style={styles.suggestButton}
+            onPress={handleAutoCategorize}
+            disabled={suggestLoading || creatingCategory}
+            activeOpacity={0.8}
+          >
+            <Icon name="sparkles" size={18} color={themeColors.primary} />
+            <Text style={styles.suggestButtonText}>
+              {suggestLoading ? 'Laya is thinking…' : 'Auto-categorize with Laya'}
+            </Text>
+          </TouchableOpacity>
+          {!aiConfigured ? (
+            <Text style={styles.suggestHint}>
+              Tip: add a Gemini API key in Settings for smarter suggestions. Offline keyword matching is used for now.
+            </Text>
+          ) : null}
+          {suggestError ? <Text style={styles.suggestError}>{suggestError}</Text> : null}
+          {categorySuggestion || suggestLoading ? (
+            <CategorySuggestionBanner
+              suggestion={categorySuggestion}
+              loading={suggestLoading}
+              creating={creatingCategory}
+              onApplyMatch={handleApplySuggestedMatch}
+              onCreateNew={handleCreateSuggestedCategory}
+              onDismiss={clearCategorySuggestion}
+            />
+          ) : null}
 
           {/* Currency Picker */}
           <CurrencyPicker
@@ -644,5 +727,33 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) => StyleSh
     color: themeColors.textSecondary,
     marginTop: spacing.xs,
     textAlign: 'center',
+  },
+  suggestButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: themeColors.primary + '40',
+    backgroundColor: themeColors.primary + '10',
+    marginBottom: spacing.xs,
+  },
+  suggestButtonText: {
+    ...typography.body,
+    color: themeColors.primary,
+    fontWeight: '700',
+  },
+  suggestHint: {
+    ...typography.caption,
+    color: themeColors.textSecondary,
+    marginBottom: spacing.sm,
+  },
+  suggestError: {
+    ...typography.caption,
+    color: '#EF4444',
+    marginBottom: spacing.sm,
   },
 });

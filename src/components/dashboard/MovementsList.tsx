@@ -22,6 +22,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { useUIStore } from '../../store/uiStore';
 import type { Transaction, Category } from '../../types/models';
 
 interface TransactionWithCategory extends Transaction {
@@ -43,14 +44,18 @@ export const MovementsList: React.FC<MovementsListProps> = React.memo(({
 }) => {
   const themeColors = useThemeColors();
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
+  const isBalanceHidden = useUIStore((state) => state.isBalanceHidden);
 
   const formatAmount = useCallback((amount: number, type: string) => {
+    if (isBalanceHidden) {
+      return '••••••';
+    }
     const sign = type === 'income' ? '+' : '-';
     if (accountCurrency === 'USD') {
       return `${sign}$${Math.abs(amount).toFixed(2)}`;
     }
     return `${sign}${Math.abs(amount).toFixed(2)} ${accountCurrency}`;
-  }, [accountCurrency]);
+  }, [accountCurrency, isBalanceHidden]);
 
   const getIconGradient = useCallback((type: string): [string, string] => {
     if (type === 'income') {
@@ -110,7 +115,7 @@ export const MovementsList: React.FC<MovementsListProps> = React.memo(({
         </Text>
       </TouchableOpacity>
     );
-  }, [styles, themeColors, getIconGradient, formatAmount, onTransactionPress]);
+  }, [styles, themeColors, getIconGradient, formatAmount, onTransactionPress, isBalanceHidden]);
 
   if (transactions.length === 0) {
     return null;
