@@ -4,11 +4,6 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      architectures:
-        description: 'ABIs to build (comma-separated phone ABIs)'
-        default: 'armeabi-v7a,arm64-v8a'
-        required: false
 
 # Serialize release runs: each run bumps package.json and pushes it back,
 # so overlapping runs would conflict on push.
@@ -17,17 +12,59 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    name: Build APK
+  # Bump the patch version once per triggered build so every published APK
+  # has a fresh versionName, and use the monotonic run number as versionCode
+  # so Android accepts it as an upgrade over any previous install.
+  version:
+    name: Bump version
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+      versionCode: ${{ steps.bump.outputs.versionCode }}
+      tag: ${{ steps.bump.outputs.tag }}
+      name: ${{ steps.bump.outputs.name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Bump patch version
+        id: bump
+        run: |
+          NEW_VERSION=$(node -p "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));const v=p.version.split('.').map(Number);v[2]+=1;p.version=v.join('.');fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n');p.version")
+          SHORT_SHA=$(echo $GITHUB_SHA | cut -c1-7)
+          echo "version=${NEW_VERSION}" >> $GITHUB_OUTPUT
+          echo "versionCode=${{ github.run_number }}" >> $GITHUB_OUTPUT
+          echo "tag=v${NEW_VERSION}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "name=v${NEW_VERSION} (${SHORT_SHA})" >> $GITHUB_OUTPUT
+
+      # Push the bumped package.json back so the repo version stays in sync.
+      # [skip ci] avoids triggering a new run (would loop forever otherwise).
+      # autostash handles any working-tree changes during the rebase.
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git -c rebase.autoStash=true pull --rebase origin main
+          git add package.json
+          git commit -m "ci: bump version to ${{ steps.bump.outputs.version }} [skip ci]" || echo "nothing to commit"
+          git push origin HEAD:main || echo "version push skipped"
+
+  # One build per ABI in parallel: each job compiles a single small APK
+  # (~30MB) instead of every job building all ABIs. Wall time drops to
+  # roughly a single-ABI build.
+  build:
+    name: Build APK (${{ matrix.arch }})
+    needs: version
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64-v8a, armeabi-v7a]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -50,50 +87,45 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./android/gradlew
 
-      # Bump the patch version on every triggered build so each published
-      # APK has a fresh versionName, and use the monotonic run number as
-      # versionCode so Android accepts it as an upgrade over any previous
-      # install (this is what was blocking installs before).
-      - name: Bump version
-        id: version
-        run: |
-          NEW_VERSION=$(node -p "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));const v=p.version.split('.').map(Number);v[2]+=1;p.version=v.join('.');fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n');p.version")
-          SHORT_SHA=$(echo $GITHUB_SHA | cut -c1-7)
-          echo "version=${NEW_VERSION}" >> $GITHUB_OUTPUT
-          echo "versionCode=${{ github.run_number }}" >> $GITHUB_OUTPUT
-          echo "tag=v${NEW_VERSION}-${SHORT_SHA}" >> $GITHUB_OUTPUT
-          echo "name=v${NEW_VERSION} (${SHORT_SHA})" >> $GITHUB_OUTPUT
-
-      # Per-ABI build: one small APK per architecture instead of a fat
-      # universal APK (~120MB), and only phone ABIs are compiled so the
-      # native build is much faster. Install the APK matching your phone
-      # (arm64-v8a on modern phones, armeabi-v7a on older 32-bit ones).
       - name: Build Release APK
-        run: |
-          ARCHS="${{ inputs.architectures }}"
-          cd android && ./gradlew assembleRelease -PreactNativeArchitectures=${ARCHS:-armeabi-v7a,arm64-v8a} -PappVersionCode=${{ steps.version.outputs.versionCode }} -PappVersionName=${{ steps.version.outputs.version }} --no-daemon
+        run: >
+          cd android && ./gradlew assembleRelease
+          -PreactNativeArchitectures=${{ matrix.arch }}
+          -PappVersionCode=${{ needs.version.outputs.versionCode }}
+          -PappVersionName=${{ needs.version.outputs.version }}
+          --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-${{ matrix.arch }}
+          path: android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+  release:
+    name: Publish Release
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download APKs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: apk-*
+          merge-multiple: true
+          path: apks
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          name: Release ${{ steps.version.outputs.name }}
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: Release ${{ needs.version.outputs.name }}
           body: |
-            **Version:** ${{ steps.version.outputs.version }} (versionCode ${{ steps.version.outputs.versionCode }})
+            **Version:** ${{ needs.version.outputs.version }} (versionCode ${{ needs.version.outputs.versionCode }})
             **Commit:** ${{ github.sha }}
             **Message:** ${{ github.event.head_commit.message }}
-            **APKs:** per-ABI builds (~30MB each) — pick the one matching your phone: `app-arm64-v8a-release.apk` (modern phones) or `app-armeabi-v7a-release.apk` (older 32-bit phones). If install fails, uninstall the old app first (signing key changed).
-          files: android/app/build/outputs/apk/release/*.apk
+            **APKs:** per-ABI builds (~30MB each) — pick the one matching your phone: `app-arm64-v8a-release.apk` (modern phones) or `app-armeabi-v7a-release.apk` (older 32-bit phones). Installs as a normal upgrade; only uninstall first if you get a signature error (happens when the old app came from a local build).
+          files: apks/*.apk
           token: ${{ secrets.GITHUB_TOKEN }}
           make_latest: true
-
-      # Push the bumped package.json back so the repo version stays in sync.
-      # [skip ci] avoids triggering a new run (would loop forever otherwise).
-      - name: Commit version bump
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git pull --rebase origin main
-          git add package.json
-          git commit -m "ci: bump version to ${{ steps.version.outputs.version }} [skip ci]" || echo "nothing to commit"
-          git push origin HEAD:main || echo "version push skipped"
