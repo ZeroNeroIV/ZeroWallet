@@ -53,17 +53,18 @@ jobs:
           git commit -m "ci: bump version to ${{ steps.bump.outputs.version }} [skip ci]" || echo "nothing to commit"
           git push origin HEAD:main || echo "version push skipped"
 
-  # One build per ABI in parallel: each job compiles a single small APK
-  # (~30MB) instead of every job building all ABIs. Wall time drops to
-  # roughly a single-ABI build.
+  # Single build job for ALL phone ABIs: one gradle invocation emits one
+  # small per-ABI APK per architecture (~30-48MB each) via ABI splits.
+  # NOTE: do NOT fan this out into a matrix with artifact upload/download —
+  # mixing split outputs across jobs produced structurally corrupt APKs
+  # (central-directory/local-header mismatches → INSTALL_PARSE_FAILED on
+  # device). Keep build + publish in this one job.
   build:
-    name: Build APK (${{ matrix.arch }})
+    name: Build & Publish APKs
     needs: version
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [arm64-v8a, armeabi-v7a]
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -89,34 +90,43 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./android/gradlew
 
-      - name: Build Release APK
+      - name: Build Release APKs
         run: >
           cd android && ./gradlew assembleRelease
-          -PreactNativeArchitectures=${{ matrix.arch }}
+          -PreactNativeArchitectures=armeabi-v7a,arm64-v8a
           -PappVersionCode=${{ needs.version.outputs.versionCode }}
           -PappVersionName=${{ needs.version.outputs.version }}
           --no-daemon
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: apk-${{ matrix.arch }}
-          path: android/app/build/outputs/apk/release/*.apk
-          if-no-files-found: error
+      # Structural integrity gate: every zip entry's central-directory
+      # record must match its local header. A mismatch means the v2
+      # signature digests cannot verify and Android rejects the APK with
+      # INSTALL_PARSE_FAILED_NO_CERTIFICATES ("invalid package").
+      - name: Verify APK integrity
+        run: |
+          python3 - <<'EOF'
+          import glob
+          import sys
+          import zipfile
 
-  release:
-    name: Publish Release
-    needs: [version, build]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Download APKs
-        uses: actions/download-artifact@v4
-        with:
-          pattern: apk-*
-          merge-multiple: true
-          path: apks
+          failed = False
+          apks = sorted(glob.glob('android/app/build/outputs/apk/release/*.apk'))
+          assert apks, 'no APKs found'
+          for path in apks:
+              print('checking', path)
+              with zipfile.ZipFile(path) as z:
+                  for info in z.infolist():
+                      try:
+                          with z.open(info.filename) as f:
+                              f.read(1)
+                      except Exception as ex:
+                          print('CORRUPT ENTRY:', info.filename, '->', ex)
+                          failed = True
+          if failed:
+              print('APK INTEGRITY CHECK FAILED')
+              sys.exit(1)
+          print('all APK entries structurally sound')
+          EOF
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -127,7 +137,7 @@ jobs:
             **Version:** ${{ needs.version.outputs.version }} (versionCode ${{ needs.version.outputs.versionCode }})
             **Commit:** ${{ github.sha }}
             **Message:** ${{ github.event.head_commit.message }}
-            **APKs:** per-ABI builds (~30MB each) — pick the one matching your phone: `app-arm64-v8a-release.apk` (modern phones) or `app-armeabi-v7a-release.apk` (older 32-bit phones). Installs as a normal upgrade; only uninstall first if you get a signature error (happens when the old app came from a local build).
-          files: apks/*.apk
+            **APKs:** per-ABI builds — pick the one matching your phone: `app-arm64-v8a-release.apk` (modern phones, e.g. HONOR X9a) or `app-armeabi-v7a-release.apk` (older 32-bit phones). Installs as a normal upgrade; only uninstall first if you get a signature error (happens when the old app came from a local build).
+          files: android/app/build/outputs/apk/release/*.apk
           token: ${{ secrets.GITHUB_TOKEN }}
           make_latest: true
