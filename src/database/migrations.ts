@@ -61,6 +61,10 @@ async function applyMigration(
       await migration_v7(database);
       break;
 
+    case 8:
+      await migration_v8(database);
+      break;
+
     default:
       console.warn(`[Migrations] No migration defined for version ${version}`);
   }
@@ -328,6 +332,33 @@ async function migration_v7(database: any): Promise<void> {
   console.log('[Migration v7] Repair pass: re-running vault table rebuild');
   await migration_v6(database);
   console.log('[Migration v7] Repair pass complete');
+}
+
+/**
+ * Migration v8: Add updated_at to categories.
+ * BaseRepository.create()/update() always write updated_at, but the
+ * categories table never had the column — so EVERY category insert or
+ * update failed with SQLITE_ERROR (this broke LAYA category creation,
+ * manual category creation/editing, and transfer setup which auto-creates
+ * Transfer categories). Checks sqlite_master first so re-runs are safe;
+ * throws on real failure so the version does not advance on a broken DB.
+ */
+async function migration_v8(database: any): Promise<void> {
+  console.log('[Migration v8] Adding updated_at column to categories table');
+
+  const [defRows] = await database.executeSql(
+    `SELECT sql FROM sqlite_master WHERE type='table' AND name='categories';`
+  );
+  const tableSql: string = defRows.rows.item(0)?.sql ?? '';
+  if (tableSql.includes('updated_at')) {
+    console.log('[Migration v8] Column already exists, nothing to do');
+    return;
+  }
+
+  await database.executeSql(
+    `ALTER TABLE categories ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;`
+  );
+  console.log('[Migration v8] Successfully added updated_at column');
 }
 
 async function migration_v5(database: any): Promise<void> {

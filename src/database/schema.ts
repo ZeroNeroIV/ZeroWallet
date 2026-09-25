@@ -1,6 +1,6 @@
 // SQLite Database Schema Definitions
 
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 // All wallet keys allowed in vault_type columns (v6+)
 export const VAULT_TYPE_CHECK = `('main', 'savings', 'held', 'salary', 'emergency', 'card', 'physical')`;
@@ -45,6 +45,7 @@ export const CREATE_CATEGORIES_TABLE = `
     color TEXT NOT NULL,
     is_default INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 `;
