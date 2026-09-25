@@ -233,7 +233,7 @@ export default function DebtDetailsScreen() {
                                 label="Payment Amount"
                                 value={paymentAmount}
                                 onChangeText={setPaymentAmount}
-                                placeholder="0.00"
+                                placeholder="0.000"
                             />
                             <View style={styles.buttonRow}>
                                 <Button

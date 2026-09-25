@@ -86,9 +86,9 @@ export const AddTransactionScreen: React.FC = () => {
     suggestion: categorySuggestion,
     loading: suggestLoading,
     error: suggestError,
-    suggest: suggestCategory,
     clear: clearCategorySuggestion,
     resolve: resolveCategorySuggestion,
+    suggestAndAutoApply: suggestAndAutoApplyCategory,
   } = useAutoCategorize(type);
   const [creatingCategory, setCreatingCategory] = useState(false);
 
@@ -187,7 +187,31 @@ export const AddTransactionScreen: React.FC = () => {
       return;
     }
     const numericAmount = parseFloat(amount);
-    await suggestCategory(description, Number.isFinite(numericAmount) ? numericAmount : undefined, categories);
+    setCreatingCategory(true);
+    try {
+      // Autonomous: LAYA suggests, and creates the category on demand
+      // when the suggestion doesn't exist yet
+      const result = await suggestAndAutoApplyCategory(
+        description,
+        Number.isFinite(numericAmount) ? numericAmount : undefined,
+        categories,
+        async () => {
+          await loadCategories();
+        },
+      );
+      if (result.createdNew && result.category) {
+        setSelectedCategory(result.category);
+        setErrors((prev) => ({ ...prev, category: '' }));
+        clearCategorySuggestion();
+        Alert.alert('Category created', `Laya created "${result.category.name}" and selected it.`);
+      }
+      // Existing-category matches stay visible in the banner for one-tap Apply
+    } catch (error) {
+      console.error('[AddTransaction] Laya auto-categorize failed:', error);
+      Alert.alert('Error', 'Laya could not categorize this transaction');
+    } finally {
+      setCreatingCategory(false);
+    }
   };
 
   const handleApplySuggestedMatch = (categoryId: string) => {
@@ -453,6 +477,16 @@ export const AddTransactionScreen: React.FC = () => {
             enableCalculator={true}
           />
 
+          {/* Description Input */}
+          <Input
+            label="Description (Optional)"
+            value={description}
+            onChangeText={setDescription}
+            placeholder="Add a note..."
+            multiline
+            numberOfLines={3}
+          />
+
           {/* Category Picker */}
           <CategoryPicker
             categories={categories}
@@ -572,16 +606,6 @@ export const AddTransactionScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
           </View>
-
-          {/* Description Input */}
-          <Input
-            label="Description (Optional)"
-            value={description}
-            onChangeText={setDescription}
-            placeholder="Add a note..."
-            multiline
-            numberOfLines={3}
-          />
 
           {/* Date Picker */}
           <DatePicker

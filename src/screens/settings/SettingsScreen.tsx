@@ -212,9 +212,15 @@ const SettingsScreen = ({ navigation }: any) => {
         {
           text: 'Choose File',
           onPress: async () => {
-            if (!currentAccountId) return;
+            if (!currentAccountId || !currentUser) return;
             try {
-              const result = await pickAndImportData(currentAccountId);
+              const result = await pickAndImportData(currentAccountId, currentUser.id);
+              // Recalculate balances so home reflects the imported data now
+              const { TransactionRepository } = await import('../../database/repositories/TransactionRepository');
+              const { calculateVaultBalances } = await import('../../utils/balanceCalculator');
+              const { useAccountStore } = await import('../../store/accountStore');
+              const txs = await new TransactionRepository().findByAccount(currentAccountId);
+              useAccountStore.getState().updateBalance(currentAccountId, calculateVaultBalances(txs));
               const summary = Object.entries(result.imported)
                 .map(([k, v]) => `${v} ${k}`)
                 .join(', ');

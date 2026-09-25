@@ -234,7 +234,7 @@ const SalarySettingsScreen = ({ navigation }: any) => {
           <AmountInput
             value={amount}
             onChangeText={setAmount}
-            placeholder="0.00"
+            placeholder="0.000"
             editable={isEnabled}
           />
         </View>

@@ -113,6 +113,24 @@ export async function categorizeBatch(
 }
 
 /**
+ * Create a category by name on demand (used when LAYA suggests a
+ * category that doesn't exist in the user's list).
+ */
+export async function createCategoryByName(
+  userId: string,
+  type: CategoryType,
+  name: string,
+): Promise<Category> {
+  const cleanName = toTitleCase(name).slice(0, 30) || 'Miscellaneous';
+  return createProposedCategory(userId, type, {
+    name: cleanName,
+    icon: guessIcon(cleanName),
+    color: guessColor(cleanName),
+    reasoning: `LAYA created "${cleanName}" on demand.`,
+  });
+}
+
+/**
  * Create the proposed on-demand category in the database.
  * Returns the created Category.
  */

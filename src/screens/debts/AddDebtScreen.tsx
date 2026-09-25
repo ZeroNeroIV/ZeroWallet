@@ -229,7 +229,7 @@ export default function AddDebtScreen() {
                 label="Amount"
                 value={amount}
                 onChangeText={setAmount}
-                placeholder="0.00"
+                placeholder="0.000"
             />
 
             {/* Due Date */}
@@ -281,7 +281,7 @@ export default function AddDebtScreen() {
                         {debtType === 'lent' ? 'They owe you' : 'You owe them'}
                     </Text>
                     <Text style={[styles.previewAmount, { color: themeColors.text }]}>
-                        ${amount || '0.00'}
+                        ${amount || '0.000'}
                     </Text>
                     <Text style={[styles.previewPerson, { color: themeColors.textSecondary }]}>
                         {personName || 'Person Name'}

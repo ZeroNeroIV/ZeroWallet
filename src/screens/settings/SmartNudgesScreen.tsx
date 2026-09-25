@@ -234,7 +234,7 @@ const SmartNudgesScreen = () => {
           <AmountInput
             value={threshold}
             onChangeText={setThreshold}
-            placeholder="0.00"
+            placeholder="0.000"
             editable={notificationSettings.lowBalanceAlertEnabled}
           />
           <TouchableOpacity

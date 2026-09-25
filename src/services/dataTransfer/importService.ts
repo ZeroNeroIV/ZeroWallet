@@ -26,7 +26,10 @@ interface ExportPayload {
   };
 }
 
-export async function pickAndImportData(currentAccountId: string): Promise<{
+export async function pickAndImportData(
+  currentAccountId: string,
+  currentUserId: string,
+): Promise<{
   imported: Record<string, number>;
 }> {
   const [result] = await pick({ allowMultiSelection: false });
@@ -65,7 +68,7 @@ export async function pickAndImportData(currentAccountId: string): Promise<{
 
     if (!(await RNFS.exists(IMAGES_DEST))) await RNFS.mkdir(IMAGES_DEST);
 
-    await importPayload(payload, currentAccountId, async (fileName: string) => {
+    const imported = await importPayload(payload, currentAccountId, currentUserId, async (fileName: string) => {
       const zipEntry = zip.file(`images/${fileName}`);
       if (!zipEntry) return null;
       const destPath = `${IMAGES_DEST}/${fileName}`;
@@ -86,40 +89,99 @@ export async function pickAndImportData(currentAccountId: string): Promise<{
         await RNFS.writeFile(destPath, imgBase64, 'base64');
       }
     }
-  } else {
-    // Legacy plain JSON backup
-    const raw = await RNFS.readFile(filePath, 'utf8');
-    payload = JSON.parse(raw);
-    await importPayload(payload, currentAccountId, null);
+    return { imported };
   }
 
-  return { imported: countImported(payload) };
+  // Legacy plain JSON backup
+  const raw = await RNFS.readFile(filePath, 'utf8');
+  const jsonPayload = JSON.parse(raw) as ExportPayload;
+  const imported = await importPayload(jsonPayload, currentAccountId, currentUserId, null);
+
+  return { imported };
 }
 
 type ImageResolver = ((fileName: string) => Promise<string | null>) | null;
 
+async function existingIds(table: string, ownerColumn: string, ownerId: string): Promise<Set<string>> {
+  const rows = await executeSql<{ id: string }>(
+    `SELECT id FROM ${table} WHERE ${ownerColumn} = ?`,
+    [ownerId]
+  );
+  return new Set(rows.map((r) => r.id));
+}
+
 async function importPayload(
   payload: ExportPayload,
   currentAccountId: string,
+  currentUserId: string,
   resolveImage: ImageResolver
-): Promise<void> {
+): Promise<Record<string, number>> {
   if (!payload.version || !payload.data) {
     throw new Error('Invalid backup file format');
   }
 
   const { categories, transactions, subscriptions, recurringExpenses, goals, debts } = payload.data;
+  const counts: Record<string, number> = {
+    categories: 0,
+    transactions: 0,
+    subscriptions: 0,
+    recurringExpenses: 0,
+    goals: 0,
+    debts: 0,
+  };
 
-  // Import categories
+  // Import categories: adopt them to the current user and map backup ids
+  // to usable ids (reusing an existing same-name category when present so
+  // no duplicates or orphaned category references are left behind).
+  const categoryIdMap = new Map<string, string>();
+  const knownCategories = await executeSql<{ id: string; name: string; type: string }>(
+    'SELECT id, name, type FROM categories WHERE user_id = ?',
+    [currentUserId]
+  );
+  const byNameType = new Map(
+    knownCategories.map((c) => [`${c.type}|${c.name.toLowerCase()}`, c.id])
+  );
   for (const c of categories ?? []) {
-    await executeSql(
-      `INSERT OR IGNORE INTO categories (id, user_id, name, type, icon, color, is_default, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [c.id, c.userId, c.name, c.type, c.icon, c.color, c.isDefault ? 1 : 0, c.createdAt]
+    const key = `${c.type}|${c.name.toLowerCase()}`;
+    const reuseId = byNameType.get(key);
+    if (reuseId) {
+      categoryIdMap.set(c.id, reuseId);
+      // Heal rows that still point at the backup id
+      await remapCategoryReferences(c.id, reuseId, currentAccountId);
+      continue;
+    }
+    const alreadyThere = await executeSql<{ id: string }>(
+      'SELECT id FROM categories WHERE id = ?',
+      [c.id]
     );
+    if (alreadyThere.length > 0) {
+      // Adopt an orphaned category from a previous import/user
+      await executeSql(
+        'UPDATE categories SET user_id = ?, name = ?, type = ?, icon = ?, color = ? WHERE id = ?',
+        [currentUserId, c.name, c.type, c.icon, c.color, c.id]
+      );
+    } else {
+      await executeSql(
+        `INSERT INTO categories (id, user_id, name, type, icon, color, is_default, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [c.id, currentUserId, c.name, c.type, c.icon, c.color, c.isDefault ? 1 : 0, c.createdAt]
+      );
+    }
+    categoryIdMap.set(c.id, c.id);
+    byNameType.set(key, c.id);
+    counts.categories += 1;
   }
 
-  // Import transactions + their images
+  // Import transactions + their images (skip ids already present, but heal
+  // their category reference so re-importing fixes orphaned rows)
+  const knownTxIds = await existingIds('transactions', 'account_id', currentAccountId);
   for (const t of transactions ?? []) {
+    const categoryId = categoryIdMap.get(t.categoryId) ?? t.categoryId;
+    if (knownTxIds.has(t.id)) {
+      await executeSql('UPDATE transactions SET category_id = ? WHERE id = ?', [categoryId, t.id]);
+      continue;
+    }
+
     const newImagePaths: string[] = [];
 
     if (resolveImage && t.images?.length) {
@@ -138,13 +200,13 @@ async function importPayload(
     }
 
     await executeSql(
-      `INSERT OR IGNORE INTO transactions
+      `INSERT INTO transactions
        (id, account_id, type, amount, category_id, description, date, vault_type,
         is_recurring, recurring_expense_id, subscription_id, image_path, currency,
         original_amount, exchange_rate, converted_amount, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        t.id, currentAccountId, t.type, t.amount, t.categoryId, t.description ?? null,
+        t.id, currentAccountId, t.type, t.amount, categoryId, t.description ?? null,
         t.date, t.vaultType, t.isRecurring ? 1 : 0,
         t.recurringExpenseId ?? null, t.subscriptionId ?? null,
         restoredImagePath,
@@ -153,6 +215,7 @@ async function importPayload(
         t.createdAt, t.updatedAt,
       ]
     );
+    counts.transactions += 1;
 
     for (let i = 0; i < newImagePaths.length; i++) {
       const id = `${t.id}-img-${i}`;
@@ -165,39 +228,55 @@ async function importPayload(
   }
 
   // Import subscriptions
+  const knownSubIds = await existingIds('subscriptions', 'account_id', currentAccountId);
   for (const s of subscriptions ?? []) {
+    const categoryId = categoryIdMap.get(s.categoryId) ?? s.categoryId;
+    if (knownSubIds.has(s.id)) {
+      await executeSql('UPDATE subscriptions SET category_id = ? WHERE id = ?', [categoryId, s.id]);
+      continue;
+    }
     await executeSql(
-      `INSERT OR IGNORE INTO subscriptions
+      `INSERT INTO subscriptions
        (id, account_id, name, amount, category_id, billing_day, is_active,
         vault_type, last_processed, next_processing, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        s.id, currentAccountId, s.name, s.amount, s.categoryId, s.billingDay,
+        s.id, currentAccountId, s.name, s.amount, categoryId, s.billingDay,
         s.isActive ? 1 : 0, s.vaultType, s.lastProcessed ?? null,
         s.nextProcessing, s.createdAt, s.updatedAt,
       ]
     );
+    counts.subscriptions += 1;
   }
 
   // Import recurring expenses
+  const knownRecIds = await existingIds('recurring_expenses', 'account_id', currentAccountId);
   for (const r of recurringExpenses ?? []) {
+    const categoryId = categoryIdMap.get(r.categoryId) ?? r.categoryId;
+    if (knownRecIds.has(r.id)) {
+      await executeSql('UPDATE recurring_expenses SET category_id = ? WHERE id = ?', [categoryId, r.id]);
+      continue;
+    }
     await executeSql(
-      `INSERT OR IGNORE INTO recurring_expenses
+      `INSERT INTO recurring_expenses
        (id, account_id, name, amount, category_id, frequency, interval,
         next_occurrence, vault_type, is_active, auto_deduct, last_processed, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        r.id, currentAccountId, r.name, r.amount, r.categoryId, r.frequency,
+        r.id, currentAccountId, r.name, r.amount, categoryId, r.frequency,
         r.interval, r.nextOccurrence, r.vaultType, r.isActive ? 1 : 0,
         r.autoDeduct ? 1 : 0, r.lastProcessed ?? null, r.createdAt, r.updatedAt,
       ]
     );
+    counts.recurringExpenses += 1;
   }
 
   // Import goals
+  const knownGoalIds = await existingIds('goals', 'account_id', currentAccountId);
   for (const g of goals ?? []) {
+    if (knownGoalIds.has(g.id)) continue;
     await executeSql(
-      `INSERT OR IGNORE INTO goals
+      `INSERT INTO goals
        (id, account_id, name, target_amount, current_amount, funding_source,
         icon, color, is_completed, completed_at, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -207,32 +286,64 @@ async function importPayload(
         g.completedAt ?? null, g.createdAt, g.updatedAt,
       ]
     );
+    counts.goals += 1;
   }
 
   // Import debts
+  const knownDebtIds = await existingIds('debts', 'account_id', currentAccountId);
   for (const d of debts ?? []) {
+    const categoryId = d.categoryId ? (categoryIdMap.get(d.categoryId) ?? d.categoryId) : null;
+    if (knownDebtIds.has(d.id)) {
+      if (d.categoryId) {
+        await executeSql('UPDATE debts SET category_id = ? WHERE id = ?', [categoryId, d.id]);
+      }
+      continue;
+    }
     await executeSql(
-      `INSERT OR IGNORE INTO debts
+      `INSERT INTO debts
        (id, account_id, type, person_name, amount, amount_paid, due_date,
         status, description, category_id, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         d.id, currentAccountId, d.type, d.personName, d.amount, d.amountPaid,
         d.dueDate ?? null, d.status, d.description ?? null,
-        d.categoryId ?? null, d.createdAt, d.updatedAt,
+        categoryId, d.createdAt, d.updatedAt,
       ]
     );
+    counts.debts += 1;
   }
+
+  return counts;
 }
 
-function countImported(payload: ExportPayload): Record<string, number> {
-  const d = payload.data;
-  return {
-    categories: d.categories?.length ?? 0,
-    transactions: d.transactions?.length ?? 0,
-    subscriptions: d.subscriptions?.length ?? 0,
-    recurringExpenses: d.recurringExpenses?.length ?? 0,
-    goals: d.goals?.length ?? 0,
-    debts: d.debts?.length ?? 0,
-  };
+/**
+ * Purpose: Point every row that still references an old backup category id
+ * at the usable category id, healing orphaned references from earlier
+ * imports (re-importing the same backup repairs the data).
+ */
+async function remapCategoryReferences(
+  oldCategoryId: string,
+  newCategoryId: string,
+  accountId: string
+): Promise<void> {
+  if (oldCategoryId === newCategoryId) return;
+  await executeSql('UPDATE transactions SET category_id = ? WHERE account_id = ? AND category_id = ?', [
+    newCategoryId,
+    accountId,
+    oldCategoryId,
+  ]);
+  await executeSql('UPDATE subscriptions SET category_id = ? WHERE account_id = ? AND category_id = ?', [
+    newCategoryId,
+    accountId,
+    oldCategoryId,
+  ]);
+  await executeSql(
+    'UPDATE recurring_expenses SET category_id = ? WHERE account_id = ? AND category_id = ?',
+    [newCategoryId, accountId, oldCategoryId]
+  );
+  await executeSql('UPDATE debts SET category_id = ? WHERE account_id = ? AND category_id = ?', [
+    newCategoryId,
+    accountId,
+    oldCategoryId,
+  ]);
 }

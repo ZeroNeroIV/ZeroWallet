@@ -183,7 +183,7 @@ export default function CreateGoalScreen() {
                     label="Target Amount"
                     value={targetAmount}
                     onChangeText={setTargetAmount}
-                    placeholder="0.00"
+                    placeholder="0.000"
                 />
             )}
 

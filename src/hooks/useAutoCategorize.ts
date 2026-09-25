@@ -9,7 +9,7 @@
  *
  * Side effects:
  *   - Queries CategoryRepository via categorizationService
- *   - Calls Gemini API when an API key is configured
+ *   - Creates categories on demand (LAYA engine, fully offline)
  */
 
 import { useCallback, useRef, useState } from 'react';
@@ -18,6 +18,7 @@ import type { Category } from '../types/models';
 import type { CategorizationOutcome } from '../types/categorization';
 import {
   categorizeTransaction,
+  createCategoryByName,
   createProposedCategory,
   isAutoApplicable,
 } from '../services/ai/categorizationService';
@@ -96,6 +97,56 @@ export function useAutoCategorize(type: 'income' | 'expense', options: UseAutoCa
     [currentUser, type],
   );
 
+  /**
+   * Suggest a category and, when the suggestion doesn't exist yet,
+   * create it on demand via LAYA so the caller gets a usable Category.
+   * - create_new outcome -> creates the proposed category
+   * - match outcome whose category is missing -> creates it by name
+   * - match outcome that exists -> returned for one-tap apply (no creation)
+   */
+  const suggestAndAutoApply = useCallback(
+    async (
+      description: string,
+      amount?: number,
+      categories?: Category[],
+      onCategoryCreated?: (created: Category) => Promise<void> | void,
+    ): Promise<{ outcome: CategorizationOutcome | null; category: Category | null; createdNew: boolean }> => {
+      const outcome = await suggest(description, amount, categories);
+      if (!outcome) {
+        return { outcome: null, category: null, createdNew: false };
+      }
+      const list = categories ?? [];
+      if (outcome.kind === 'create_new') {
+        try {
+          const created = await resolve(outcome, list);
+          if (created) {
+            await onCategoryCreated?.(created);
+            return { outcome, category: created, createdNew: true };
+          }
+        } catch (e) {
+          // Fall through to manual banner below
+        }
+        return { outcome, category: null, createdNew: false };
+      }
+      const matched = list.find((c) => c.id === outcome.choice.categoryId) ?? null;
+      if (matched) {
+        return { outcome, category: matched, createdNew: false };
+      }
+      // Suggested category not found — create it on demand
+      if (!currentUser) {
+        return { outcome, category: null, createdNew: false };
+      }
+      try {
+        const created = await createCategoryByName(currentUser.id, type, outcome.choice.categoryName);
+        await onCategoryCreated?.(created);
+        return { outcome, category: created, createdNew: true };
+      } catch (e) {
+        return { outcome, category: null, createdNew: false };
+      }
+    },
+    [suggest, resolve, currentUser, type],
+  );
+
   return {
     suggestion,
     loading,
@@ -103,6 +154,7 @@ export function useAutoCategorize(type: 'income' | 'expense', options: UseAutoCa
     suggest,
     clear,
     resolve,
+    suggestAndAutoApply,
     isAuto: suggestion ? isAutoApplicable(suggestion, options.autoThreshold) : false,
     setSuggestion,
   };

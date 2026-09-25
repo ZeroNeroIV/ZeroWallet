@@ -177,7 +177,7 @@ export const CurrencyConversionModal: React.FC<CurrencyConversionModalProps> = (
                                         value={amount}
                                         onChangeText={setAmount}
                                         keyboardType="decimal-pad"
-                                        placeholder="0.00"
+                                        placeholder="0.000"
                                         placeholderTextColor={themeColors.textSecondary}
                                     />
                                 </View>
@@ -211,7 +211,7 @@ export const CurrencyConversionModal: React.FC<CurrencyConversionModalProps> = (
                                     <Text style={styles.convertedAmount}>
                                         {convertedAmount !== null
                                             ? convertedAmount.toFixed(3)
-                                            : '0.00'}
+                                            : '0.000'}
                                     </Text>
                                 </View>
                             </View>

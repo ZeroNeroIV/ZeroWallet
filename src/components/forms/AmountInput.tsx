@@ -30,7 +30,7 @@ export const AmountInput: React.FC<AmountInputProps> = ({
   label = 'Amount',
   error,
   currency = '$',
-  placeholder = '0.00',
+  placeholder = '0.000',
   editable = true,
   enableCalculator = false,
 }) => {
