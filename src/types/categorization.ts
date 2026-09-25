@@ -57,7 +57,7 @@ export type CategorizationOutcome =
       source: CategorizationSource;
     };
 
-export type CategorizationSource = 'gemini' | 'keyword_fallback' | 'history';
+export type CategorizationSource = 'laya';
 
 // ============================================
 // Raw Model Response (structured JSON)

@@ -93,7 +93,7 @@ export const tabAccessibility = (label: string, selected: boolean) => ({
  */
 export const formatCurrencyForAccessibility = (amount: number, isIncome: boolean = false) => {
   const prefix = isIncome ? 'Income' : 'Expense';
-  const formattedAmount = Math.abs(amount).toFixed(2);
+  const formattedAmount = Math.abs(amount).toFixed(3);
   return `${prefix} of ${formattedAmount} dollars`;
 };
 
@@ -149,7 +149,7 @@ export const vaultAccessibility = (
   percentage: number
 ) => ({
   accessible: true,
-  accessibilityLabel: `${vaultName} vault. Balance: ${balance.toFixed(2)} dollars. ${percentage.toFixed(0)} percent of total`,
+  accessibilityLabel: `${vaultName} vault. Balance: ${balance.toFixed(3)} dollars. ${percentage.toFixed(0)} percent of total`,
   accessibilityHint: 'Double tap to manage this vault',
 });
 

@@ -137,7 +137,7 @@ export default function RecurringExpensesScreen() {
   const handleManualTrigger = async (expense: RecurringExpenseWithCategory) => {
     Alert.alert(
       'Process Expense',
-      `Process "${expense.name}" now for $${expense.amount.toFixed(2)}?`,
+      `Process "${expense.name}" now for $${expense.amount.toFixed(3)}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -272,7 +272,7 @@ export default function RecurringExpensesScreen() {
             {item.name}
           </Text>
           <Text style={styles.expenseDetails}>
-            ${item.amount.toFixed(2)} • {getFrequencyText(item.frequency, item.interval)}
+            ${item.amount.toFixed(3)} • {getFrequencyText(item.frequency, item.interval)}
           </Text>
           <Text style={styles.expenseNext}>
             Next: {format(item.nextOccurrence, 'MMM d, yyyy')}

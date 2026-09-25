@@ -14,16 +14,22 @@ const defaultSalarySettings = {
   amount: 0,
   categoryId: '',
   targetVault: 'main' as const,
+  payDay: 1,
   lastProcessed: null,
   nextProcessing: getNextFirstOfMonth(),
 };
 
 const defaultNotificationSettings = {
-  nudgesEnabled: true,
   nudgeTime: '20:00',
-  subscriptionReminders: true,
-  recurringReminders: true,
+  dailyNudgeEnabled: true,
   periodicNudgesEnabled: false,
+  lowBalanceAlertEnabled: true,
+  lowBalanceThreshold: 50,
+  subscriptionRemindersEnabled: true,
+  subscriptionDaysBefore: 2,
+  recurringRemindersEnabled: true,
+  recurringDaysBefore: 2,
+  salaryReminderEnabled: true,
 };
 
 const defaultAppSettings = {
@@ -155,7 +161,7 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: 'settings-storage',
       storage: mmkvStorage,
-      version: 1,
+      version: 2,
       migrate: (persistedState: any, version: number) => {
         // Migrate old model names to new ones
         if (persistedState?.aiSettings?.selectedModel) {
@@ -165,13 +171,37 @@ export const useSettingsStore = create<SettingsState>()(
             'gemini-2.0-flash': 'gemini-2.5-flash',
             'gemini-2.0-pro': 'gemini-1.5-pro',
           };
-          
+
           if (modelMigration[oldModel]) {
             console.log(`[SettingsStore] Migrating model: ${oldModel} → ${modelMigration[oldModel]}`);
             persistedState.aiSettings.selectedModel = modelMigration[oldModel];
           }
         }
-        
+
+        // v2: salary payday + merged smart-nudge settings
+        if (version < 2) {
+          if (persistedState?.salarySettings && persistedState.salarySettings.payDay === undefined) {
+            persistedState.salarySettings.payDay = 1;
+          }
+          const n = persistedState?.notificationSettings;
+          if (n) {
+            persistedState.notificationSettings = {
+              nudgeTime: n.nudgeTime ?? '20:00',
+              dailyNudgeEnabled: n.dailyNudgeEnabled ?? n.nudgesEnabled ?? true,
+              periodicNudgesEnabled: n.periodicNudgesEnabled ?? false,
+              lowBalanceAlertEnabled: n.lowBalanceAlertEnabled ?? true,
+              lowBalanceThreshold: n.lowBalanceThreshold ?? 50,
+              subscriptionRemindersEnabled:
+                n.subscriptionRemindersEnabled ?? n.subscriptionReminders ?? true,
+              subscriptionDaysBefore: n.subscriptionDaysBefore ?? 2,
+              recurringRemindersEnabled:
+                n.recurringRemindersEnabled ?? n.recurringReminders ?? true,
+              recurringDaysBefore: n.recurringDaysBefore ?? 2,
+              salaryReminderEnabled: n.salaryReminderEnabled ?? true,
+            };
+          }
+        }
+
         return persistedState;
       },
     }

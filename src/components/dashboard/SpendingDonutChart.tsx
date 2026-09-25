@@ -1,8 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Dimensions, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = (SCREEN_WIDTH - 24 * 2 - 12) / 2; // lg margins + gap/2
 import { PieChart } from 'react-native-gifted-charts';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -96,8 +94,8 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
     card: {
       backgroundColor: themeColors.glass.background,
       borderRadius: 16,
-      padding: spacing.md,
-      width: CARD_WIDTH,
+      padding: spacing.lg,
+      flex: 1,
       overflow: 'hidden',
     },
     title: {

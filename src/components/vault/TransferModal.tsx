@@ -14,6 +14,7 @@ import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { VaultType } from '../../types/models';
+import { WALLET_META, walletShortName } from '../../utils/wallets';
 
 interface TransferModalProps {
   visible: boolean;
@@ -39,9 +40,9 @@ export const TransferModal: React.FC<TransferModalProps> = ({
   const [error, setError] = useState('');
 
   const vaults = [
-    { value: 'main' as VaultType, label: 'Main', icon: 'wallet', balance: mainBalance },
-    { value: 'savings' as VaultType, label: 'Savings', icon: 'piggy-bank', balance: savingsBalance },
-    { value: 'held' as VaultType, label: 'Held', icon: 'lock', balance: heldBalance },
+    { value: 'main' as VaultType, label: walletShortName('main'), icon: WALLET_META.main.icon, balance: mainBalance },
+    { value: 'savings' as VaultType, label: walletShortName('savings'), icon: WALLET_META.savings.icon, balance: savingsBalance },
+    { value: 'held' as VaultType, label: walletShortName('held'), icon: WALLET_META.held.icon, balance: heldBalance },
   ];
 
   const getVaultBalance = (vault: VaultType) => {
@@ -64,7 +65,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
     }
 
     if (fromVault === toVault) {
-      setError('Please select different vaults');
+      setError('Please select different wallets');
       return false;
     }
 
@@ -72,7 +73,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
     const fromBalance = getVaultBalance(fromVault);
 
     if (transferAmount > fromBalance) {
-      setError(`Insufficient balance in ${fromVault} vault`);
+      setError(`Insufficient balance in ${walletShortName(fromVault)} wallet`);
       return false;
     }
 
@@ -122,7 +123,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
         <View style={styles.container}>
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.title}>Transfer Between Vaults</Text>
+            <Text style={styles.title}>Transfer Between Wallets</Text>
             <TouchableOpacity onPress={resetAndClose}>
               <MaterialCommunityIcons
                 name="close"
@@ -163,7 +164,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                     {vault.label}
                   </Text>
                   <Text style={styles.vaultBalance}>
-                    ${vault.balance.toFixed(2)}
+                    ${vault.balance.toFixed(3)}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -212,7 +213,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                     {vault.label}
                   </Text>
                   <Text style={styles.vaultBalance}>
-                    ${vault.balance.toFixed(2)}
+                    ${vault.balance.toFixed(3)}
                   </Text>
                 </TouchableOpacity>
               ))}

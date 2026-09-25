@@ -48,7 +48,7 @@ export const GradientBalanceCard: React.FC<GradientBalanceCardProps> = React.mem
       return '••••••';
     }
     const sign = amount < 0 ? '-' : '';
-    const formatted = Math.abs(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const formatted = Math.abs(amount).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
     if (accountCurrency === 'USD') {
       return `${sign}$${formatted}`;
     }
@@ -101,9 +101,9 @@ export const GradientBalanceCard: React.FC<GradientBalanceCardProps> = React.mem
 
         {/* Breakdown Section */}
         <View style={styles.breakdown}>
-          {/* Main Balance */}
+          {/* Investment Balance */}
           <View style={styles.breakdownItem}>
-            <Text style={styles.breakdownLabel}>MAIN BALANCE</Text>
+            <Text style={styles.breakdownLabel}>INVESTMENT</Text>
             <Text style={[styles.breakdownValue, { color: themeColors.primary }]}>
               {formatAmount(mainBalance)}
             </Text>
@@ -117,9 +117,9 @@ export const GradientBalanceCard: React.FC<GradientBalanceCardProps> = React.mem
             </Text>
           </View>
 
-          {/* Held Money */}
+          {/* Recurring Money */}
           <View style={styles.breakdownItem}>
-            <Text style={styles.breakdownLabel}>HELD MONEY</Text>
+            <Text style={styles.breakdownLabel}>RECURRING</Text>
             <Text style={styles.breakdownValue}>
               {formatAmount(heldBalance)}
             </Text>

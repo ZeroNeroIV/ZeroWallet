@@ -35,9 +35,9 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
   const formatAmount = (amount: number, type: 'income' | 'expense', currency: string) => {
     const sign = type === 'income' ? '+' : '-';
     if (currency === 'USD') {
-      return `${sign}$${amount.toFixed(2)}`;
+      return `${sign}$${amount.toFixed(3)}`;
     }
-    return `${sign}${amount.toFixed(2)} ${currency}`;
+    return `${sign}${amount.toFixed(3)} ${currency}`;
   };
 
   const renderTransaction = ({
@@ -89,7 +89,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
         </Text>
         {item.convertedAmount && item.currency !== accountCurrency && (
           <Text style={styles.originalAmount}>
-            From {item.amount.toFixed(2)} {item.currency}
+            From {item.amount.toFixed(3)} {item.currency}
           </Text>
         )}
       </View>

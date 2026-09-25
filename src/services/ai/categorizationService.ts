@@ -1,5 +1,5 @@
 /**
- * Purpose: Automatic transaction categorization (Laya) via Gemini structured output
+ * Purpose: Automatic transaction categorization with LAYA (on-device engine)
  *
  * Inputs:
  *   - request (CategorizeRequest): description, type, optional amount
@@ -10,13 +10,11 @@
  *     on-demand new-category proposal instead of falling back to "Other"
  *
  * Side effects:
- *   - Makes HTTP requests to Google Gemini API when API key is configured
  *   - Queries CategoryRepository when categories are not supplied
+ *   - No network calls, no API key needed — works fully offline
  */
 
 import { CategoryRepository } from '../../database/repositories/CategoryRepository';
-import { useSettingsStore } from '../../store/settingsStore';
-import { logger } from '../../utils/logger';
 import { config } from '../../config';
 import type { Category, CategoryType } from '../../types/models';
 import type {
@@ -24,11 +22,8 @@ import type {
   CategorizationOutcome,
   CategorizeRequest,
   NewCategoryProposal,
-  RawCategoryModelResponse,
 } from '../../types/categorization';
 import { CATEGORIZATION_DEFAULTS } from '../../types/categorization';
-
-const TAG = '[Categorization]';
 
 // Palette for on-demand categories (matches CreateCategoryScreen tones)
 const NEW_CATEGORY_COLORS = [
@@ -50,67 +45,40 @@ const NEW_CATEGORY_COLORS = [
 
 // Keyword -> icon hint for newly created categories
 const KEYWORD_ICON_HINTS: Array<{ keywords: string[]; icon: string }> = [
-  { keywords: ['coffee', 'cafe', 'starbucks', 'restaurant', 'food', 'pizza', 'burger', 'dining', 'grocery', 'supermarket', 'market'], icon: 'food' },
-  { keywords: ['uber', 'taxi', 'bus', 'train', 'metro', 'fuel', 'gas', 'parking', 'flight', 'airline', 'transport'], icon: 'car' },
-  { keywords: ['netflix', 'spotify', 'cinema', 'movie', 'game', 'concert', 'theater', 'entertainment'], icon: 'movie' },
-  { keywords: ['electric', 'water', 'internet', 'phone', 'rent', 'utility', 'bill', 'gas bill'], icon: 'receipt' },
-  { keywords: ['pharmacy', 'doctor', 'hospital', 'clinic', 'health', 'gym', 'fitness'], icon: 'medical-bag' },
-  { keywords: ['school', 'course', 'book', 'tuition', 'education', 'udemy'], icon: 'school' },
+  { keywords: ['coffee', 'cafe', 'starbucks', 'restaurant', 'food', 'pizza', 'burger', 'dining', 'grocery', 'supermarket', 'market', 'bakery', 'kfc', 'mcdonald'], icon: 'food' },
+  { keywords: ['uber', 'taxi', 'bus', 'train', 'metro', 'fuel', 'gas', 'parking', 'flight', 'airline', 'transport', 'careem', 'jett'], icon: 'car' },
+  { keywords: ['netflix', 'spotify', 'cinema', 'movie', 'game', 'concert', 'theater', 'entertainment', 'shahid', 'osn', 'disney'], icon: 'movie' },
+  { keywords: ['electric', 'water', 'internet', 'phone', 'rent', 'utility', 'bill', 'gas bill', 'umneya', 'zain', 'orange', 'maintenance'], icon: 'receipt' },
+  { keywords: ['pharmacy', 'doctor', 'hospital', 'clinic', 'health', 'gym', 'fitness', 'dentist', 'medicine'], icon: 'medical-bag' },
+  { keywords: ['school', 'course', 'book', 'tuition', 'education', 'udemy', 'university', 'stationery'], icon: 'school' },
   { keywords: ['salary', 'payroll', 'wage', 'paycheck'], icon: 'briefcase' },
   { keywords: ['freelance', 'upwork', 'fiverr', 'contract'], icon: 'laptop' },
-  { keywords: ['gift', 'donation', 'charity'], icon: 'gift' },
-  { keywords: ['shop', 'mall', 'amazon', 'clothing', 'shoes', 'store'], icon: 'shopping' },
+  { keywords: ['gift', 'donation', 'charity', 'zakat'], icon: 'gift' },
+  { keywords: ['shop', 'mall', 'amazon', 'clothing', 'shoes', 'store', 'shein', 'noon', 'talabat', 'careem now'], icon: 'shopping' },
+  { keywords: ['barber', 'salon', 'haircut', 'spa'], icon: 'content-cut' },
+  { keywords: ['baby', 'kids', 'toy'], icon: 'baby-face-outline' },
+  { keywords: ['pet', 'vet'], icon: 'paw' },
 ];
 
-// Keyword -> existing default category name (fallback when AI is unavailable)
+// Keyword -> existing default category name (LAYA local matching)
 const KEYWORD_CATEGORY_MAP: Array<{ keywords: string[]; category: string }> = [
-  { keywords: ['grocery', 'groceries', 'supermarket', 'market', 'food', 'restaurant', 'dining', 'pizza', 'burger', 'cafe', 'coffee', 'starbucks', 'bakery'], category: 'Food & Dining' },
-  { keywords: ['uber', 'taxi', 'bus', 'train', 'metro', 'fuel', 'gas station', 'parking', 'flight', 'airline', 'transport'], category: 'Transportation' },
-  { keywords: ['netflix', 'spotify', 'cinema', 'movie', 'game', 'concert', 'entertainment', 'subscription'], category: 'Entertainment' },
-  { keywords: ['electric', 'water', 'internet', 'phone bill', 'rent', 'utility', 'utilities', 'bill'], category: 'Bills & Utilities' },
-  { keywords: ['pharmacy', 'doctor', 'hospital', 'clinic', 'health', 'medical', 'gym'], category: 'Healthcare' },
-  { keywords: ['school', 'course', 'book', 'tuition', 'education', 'udemy'], category: 'Education' },
+  { keywords: ['grocery', 'groceries', 'supermarket', 'market', 'food', 'restaurant', 'dining', 'pizza', 'burger', 'cafe', 'coffee', 'starbucks', 'bakery', 'kfc', 'mcdonald', 'talabat', 'breakfast', 'lunch', 'dinner'], category: 'Food & Dining' },
+  { keywords: ['uber', 'taxi', 'bus', 'train', 'metro', 'fuel', 'gas station', 'parking', 'flight', 'airline', 'transport', 'careem', 'jett', 'car wash', 'carwash'], category: 'Transportation' },
+  { keywords: ['netflix', 'spotify', 'cinema', 'movie', 'game', 'concert', 'entertainment', 'subscription', 'shahid', 'osn', 'disney', 'playstation', 'steam'], category: 'Entertainment' },
+  { keywords: ['electric', 'water', 'internet', 'phone bill', 'rent', 'utility', 'utilities', 'bill', 'umneya', 'zain', 'orange', 'maintenance', 'gas bill'], category: 'Bills & Utilities' },
+  { keywords: ['pharmacy', 'doctor', 'hospital', 'clinic', 'health', 'medical', 'gym', 'dentist', 'medicine', 'optics'], category: 'Healthcare' },
+  { keywords: ['school', 'course', 'book', 'tuition', 'education', 'udemy', 'university', 'stationery'], category: 'Education' },
   { keywords: ['salary', 'payroll', 'wage', 'paycheck', 'income'], category: 'Salary' },
   { keywords: ['freelance', 'upwork', 'fiverr', 'contract'], category: 'Freelance' },
   { keywords: ['dividend', 'interest', 'investment', 'stocks'], category: 'Investment' },
   { keywords: ['gift'], category: 'Gift' },
-  { keywords: ['amazon', 'mall', 'clothing', 'shoes', 'shopping', 'store', 'shop'], category: 'Shopping' },
+  { keywords: ['amazon', 'mall', 'clothing', 'shoes', 'shopping', 'store', 'shop', 'shein', 'noon', 'fashion'], category: 'Shopping' },
+  { keywords: ['barber', 'salon', 'haircut', 'spa'], category: 'Shopping' },
 ];
 
 /**
- * Build the typed question sent to the model.
- * Example: Choose the best category: [groceries, transport, entertainment, utilities, other]
- */
-export function buildCategorizationPrompt(
-  request: CategorizeRequest,
-  categories: Category[],
-): string {
-  const names = categories.map((c) => c.name);
-  const list = names.join(', ');
-  const amountLine = request.amount !== undefined ? `\nAmount: ${request.amount}` : '';
-
-  return `You are an expense categorization assistant. Answer with JSON only, no markdown.
-
-Choose the best category: [${list}]
-
-Transaction description: "${request.description}"${amountLine}
-Transaction type: ${request.type}
-
-Rules:
-1. Pick exactly one name from the list above as "categoryName", matching spelling/case exactly.
-2. Return a "confidence" number between 0 and 1.
-3. Keep "reasoning" to one short sentence.
-4. If NONE of the listed categories fit well (do not force "Other"), set "shouldCreateNew" to true and propose a concise "suggestedNewCategory" with a Title-Case "name" (max 3 words), plus "icon" (a MaterialCommunityIcons name) and "color" (hex).
-5. Never invent a categoryName outside the list. Propose new names only inside "suggestedNewCategory".
-
-Return exactly this JSON shape:
-{"categoryName": "<one of the listed names>" | null, "confidence": 0.0-1.0, "reasoning": "<short>", "shouldCreateNew": false, "suggestedNewCategory": {"name": "<Title Case>", "icon": "shopping", "color": "#FF6B6B"}}
-
-If everything fits, omit suggestedNewCategory or set it to null. Respond with raw JSON only.`;
-}
-
-/**
- * Main entry: categorize a single transaction description.
+ * Main entry: categorize a single transaction description with LAYA.
+ * Fully offline — no AI service or API key required.
  */
 export async function categorizeTransaction(
   request: CategorizeRequest,
@@ -127,23 +95,11 @@ export async function categorizeTransaction(
     throw new Error(`No ${request.type} categories found`);
   }
 
-  const apiKey = useSettingsStore.getState().aiSettings.apiKey;
-  if (apiKey) {
-    try {
-      const raw = await callGeminiCategorize(apiKey, request, categories, options.signal);
-      return toOutcome(raw, categories, request, { allowCreateNew });
-    } catch (error) {
-      logger.warn(TAG, 'Gemini categorization failed, using keyword fallback', error);
-    }
-  } else {
-    logger.info(TAG, 'No AI API key configured, using keyword fallback');
-  }
-
-  return keywordFallback(request, categories, allowCreateNew);
+  return layaMatch(request, categories, allowCreateNew);
 }
 
 /**
- * Categorize multiple descriptions efficiently (sequential to respect rate limits).
+ * Categorize multiple descriptions.
  */
 export async function categorizeBatch(
   requests: CategorizeRequest[],
@@ -184,188 +140,10 @@ export async function createProposedCategory(
 }
 
 // ============================================================================
-// Gemini call
+// LAYA local matching — score keyword hits, never settle for "Other"
 // ============================================================================
 
-async function callGeminiCategorize(
-  apiKey: string,
-  request: CategorizeRequest,
-  categories: Category[],
-  signal?: AbortSignal,
-): Promise<RawCategoryModelResponse> {
-  const model = useSettingsStore.getState().aiSettings.selectedModel ?? 'gemini-2.5-flash';
-  const url = `${config.ai.baseUrl}/${model}:generateContent?key=${apiKey}`;
-  const prompt = buildCategorizationPrompt(request, categories);
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    signal,
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.2,
-        maxOutputTokens: 256,
-        responseMimeType: 'application/json',
-      },
-    }),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData?.error?.message ?? `Categorization API failed: ${response.status}`);
-  }
-
-  const data = await response.json();
-  const text: string | undefined = data?.candidates?.[0]?.content?.parts
-    ?.map((p: { text?: string }) => p.text ?? '')
-    .join('')
-    .trim();
-
-  if (!text) {
-    throw new Error('Empty categorization response from model');
-  }
-
-  return parseModelJson(text);
-}
-
-function parseModelJson(text: string): RawCategoryModelResponse {
-  const cleaned = text.replace(/```json|```/g, '').trim();
-  const parsed = JSON.parse(cleaned) as RawCategoryModelResponse;
-  const confidence = clampConfidence(Number(parsed.confidence));
-  return { ...parsed, confidence };
-}
-
-// ============================================================================
-// Outcome mapping — never settle for "Other" when a new category fits better
-// ============================================================================
-
-function toOutcome(
-  raw: RawCategoryModelResponse,
-  categories: Category[],
-  request: CategorizeRequest,
-  opts: { allowCreateNew: boolean },
-): CategorizationOutcome {
-  const confidence = clampConfidence(raw.confidence);
-  const matched = matchCategoryName(raw.categoryName, categories);
-  const otherCategory = categories.find((c) => c.name.toLowerCase() === 'other') ?? null;
-
-  const suggestedName = raw.suggestedNewCategory?.name?.trim();
-  const modelWantsNew = raw.shouldCreateNew === true && !!suggestedName;
-
-  // 1. Model explicitly proposes a new category -> honor it (on-demand creation)
-  if (modelWantsNew && opts.allowCreateNew) {
-    return {
-      kind: 'create_new',
-      choice: {
-        categoryName: matched?.name ?? otherCategory?.name ?? categories[0].name,
-        categoryId: matched?.id ?? otherCategory?.id ?? null,
-        confidence,
-        reasoning: raw.reasoning || 'No existing category fits well.',
-      },
-      shouldCreateNew: true,
-      newCategory: normalizeProposal(raw, request.description),
-      source: 'gemini',
-    };
-  }
-
-  // 2. Best match is "Other" (or no match / low confidence) -> propose on-demand instead
-  const isOther = !matched || matched.name.toLowerCase() === 'other';
-  if (isOther && opts.allowCreateNew) {
-    const derived = suggestedName || deriveCategoryName(request.description);
-    // Don't propose "Other" itself as a new category
-    if (derived.toLowerCase() !== 'other') {
-      return {
-        kind: 'create_new',
-        choice: {
-          categoryName: otherCategory?.name ?? matched?.name ?? 'Other',
-          categoryId: otherCategory?.id ?? matched?.id ?? null,
-          confidence,
-          reasoning: raw.reasoning || `No good match for "${request.description}".`,
-        },
-        shouldCreateNew: true,
-        newCategory: normalizeProposal(
-          {
-            ...raw,
-            suggestedNewCategory: {
-              name: derived,
-              icon: raw.suggestedNewCategory?.icon,
-              color: raw.suggestedNewCategory?.color,
-            },
-          },
-          request.description,
-        ),
-        source: 'gemini',
-      };
-    }
-  }
-
-  // 3. Very low confidence with creation allowed -> also propose new instead of guessing
-  if (
-    opts.allowCreateNew &&
-    confidence < CATEGORIZATION_DEFAULTS.LOW_CONFIDENCE_NEW_CATEGORY_THRESHOLD
-  ) {
-    return {
-      kind: 'create_new',
-      choice: {
-        categoryName: matched?.name ?? otherCategory?.name ?? categories[0].name,
-        categoryId: matched?.id ?? otherCategory?.id ?? null,
-        confidence,
-        reasoning: raw.reasoning || 'Low confidence match.',
-      },
-      shouldCreateNew: true,
-      newCategory: normalizeProposal(
-        {
-          ...raw,
-          suggestedNewCategory: {
-            name: suggestedName || deriveCategoryName(request.description),
-            icon: raw.suggestedNewCategory?.icon,
-            color: raw.suggestedNewCategory?.color,
-          },
-        },
-        request.description,
-      ),
-      source: 'gemini',
-    };
-  }
-
-  // 4. Normal match
-  if (matched) {
-    return {
-      kind: 'match',
-      choice: {
-        categoryName: matched.name,
-        categoryId: matched.id,
-        confidence,
-        reasoning: raw.reasoning || '',
-      },
-      shouldCreateNew: false,
-      newCategory: null,
-      source: 'gemini',
-    };
-  }
-
-  // 5. Defensive fallback (should be rare: model returned unknown name)
-  const fallback = otherCategory ?? categories[0];
-  return {
-    kind: 'match',
-    choice: {
-      categoryName: fallback.name,
-      categoryId: fallback.id,
-      confidence: Math.min(confidence, 0.3),
-      reasoning: `Unknown model choice "${raw.categoryName}", fell back to ${fallback.name}.`,
-    },
-    shouldCreateNew: false,
-    newCategory: null,
-    source: 'gemini',
-  };
-}
-
-// ============================================================================
-// Keyword fallback (offline / no API key)
-// ============================================================================
-
-function keywordFallback(
+function layaMatch(
   request: CategorizeRequest,
   categories: Category[],
   allowCreateNew: boolean,
@@ -373,27 +151,34 @@ function keywordFallback(
   const haystack = `${request.description} ${request.merchantHint ?? ''}`.toLowerCase();
   const otherCategory = categories.find((c) => c.name.toLowerCase() === 'other') ?? null;
 
+  let best: { category: string; hits: number } | null = null;
   for (const entry of KEYWORD_CATEGORY_MAP) {
-    if (entry.keywords.some((k) => haystack.includes(k))) {
-      const matched = matchCategoryName(entry.category, categories);
-      if (matched && matched.name.toLowerCase() !== 'other') {
-        return {
-          kind: 'match',
-          choice: {
-            categoryName: matched.name,
-            categoryId: matched.id,
-            confidence: 0.65,
-            reasoning: `Keyword match for "${request.description}".`,
-          },
-          shouldCreateNew: false,
-          newCategory: null,
-          source: 'keyword_fallback',
-        };
-      }
+    const hits = entry.keywords.filter((k) => haystack.includes(k)).length;
+    if (hits > 0 && (!best || hits > best.hits)) {
+      best = { category: entry.category, hits };
     }
   }
 
-  // No keyword hit -> propose on-demand category instead of silently using Other
+  if (best) {
+    const matched = matchCategoryName(best.category, categories);
+    if (matched && matched.name.toLowerCase() !== 'other') {
+      const confidence = Math.min(0.9, 0.6 + best.hits * 0.1);
+      return {
+        kind: 'match',
+        choice: {
+          categoryName: matched.name,
+          categoryId: matched.id,
+          confidence,
+          reasoning: `LAYA matched "${request.description}" to ${matched.name}.`,
+        },
+        shouldCreateNew: false,
+        newCategory: null,
+        source: 'laya',
+      };
+    }
+  }
+
+  // No good match -> propose on-demand category instead of using Other
   if (allowCreateNew) {
     const name = deriveCategoryName(request.description);
     if (name.toLowerCase() !== 'other') {
@@ -403,11 +188,11 @@ function keywordFallback(
           categoryName: otherCategory?.name ?? categories[0].name,
           categoryId: otherCategory?.id ?? null,
           confidence: 0.35,
-          reasoning: 'No keyword match; new category suggested.',
+          reasoning: `LAYA found no good match for "${request.description}".`,
         },
         shouldCreateNew: true,
         newCategory: buildProposal(name, request.description),
-        source: 'keyword_fallback',
+        source: 'laya',
       };
     }
   }
@@ -419,11 +204,11 @@ function keywordFallback(
       categoryName: fallback.name,
       categoryId: fallback.id,
       confidence: 0.3,
-      reasoning: 'No keyword match.',
+      reasoning: 'LAYA found no keyword match.',
     },
     shouldCreateNew: false,
     newCategory: null,
-    source: 'keyword_fallback',
+    source: 'laya',
   };
 }
 
@@ -455,23 +240,13 @@ function matchCategoryName(name: string | null | undefined, categories: Category
   );
 }
 
-function clampConfidence(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.min(1, Math.max(0, value));
-}
-
-function normalizeProposal(raw: RawCategoryModelResponse, description: string): NewCategoryProposal {
-  const name = toTitleCase(raw.suggestedNewCategory?.name?.trim() || deriveCategoryName(description));
-  return buildProposal(name, description, raw.suggestedNewCategory?.icon, raw.suggestedNewCategory?.color);
-}
-
 function buildProposal(name: string, description: string, icon?: string, color?: string): NewCategoryProposal {
   const cleanName = toTitleCase(name).slice(0, 30) || 'Miscellaneous';
   return {
     name: cleanName,
     icon: icon || guessIcon(`${cleanName} ${description}`),
     color: color || guessColor(cleanName),
-    reasoning: `Proposed new category "${cleanName}" for "${description}".`,
+    reasoning: `LAYA proposes new category "${cleanName}" for "${description}".`,
   };
 }
 

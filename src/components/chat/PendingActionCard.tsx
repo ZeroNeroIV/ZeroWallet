@@ -136,7 +136,7 @@ export const PendingActionCard: React.FC<PendingActionCardProps> = ({
             {data.amount && (
               <DetailRow
                 label="Amount"
-                value={`${data.amount.toFixed(2)}`}
+                value={`${data.amount.toFixed(3)}`}
                 icon="cash"
               />
             )}
@@ -177,7 +177,7 @@ export const PendingActionCard: React.FC<PendingActionCardProps> = ({
             {data.targetAmount && (
               <DetailRow
                 label="Target"
-                value={`${data.targetAmount.toFixed(2)}`}
+                value={`${data.targetAmount.toFixed(3)}`}
                 icon="cash"
               />
             )}
@@ -204,7 +204,7 @@ export const PendingActionCard: React.FC<PendingActionCardProps> = ({
             {data.amount && (
               <DetailRow
                 label="Amount"
-                value={`${data.amount.toFixed(2)}`}
+                value={`${data.amount.toFixed(3)}`}
                 icon="cash"
               />
             )}
@@ -231,7 +231,7 @@ export const PendingActionCard: React.FC<PendingActionCardProps> = ({
             {data.amount && (
               <DetailRow
                 label="Amount"
-                value={`${data.amount.toFixed(2)}`}
+                value={`${data.amount.toFixed(3)}`}
                 icon="cash"
               />
             )}
@@ -258,7 +258,7 @@ export const PendingActionCard: React.FC<PendingActionCardProps> = ({
             {data.amount && (
               <DetailRow
                 label="Amount"
-                value={`${data.amount.toFixed(2)}`}
+                value={`${data.amount.toFixed(3)}`}
                 icon="cash"
               />
             )}

@@ -117,18 +117,28 @@ export const DashboardScreen: React.FC = () => {
         >
           {data && (
             <>
-              <GradientBalanceCard
-                totalBalance={data.balance.totalBalance}
-                mainBalance={data.balance.mainBalance}
-                savingsBalance={data.balance.savingsBalance}
-                heldBalance={data.balance.heldBalance}
-                accountCurrency={data.currency}
-              />
-              <ActionButtons />
-              <WealthAnalyticsCard data={data.chartData} activeTab={analyticsTab} onTabChange={setAnalyticsTab} />
-              <IncomeExpenseChart data={data.monthlyData} />
-              <View style={styles.chartsRow}>
+              <View style={styles.section}>
+                <GradientBalanceCard
+                  totalBalance={data.balance.totalBalance}
+                  mainBalance={data.balance.mainBalance}
+                  savingsBalance={data.balance.savingsBalance}
+                  heldBalance={data.balance.heldBalance}
+                  accountCurrency={data.currency}
+                />
+              </View>
+              <View style={styles.section}>
+                <ActionButtons />
+              </View>
+              <View style={styles.section}>
+                <WealthAnalyticsCard data={data.chartData} activeTab={analyticsTab} onTabChange={setAnalyticsTab} />
+              </View>
+              <View style={styles.section}>
+                <IncomeExpenseChart data={data.monthlyData} />
+              </View>
+              <View style={styles.section}>
                 <SpendingDonutChart data={data.categorySpend} totalSpend={data.totalMonthSpend} />
+              </View>
+              <View style={styles.section}>
                 <GoalsProgressCard goals={data.activeGoals} />
               </View>
               <DashboardCardsGrid
@@ -164,8 +174,8 @@ const createStyles = (tc: ReturnType<typeof useThemeColors>) => StyleSheet.creat
     shadowOpacity: 0.1, shadowRadius: 3, elevation: 3,
   },
   scrollView: { flex: 1 },
-  scrollContent: { paddingTop: 80, paddingBottom: 100 },
-  chartsRow: {
-    flexDirection: 'row', marginHorizontal: spacing.lg, gap: 12, marginBottom: spacing.md,
+  scrollContent: { paddingTop: 96, paddingBottom: 120 },
+  section: {
+    marginBottom: spacing.lg,
   },
 });

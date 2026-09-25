@@ -135,7 +135,7 @@ export const TransactionDetailsScreen: React.FC = () => {
   };
 
   const formatAmount = (amount: number) => {
-    return `$${amount.toFixed(2)}`;
+    return `$${amount.toFixed(3)}`;
   };
 
   const formatDate = (timestamp: number) => {

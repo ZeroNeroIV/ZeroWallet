@@ -18,6 +18,7 @@ import { VaultType } from '../../types/models';
 import { useAuthStore } from '../../store/authStore';
 import { useAccountStore } from '../../store/accountStore';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { WALLET_META } from '../../utils/wallets';
 
 export const VaultManagementScreen: React.FC = () => {
   const { currentAccountId } = useAuthStore();
@@ -70,9 +71,10 @@ export const VaultManagementScreen: React.FC = () => {
 
   const vaultDetails = [
     {
-      name: 'Main Vault',
-      description: 'Your primary spending money',
-      icon: 'wallet',
+      name: WALLET_META.main.name,
+      category: WALLET_META.main.category,
+      description: 'Your active everyday money',
+      icon: WALLET_META.main.icon,
       color: colors.primary.main,
       balance: currentBalance.mainBalance,
       features: [
@@ -82,26 +84,28 @@ export const VaultManagementScreen: React.FC = () => {
       ],
     },
     {
-      name: 'Savings Vault',
+      name: WALLET_META.savings.name,
+      category: WALLET_META.savings.category,
       description: 'Money set aside for future goals',
-      icon: 'piggy-bank',
+      icon: WALLET_META.savings.icon,
       color: colors.semantic.success,
       balance: currentBalance.savingsBalance,
       features: [
         'Save for future purchases',
         'Included in available balance',
-        'Transfer to main when needed',
+        'Transfer to investment wallet when needed',
       ],
     },
     {
-      name: 'Held Vault',
+      name: WALLET_META.held.name,
+      category: WALLET_META.held.category,
       description: 'Reserved money not available to spend',
-      icon: 'lock',
+      icon: WALLET_META.held.icon,
       color: colors.semantic.warning,
       balance: currentBalance.heldBalance,
       features: [
         'Excluded from available balance',
-        'For bills and commitments',
+        'For bills and recurring commitments',
         'Prevents accidental spending',
       ],
     },
@@ -129,12 +133,12 @@ export const VaultManagementScreen: React.FC = () => {
             size={24}
             color={colors.neutral.white}
           />
-          <Text style={styles.transferButtonText}>Transfer Between Vaults</Text>
+          <Text style={styles.transferButtonText}>Transfer Between Wallets</Text>
         </TouchableOpacity>
 
-        {/* Vault Details */}
+        {/* Wallet Details */}
         <View style={styles.detailsContainer}>
-          <Text style={styles.sectionTitle}>About Your Vaults</Text>
+          <Text style={styles.sectionTitle}>About Your Wallets</Text>
 
           {vaultDetails.map((vault, index) => (
             <View key={vault.name} style={styles.vaultDetailCard}>
@@ -153,12 +157,13 @@ export const VaultManagementScreen: React.FC = () => {
                 </View>
                 <View style={styles.vaultDetailInfo}>
                   <Text style={styles.vaultDetailName}>{vault.name}</Text>
+                  <Text style={styles.vaultDetailCategory}>{vault.category}</Text>
                   <Text style={styles.vaultDetailDescription}>
                     {vault.description}
                   </Text>
                 </View>
                 <Text style={styles.vaultDetailBalance}>
-                  ${vault.balance.toFixed(2)}
+                  ${vault.balance.toFixed(3)}
                 </Text>
               </View>
 
@@ -187,8 +192,8 @@ export const VaultManagementScreen: React.FC = () => {
           />
           <Text style={styles.infoText}>
             <Text style={styles.infoTextBold}>Available to Spend</Text> includes
-            money from Main and Savings vaults, but excludes money in the Held
-            vault to prevent overspending.
+            money from Investment and Savings wallets, but excludes money in the Recurring
+            wallet to prevent overspending.
           </Text>
         </View>
       </ScrollView>
@@ -265,6 +270,14 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) => StyleSh
     ...typography.body,
     fontWeight: '600',
     color: themeColors.text,
+    marginBottom: 2,
+  },
+  vaultDetailCategory: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.primary.main,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
     marginBottom: 2,
   },
   vaultDetailDescription: {

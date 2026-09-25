@@ -24,9 +24,9 @@ export const QuickStats: React.FC<QuickStatsProps> = ({
 
   const formatAmount = (amount: number) => {
     if (accountCurrency === 'USD') {
-      return `$${amount.toFixed(2)}`;
+      return `$${amount.toFixed(3)}`;
     }
-    return `${amount.toFixed(2)} ${accountCurrency}`;
+    return `${amount.toFixed(3)} ${accountCurrency}`;
   };
 
   const netAmount = monthlyIncome - monthlyExpense;

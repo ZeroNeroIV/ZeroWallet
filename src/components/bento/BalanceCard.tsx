@@ -24,9 +24,9 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
 
   const formatAmount = (amount: number) => {
     if (accountCurrency === 'USD') {
-      return `$${Math.abs(amount).toFixed(2)}`;
+      return `$${Math.abs(amount).toFixed(3)}`;
     }
-    return `${Math.abs(amount).toFixed(2)} ${accountCurrency}`;
+    return `${Math.abs(amount).toFixed(3)} ${accountCurrency}`;
   };
 
   const isPositiveChange = monthlyChange >= 0;

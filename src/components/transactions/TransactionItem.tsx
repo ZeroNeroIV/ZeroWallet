@@ -43,9 +43,9 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
   const formatAmount = (amount: number, currency: string, showSign: boolean = false, type?: 'income' | 'expense') => {
     const sign = showSign && type ? (type === 'income' ? '+' : '-') : '';
     if (currency === 'USD') {
-      return `${sign}$${amount.toFixed(2)}`;
+      return `${sign}$${amount.toFixed(3)}`;
     }
-    return `${sign}${amount.toFixed(2)} ${currency}`;
+    return `${sign}${amount.toFixed(3)} ${currency}`;
   };
 
   const formatDate = (timestamp: number) => {
@@ -67,7 +67,7 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
 
     Alert.alert(
       'Transaction Actions',
-      `${category.name} - $${transaction.amount.toFixed(2)}`,
+      `${category.name} - $${transaction.amount.toFixed(3)}`,
       [
         {
           text: 'View Details',
@@ -226,7 +226,7 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({
             </Text>
             {transaction.convertedAmount && transaction.currency !== accountCurrency && (
               <Text style={styles.originalAmount}>
-                From {transaction.amount.toFixed(2)} {transaction.currency}
+                From {transaction.amount.toFixed(3)} {transaction.currency}
               </Text>
             )}
             <Text style={styles.date}>{formatDate(transaction.date)}</Text>

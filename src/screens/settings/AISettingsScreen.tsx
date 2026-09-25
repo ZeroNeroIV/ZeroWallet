@@ -5,11 +5,10 @@
  *   - navigation (AISettingsScreenProps): Navigation object from React Navigation
  *
  * Outputs:
- *   - Returns (JSX.Element): AI settings configuration form
+ *   - Returns (JSX.Element): Simple AI settings form
  *
  * Side effects:
  *   - Updates AI settings in settingsStore
- *   - Opens Gemini explainer modal
  *   - Opens browser to Google AI Studio
  *   - Validates API key with Google
  */
@@ -33,60 +32,36 @@ import { typography } from '../../theme/typography';
 import { compatColors as colors } from '../../theme/colors';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { lightHaptic, mediumHaptic } from '../../services/haptics/hapticFeedback';
-import { GeminiExplainerModal } from './GeminiExplainerModal';
-import { getModelById, GEMINI_MODELS } from '../../constants/geminiModels';
+import { GEMINI_MODELS } from '../../constants/geminiModels';
+
+const AI_STUDIO_URL = 'https://aistudio.google.com/app/apikey';
 
 const AISettingsScreen = ({ navigation }: any) => {
   const store = useSettingsStore();
-  const aiSettings = store.aiSettings || {
-    apiKey: null,
-    selectedModel: 'gemini-2.5-flash',
-    isConfigured: false,
-    totalTokensUsed: 0,
-    conversationCount: 0,
-    lastUsed: null,
-  };
+  const aiSettings = store.aiSettings;
   const updateAISettings = store.updateAISettings;
   const themeColors = useThemeColors();
 
   const [apiKey, setApiKey] = useState(aiSettings?.apiKey || '');
   const [showApiKey, setShowApiKey] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
-  const [showExplainer, setShowExplainer] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
 
-  const currentModel = useMemo(
-    () => getModelById(aiSettings?.selectedModel || 'gemini-2.5-flash'),
-    [aiSettings?.selectedModel]
-  );
-
-  // Handle API key change
   const handleApiKeyChange = useCallback((text: string) => {
     setApiKey(text.trim());
     setHasChanges(true);
   }, []);
 
-  // Toggle API key visibility
-  const handleToggleShowKey = useCallback(() => {
-    lightHaptic();
-    setShowApiKey((prev) => !prev);
-  }, []);
-
-  // Open explainer modal
-  const handleShowExplainer = useCallback(() => {
-    mediumHaptic();
-    setShowExplainer(true);
-  }, []);
-
-  // Open Google AI Studio to get API key
+  // Open Google AI Studio to get a free API key
   const handleGetAPIKey = useCallback(async () => {
     mediumHaptic();
-    const url = 'https://aistudio.google.com/app/apikey';
-    const canOpen = await Linking.canOpenURL(url);
+    const canOpen = await Linking.canOpenURL(AI_STUDIO_URL);
     if (canOpen) {
-      await Linking.openURL(url);
+      await Linking.openURL(AI_STUDIO_URL);
+    } else {
+      Alert.alert('Cannot open link', 'Copy this into your browser:\n' + AI_STUDIO_URL);
     }
   }, []);
 
@@ -101,7 +76,6 @@ const AISettingsScreen = ({ navigation }: any) => {
     mediumHaptic();
 
     try {
-      // Test the API key with a simple request
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
         {
@@ -136,15 +110,6 @@ const AISettingsScreen = ({ navigation }: any) => {
       setIsValidating(false);
     }
   }, [apiKey]);
-
-  // Navigate to model selection
-  const handleSelectModel = useCallback((modelId: string) => {
-    lightHaptic();
-    updateAISettings({
-      selectedModel: modelId,
-    });
-    Alert.alert('Model Updated', `Switched to ${getModelById(modelId)?.name}`);
-  }, [updateAISettings]);
 
   // Save settings
   const handleSave = useCallback(() => {
@@ -205,66 +170,24 @@ const AISettingsScreen = ({ navigation }: any) => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* 100% FREE Badge */}
-        <View style={styles.freeBadge}>
-          <MaterialCommunityIcons name="gift" size={20} color="#fff" />
-          <Text style={styles.freeBadgeText}>100% FREE Forever - No Credit Card</Text>
-        </View>
-
-        {/* Status Card */}
+        {/* Status */}
         <View style={styles.statusCard}>
-          <View style={styles.statusHeader}>
-            <MaterialCommunityIcons
-              name={aiSettings?.isConfigured ? 'check-circle' : 'alert-circle'}
-              size={24}
-              color={aiSettings?.isConfigured ? colors.success.main : colors.warning.main}
-            />
-            <Text style={styles.statusText}>
-              {aiSettings?.isConfigured ? 'AI Assistant Configured' : 'Not Configured'}
-            </Text>
-          </View>
-
-          {aiSettings?.isConfigured && (
-            <>
-              <View style={styles.statusRow}>
-                <Text style={styles.statusLabel}>Current Model:</Text>
-                <Text style={styles.statusValue}>{currentModel?.name || 'Flash'}</Text>
-              </View>
-              <View style={styles.statusRow}>
-                <Text style={styles.statusLabel}>Conversations:</Text>
-                <Text style={styles.statusValue}>{aiSettings?.conversationCount || 0}</Text>
-              </View>
-              <View style={styles.statusRow}>
-                <Text style={styles.statusLabel}>Tokens Used:</Text>
-                <Text style={styles.statusValue}>
-                  {(aiSettings?.totalTokensUsed || 0).toLocaleString()}
-                </Text>
-              </View>
-            </>
-          )}
+          <MaterialCommunityIcons
+            name={aiSettings?.isConfigured ? 'check-circle' : 'alert-circle'}
+            size={24}
+            color={aiSettings?.isConfigured ? colors.success.main : colors.warning.main}
+          />
+          <Text style={styles.statusText}>
+            {aiSettings?.isConfigured ? 'AI Assistant ready' : 'AI Assistant not set up'}
+          </Text>
         </View>
 
-        {/* What is Gemini? Button */}
-        <TouchableOpacity style={styles.infoButton} onPress={handleShowExplainer}>
-          <MaterialCommunityIcons
-            name="help-circle"
-            size={24}
-            color={colors.primary.main}
-          />
-          <Text style={styles.infoButtonText}>What is Gemini?</Text>
-          <MaterialCommunityIcons
-            name="chevron-right"
-            size={20}
-            color={themeColors.textSecondary}
-          />
-        </TouchableOpacity>
-
-        {/* Get Free API Key Button */}
+        {/* Get Free API Key — direct link to Google AI Studio */}
         <TouchableOpacity style={styles.getKeyButton} onPress={handleGetAPIKey}>
           <MaterialCommunityIcons name="key-variant" size={20} color="#fff" />
           <View style={styles.getKeyContent}>
-            <Text style={styles.getKeyText}>Get Free API Key</Text>
-            <Text style={styles.getKeySubtext}>Opens Google AI Studio (30 seconds)</Text>
+            <Text style={styles.getKeyText}>Get a free API key</Text>
+            <Text style={styles.getKeySubtext}>Google AI Studio · aistudio.google.com</Text>
           </View>
           <MaterialCommunityIcons name="open-in-new" size={18} color="#fff" />
         </TouchableOpacity>
@@ -277,7 +200,7 @@ const AISettingsScreen = ({ navigation }: any) => {
               style={styles.input}
               value={showApiKey ? apiKey : apiKey.replace(/./g, '•')}
               onChangeText={handleApiKeyChange}
-              placeholder="Paste your API key here"
+              placeholder="Paste your key here"
               placeholderTextColor={themeColors.textSecondary}
               secureTextEntry={false}
               autoCapitalize="none"
@@ -285,7 +208,10 @@ const AISettingsScreen = ({ navigation }: any) => {
             />
             <TouchableOpacity
               style={styles.eyeButton}
-              onPress={handleToggleShowKey}
+              onPress={() => {
+                lightHaptic();
+                setShowApiKey((prev) => !prev);
+              }}
               hitSlop={10}
             >
               <MaterialCommunityIcons
@@ -297,120 +223,81 @@ const AISettingsScreen = ({ navigation }: any) => {
           </View>
         </View>
 
-        {/* Test Connection Button */}
-        <TouchableOpacity
-          style={styles.testButton}
-          onPress={handleTestConnection}
-          disabled={isValidating || !apiKey}
-        >
-          {isValidating ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <>
-              <MaterialCommunityIcons name="connection" size={20} color="#fff" />
-              <Text style={styles.testButtonText}>Test Connection</Text>
-            </>
-          )}
-        </TouchableOpacity>
-
-        {/* Model Selection */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>AI Model</Text>
-          <Text style={styles.sectionHint}>
-            Choose the model that best fits your needs
-          </Text>
-          
-          {GEMINI_MODELS.map((model) => (
-            <TouchableOpacity
-              key={model.id}
-              style={[
-                styles.modelCard,
-                aiSettings?.selectedModel === model.id && styles.modelCardActive,
-              ]}
-              onPress={() => handleSelectModel(model.id)}
-            >
-              <View style={styles.modelCardContent}>
-                <View style={styles.modelHeader}>
-                  <Text style={styles.modelName}>{model.name}</Text>
-                  {model.recommended && (
-                    <View style={styles.recommendedBadge}>
-                      <MaterialCommunityIcons name="star" size={12} color="#fff" />
-                      <Text style={styles.recommendedText}>Recommended</Text>
-                    </View>
-                  )}
-                </View>
-                
-                <Text style={styles.modelDescription}>{model.description}</Text>
-                
-                <View style={styles.modelStats}>
-                  <View style={styles.statRow}>
-                    <MaterialCommunityIcons
-                      name="lightning-bolt"
-                      size={16}
-                      color={themeColors.textSecondary}
-                    />
-                    <Text style={styles.statText}>Speed: </Text>
-                    <Text style={styles.statValue}>{'⚡'.repeat(model.speed)}</Text>
-                  </View>
-                  <View style={styles.statRow}>
-                    <MaterialCommunityIcons
-                      name="star"
-                      size={16}
-                      color={themeColors.textSecondary}
-                    />
-                    <Text style={styles.statText}>Accuracy: </Text>
-                    <Text style={styles.statValue}>{'⭐'.repeat(model.accuracy)}</Text>
-                  </View>
-                </View>
-                
-                <Text style={styles.modelBestFor}>Best for: {model.bestFor}</Text>
-              </View>
-              
-              {aiSettings?.selectedModel === model.id && (
-                <MaterialCommunityIcons
-                  name="check-circle"
-                  size={24}
-                  color={colors.success.main}
-                  style={styles.selectedIcon}
-                />
-              )}
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Action Buttons */}
-        <View style={styles.actionsContainer}>
+        {/* Test + Save */}
+        <View style={styles.actionsRow}>
           <TouchableOpacity
-            style={[styles.saveButton, !hasChanges && !apiKey && styles.saveButtonDisabled]}
+            style={[styles.testButton, (!apiKey || isValidating) && styles.buttonDisabled]}
+            onPress={handleTestConnection}
+            disabled={isValidating || !apiKey}
+          >
+            {isValidating ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <>
+                <MaterialCommunityIcons name="connection" size={20} color="#fff" />
+                <Text style={styles.buttonText}>Test</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.saveButton, (!hasChanges && !apiKey) && styles.buttonDisabled]}
             onPress={handleSave}
             disabled={!hasChanges && !apiKey}
           >
             <MaterialCommunityIcons name="check" size={20} color="#fff" />
-            <Text style={styles.saveButtonText}>Save Settings</Text>
+            <Text style={styles.buttonText}>Save</Text>
           </TouchableOpacity>
-
-          {aiSettings?.isConfigured && (
-            <TouchableOpacity style={styles.clearButton} onPress={handleClearKey}>
-              <MaterialCommunityIcons
-                name="delete"
-                size={20}
-                color={colors.error.main}
-              />
-              <Text style={styles.clearButtonText}>Clear API Key</Text>
-            </TouchableOpacity>
-          )}
         </View>
-      </ScrollView>
 
-      {/* Explainer Modal */}
-      <GeminiExplainerModal
-        visible={showExplainer}
-        onClose={() => setShowExplainer(false)}
-        onGetStarted={() => {
-          setShowExplainer(false);
-          // Focus could be added here in the future
-        }}
-      />
+        {/* Model */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Model</Text>
+          {GEMINI_MODELS.map((model) => {
+            const selected = aiSettings?.selectedModel === model.id;
+            return (
+              <TouchableOpacity
+                key={model.id}
+                style={[styles.modelRow, selected && styles.modelRowActive]}
+                onPress={() => {
+                  lightHaptic();
+                  updateAISettings({ selectedModel: model.id });
+                }}
+              >
+                <View style={styles.modelInfo}>
+                  <Text style={styles.modelName}>{model.name}</Text>
+                  <Text style={styles.modelDescription} numberOfLines={1}>
+                    {model.description}
+                  </Text>
+                </View>
+                {model.recommended && (
+                  <View style={styles.recommendedBadge}>
+                    <Text style={styles.recommendedText}>★</Text>
+                  </View>
+                )}
+                {selected && (
+                  <MaterialCommunityIcons
+                    name="check-circle"
+                    size={22}
+                    color={colors.success.main}
+                  />
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {aiSettings?.isConfigured && (
+          <TouchableOpacity style={styles.clearButton} onPress={handleClearKey}>
+            <MaterialCommunityIcons
+              name="delete"
+              size={20}
+              color={colors.error.main}
+            />
+            <Text style={styles.clearButtonText}>Remove API Key</Text>
+          </TouchableOpacity>
+        )}
+      </ScrollView>
     </View>
   );
 };
@@ -426,73 +313,23 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
     },
     scrollContent: {
       padding: spacing.lg,
-    },
-    freeBadge: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.success.main,
-      paddingVertical: spacing.sm,
-      paddingHorizontal: spacing.md,
-      borderRadius: 12,
-      marginBottom: spacing.lg,
-      gap: spacing.xs,
-    },
-    freeBadgeText: {
-      ...typography.body,
-      color: '#fff',
-      fontWeight: '700',
+      paddingBottom: spacing.xl,
     },
     statusCard: {
-      backgroundColor: themeColors.surface,
-      padding: spacing.md,
-      borderRadius: 12,
-      marginBottom: spacing.lg,
-      borderWidth: 1,
-      borderColor: themeColors.border,
-    },
-    statusHeader: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.sm,
-      marginBottom: spacing.sm,
-    },
-    statusText: {
-      ...typography.h4,
-      color: themeColors.text,
-      fontWeight: '600',
-    },
-    statusRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      paddingVertical: spacing.xs,
-    },
-    statusLabel: {
-      ...typography.body,
-      color: themeColors.textSecondary,
-    },
-    statusValue: {
-      ...typography.body,
-      color: themeColors.text,
-      fontWeight: '600',
-    },
-    infoButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
       backgroundColor: themeColors.surface,
       padding: spacing.md,
       borderRadius: 12,
       marginBottom: spacing.md,
       borderWidth: 1,
-      borderColor: colors.primary.main,
-      gap: spacing.sm,
+      borderColor: themeColors.border,
     },
-    infoButtonText: {
+    statusText: {
       ...typography.body,
-      color: colors.primary.main,
+      color: themeColors.text,
       fontWeight: '600',
-      flex: 1,
     },
     getKeyButton: {
       flexDirection: 'row',
@@ -509,7 +346,7 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
     getKeyText: {
       ...typography.body,
       color: '#fff',
-      fontWeight: '600',
+      fontWeight: '700',
     },
     getKeySubtext: {
       ...typography.caption,
@@ -524,11 +361,6 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
       color: themeColors.text,
       marginBottom: spacing.sm,
       fontWeight: '600',
-    },
-    sectionHint: {
-      ...typography.caption,
-      color: themeColors.textSecondary,
-      marginTop: spacing.xs,
     },
     inputContainer: {
       flexDirection: 'row',
@@ -548,100 +380,23 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
     eyeButton: {
       padding: spacing.xs,
     },
+    actionsRow: {
+      flexDirection: 'row',
+      gap: spacing.md,
+      marginBottom: spacing.lg,
+    },
     testButton: {
+      flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.info.main,
       padding: spacing.md,
       borderRadius: 12,
-      marginBottom: spacing.lg,
       gap: spacing.sm,
-    },
-    testButtonText: {
-      ...typography.body,
-      color: '#fff',
-      fontWeight: '600',
-    },
-    modelCard: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: themeColors.surface,
-      padding: spacing.md,
-      borderRadius: 12,
-      borderWidth: 2,
-      borderColor: themeColors.border,
-      marginBottom: spacing.md,
-    },
-    modelCardActive: {
-      borderColor: colors.success.main,
-      backgroundColor: `${colors.success.main}08`,
-    },
-    modelCardContent: {
-      flex: 1,
-    },
-    modelHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: spacing.xs,
-      gap: spacing.sm,
-    },
-    modelName: {
-      ...typography.body,
-      color: themeColors.text,
-      fontWeight: '700',
-    },
-    recommendedBadge: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: colors.warning.main,
-      paddingHorizontal: spacing.xs,
-      paddingVertical: 2,
-      borderRadius: 8,
-      gap: 2,
-    },
-    recommendedText: {
-      ...typography.caption,
-      color: '#fff',
-      fontSize: 10,
-      fontWeight: '600',
-    },
-    modelDescription: {
-      ...typography.bodySmall,
-      color: themeColors.textSecondary,
-      marginBottom: spacing.sm,
-    },
-    modelStats: {
-      flexDirection: 'row',
-      gap: spacing.md,
-      marginBottom: spacing.xs,
-    },
-    statRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 2,
-    },
-    statText: {
-      ...typography.caption,
-      color: themeColors.textSecondary,
-    },
-    statValue: {
-      ...typography.caption,
-      color: themeColors.text,
-    },
-    modelBestFor: {
-      ...typography.caption,
-      color: themeColors.textSecondary,
-      fontStyle: 'italic',
-    },
-    selectedIcon: {
-      marginLeft: spacing.sm,
-    },
-    actionsContainer: {
-      gap: spacing.md,
-      marginTop: spacing.md,
     },
     saveButton: {
+      flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
@@ -650,13 +405,52 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
       borderRadius: 12,
       gap: spacing.sm,
     },
-    saveButtonDisabled: {
+    buttonDisabled: {
       opacity: 0.5,
     },
-    saveButtonText: {
+    buttonText: {
       ...typography.body,
       color: '#fff',
       fontWeight: '600',
+    },
+    modelRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: themeColors.surface,
+      padding: spacing.md,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: themeColors.border,
+      marginBottom: spacing.sm,
+      gap: spacing.sm,
+    },
+    modelRowActive: {
+      borderColor: colors.success.main,
+    },
+    modelInfo: {
+      flex: 1,
+    },
+    modelName: {
+      ...typography.body,
+      color: themeColors.text,
+      fontWeight: '700',
+    },
+    modelDescription: {
+      ...typography.caption,
+      color: themeColors.textSecondary,
+    },
+    recommendedBadge: {
+      backgroundColor: colors.warning.main,
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    recommendedText: {
+      color: '#fff',
+      fontSize: 12,
+      fontWeight: '700',
     },
     clearButton: {
       flexDirection: 'row',

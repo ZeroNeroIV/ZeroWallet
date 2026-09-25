@@ -111,7 +111,7 @@ export const CurrencyConversionModal: React.FC<CurrencyConversionModalProps> = (
     const handleSwapCurrencies = () => {
         // Swap the currencies and amounts
         if (convertedAmount) {
-            setAmount(convertedAmount.toFixed(2));
+            setAmount(convertedAmount.toFixed(3));
         }
         if (exchangeRate) {
             setExchangeRate(1 / exchangeRate);
@@ -210,7 +210,7 @@ export const CurrencyConversionModal: React.FC<CurrencyConversionModalProps> = (
                                     </View>
                                     <Text style={styles.convertedAmount}>
                                         {convertedAmount !== null
-                                            ? convertedAmount.toFixed(2)
+                                            ? convertedAmount.toFixed(3)
                                             : '0.00'}
                                     </Text>
                                 </View>

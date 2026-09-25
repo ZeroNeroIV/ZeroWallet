@@ -1,16 +1,16 @@
 /**
- * Purpose: Process automatic monthly salary based on scheduled payment dates
- * 
+ * Purpose: Process automatic monthly salary on the user's payday
+ *
  * Strategy:
- *   - When user enables auto-salary, save nextPaymentDate (1st of next month)
- *   - On every app open, check if current date >= nextPaymentDate
- *   - If missed multiple months, process all missed salaries
+ *   - When user enables auto-salary, save nextPaymentDate (next payday)
+ *   - On every app open, pay every payday on or before today
+ *   - If months were missed, process all missed paydays
  *   - Update nextPaymentDate after processing
- * 
- * Example:
- *   - User enables on Feb 4 → nextPaymentDate = March 1
- *   - User opens app on March 15 → process March salary, set next = April 1
- *   - User opens app on June 5 → process April, May, June salaries (3 months)
+ *
+ * Example (payDay = 25):
+ *   - User enables on Feb 4 → nextPaymentDate = Feb 25
+ *   - User opens app on March 15 → process Feb 25 salary, set next = Mar 25
+ *   - User opens app on June 5 → process Mar/Apr/May/Jun salaries (4 paydays)
  */
 
 import { TransactionRepository } from '../../database/repositories/TransactionRepository';
@@ -21,16 +21,43 @@ import { useAccountStore } from '../../store/accountStore';
 import { useAuthStore } from '../../store/authStore';
 
 /**
- * Purpose: Calculate the 1st of next month from a given date
- * 
- * Inputs:
- *   - fromDate (Date): Starting date for calculation
- * 
- * Outputs:
- *   - Returns (number): Unix timestamp of next 1st of month
- * 
+ * Purpose: Days in a given month (for clamping paydays like the 31st)
+ *
  * Side effects: None
  */
+function daysInMonth(year: number, month: number): number {
+  return new Date(year, month + 1, 0).getDate();
+}
+
+function clampPayDay(year: number, month: number, payDay: number): number {
+  return Math.min(Math.max(1, payDay), daysInMonth(year, month));
+}
+
+function payDateForMonth(year: number, month: number, payDay: number): Date {
+  return new Date(year, month, clampPayDay(year, month, payDay), 0, 0, 0, 0);
+}
+
+/**
+ * Purpose: Calculate the next payday on or after a given date
+ *
+ * Inputs:
+ *   - fromDate (Date): Starting date for calculation
+ *   - payDay (number): Day of month salary arrives (1-31)
+ *
+ * Outputs:
+ *   - Returns (Date): Next payday (start of day)
+ *
+ * Side effects: None
+ */
+export function getNextPayDate(fromDate: Date = new Date(), payDay: number = 1): Date {
+  const day = clampPayDay(fromDate.getFullYear(), fromDate.getMonth(), payDay);
+  if (fromDate.getDate() <= day) {
+    return payDateForMonth(fromDate.getFullYear(), fromDate.getMonth(), payDay);
+  }
+  const next = new Date(fromDate.getFullYear(), fromDate.getMonth() + 1, 1);
+  return payDateForMonth(next.getFullYear(), next.getMonth(), payDay);
+}
+
 function getNextFirstOfMonth(fromDate: Date = new Date()): number {
   const nextMonth = new Date(
     fromDate.getFullYear(),
@@ -42,35 +69,12 @@ function getNextFirstOfMonth(fromDate: Date = new Date()): number {
 }
 
 /**
- * Purpose: Calculate how many months of salary need to be paid
- * 
- * Inputs:
- *   - nextPaymentDate (number): Unix timestamp of next scheduled payment
- *   - currentDate (Date): Current date
- * 
- * Outputs:
- *   - Returns (number): Number of months to pay (0 if not due yet)
- * 
- * Side effects: None
+ * Purpose: Advance a payday by one month, keeping the same pay day
+ * (clamped to shorter months, e.g. 31st → Feb 28th)
  */
-function calculateMonthsToPay(nextPaymentDate: number, currentDate: Date = new Date()): number {
-  const paymentDate = new Date(nextPaymentDate);
-  
-  // If current date is before payment date, nothing to pay
-  if (currentDate < paymentDate) {
-    return 0;
-  }
-  
-  // Calculate months difference
-  const paymentYear = paymentDate.getFullYear();
-  const paymentMonth = paymentDate.getMonth();
-  const currentYear = currentDate.getFullYear();
-  const currentMonth = currentDate.getMonth();
-  
-  // Total months from payment date to current date (inclusive of current month)
-  const monthsDiff = (currentYear - paymentYear) * 12 + (currentMonth - paymentMonth) + 1;
-  
-  return Math.max(0, monthsDiff);
+function advanceOneMonth(payday: Date, payDay: number): Date {
+  const next = new Date(payday.getFullYear(), payday.getMonth() + 1, 1);
+  return payDateForMonth(next.getFullYear(), next.getMonth(), payDay);
 }
 
 /**
@@ -118,44 +122,45 @@ export async function checkAndProcessAutoSalary(): Promise<{ processed: boolean;
     return { processed: false, count: 0, totalAmount: 0 };
   }
 
-  // Get next payment date
-  const nextPaymentDate = salarySettings.nextProcessing || getNextFirstOfMonth();
+  // Get next payment date (migrate legacy 1st-of-month schedules to payday)
+  const payDay = salarySettings.payDay ?? 1;
+  const nextPaymentDate = salarySettings.nextProcessing || getNextPayDate(new Date(), payDay).getTime();
   const now = new Date();
 
-  // Calculate how many months to pay
-  const monthsToPay = calculateMonthsToPay(nextPaymentDate, now);
+  // Collect every payday on or before today (catches up missed months)
+  const dueDates: Date[] = [];
+  let cursor = new Date(nextPaymentDate);
+  let guard = 0;
+  while (cursor <= now && guard < 120) {
+    dueDates.push(new Date(cursor));
+    cursor = advanceOneMonth(cursor, payDay);
+    guard += 1;
+  }
 
-  if (monthsToPay === 0) {
+  if (dueDates.length === 0) {
     console.log('[AutoSalaryTask] No salary due yet. Next payment:', new Date(nextPaymentDate).toDateString());
     return { processed: false, count: 0, totalAmount: 0 };
   }
 
-  console.log(`[AutoSalaryTask] Processing ${monthsToPay} month(s) of salary...`);
+  console.log(`[AutoSalaryTask] Processing ${dueDates.length} month(s) of salary...`);
 
   try {
     const transactionRepo = new TransactionRepository();
     const accountRepo = new AccountRepository();
-    
+
     // Get account currency
     const account = await accountRepo.findById(currentAccountId);
     const accountCurrency = account?.currency || 'USD';
-    
-    const paymentStartDate = new Date(nextPaymentDate);
+
     let totalAmountAdded = 0;
 
-    // Process each missed month
-    for (let i = 0; i < monthsToPay; i++) {
-      const paymentMonth = new Date(
-        paymentStartDate.getFullYear(),
-        paymentStartDate.getMonth() + i,
-        1
-      );
+    // Process each due payday
+    for (const payDate of dueDates) {
+      const monthName = payDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
-      const monthName = paymentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-      
       console.log(`[AutoSalaryTask] Adding salary for ${monthName}...`);
 
-      // Create income transaction with the 1st of that month as the date
+      // Create income transaction dated on the payday
       await transactionRepo.create({
         accountId: currentAccountId,
         type: 'income',
@@ -163,7 +168,7 @@ export async function checkAndProcessAutoSalary(): Promise<{ processed: boolean;
         categoryId: salarySettings.categoryId,
         vaultType: salarySettings.targetVault,
         description: `Monthly Salary - ${monthName} (Auto)`,
-        date: paymentMonth.getTime(),
+        date: payDate.getTime(),
         currency: accountCurrency,
       });
 
@@ -176,8 +181,8 @@ export async function checkAndProcessAutoSalary(): Promise<{ processed: boolean;
       accountStore.updateBalance(currentAccountId, vt.adjustBalance(currentBalance, totalAmountAdded));
     }
 
-    // Calculate next payment date (1st of next month from current date)
-    const newNextPayment = getNextFirstOfMonth(now);
+    // Next payment is the payday after the last one processed
+    const newNextPayment = advanceOneMonth(dueDates[dueDates.length - 1], payDay).getTime();
 
     // Update settings
     settingsStore.updateSalarySettings({
@@ -185,10 +190,10 @@ export async function checkAndProcessAutoSalary(): Promise<{ processed: boolean;
       nextProcessing: newNextPayment,
     });
 
-    console.log(`[AutoSalaryTask] Processed ${monthsToPay} month(s), total: ${totalAmountAdded}`);
+    console.log(`[AutoSalaryTask] Processed ${dueDates.length} month(s), total: ${totalAmountAdded}`);
     console.log(`[AutoSalaryTask] Next payment scheduled: ${new Date(newNextPayment).toDateString()}`);
 
-    return { processed: true, count: monthsToPay, totalAmount: totalAmountAdded };
+    return { processed: true, count: dueDates.length, totalAmount: totalAmountAdded };
   } catch (error) {
     console.error('[AutoSalaryTask] Failed to process salary:', error);
     return { processed: false, count: 0, totalAmount: 0 };
@@ -207,12 +212,12 @@ export async function checkAndProcessAutoSalary(): Promise<{ processed: boolean;
  * Side effects:
  *   - Updates nextProcessing in settings
  */
-export function initializeAutoSalarySchedule(): number {
+export function initializeAutoSalarySchedule(payDay: number = 1): number {
   const now = new Date();
-  const nextPayment = getNextFirstOfMonth(now);
-  
+  const nextPayment = getNextPayDate(now, payDay).getTime();
+
   console.log(`[AutoSalaryTask] Auto-salary initialized. Next payment: ${new Date(nextPayment).toDateString()}`);
-  
+
   return nextPayment;
 }
 
@@ -254,11 +259,20 @@ export function getSalaryPaymentInfo(): {
   monthsPending: number;
 } {
   const { salarySettings } = useSettingsStore.getState();
-  
-  const nextPayment = salarySettings.nextProcessing || getNextFirstOfMonth();
-  const monthsPending = salarySettings.isEnabled 
-    ? calculateMonthsToPay(nextPayment, new Date())
-    : 0;
+  const payDay = salarySettings.payDay ?? 1;
+
+  const nextPayment = salarySettings.nextProcessing || getNextPayDate(new Date(), payDay).getTime();
+  let monthsPending = 0;
+  if (salarySettings.isEnabled) {
+    let cursor = new Date(nextPayment);
+    const now = new Date();
+    let guard = 0;
+    while (cursor <= now && guard < 120) {
+      monthsPending += 1;
+      cursor = advanceOneMonth(cursor, payDay);
+      guard += 1;
+    }
+  }
 
   return {
     isEnabled: salarySettings.isEnabled,

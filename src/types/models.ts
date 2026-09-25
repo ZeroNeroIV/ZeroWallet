@@ -160,17 +160,24 @@ export interface SalarySettings {
   amount: number;
   categoryId: string; // FK to Category (salary category)
   targetVault: VaultType; // Where to deposit
+  payDay: number; // Day of month salary arrives (1-31, default 1)
   lastProcessed: number | null; // Unix timestamp
-  nextProcessing: number; // Unix timestamp (1st of next month)
+  nextProcessing: number; // Unix timestamp (next payday)
 }
 
-// Notification Settings (MMKV)
+// Notification Settings (MMKV) — all smart-nudge items live here and are
+// managed from the Smart Nudges screen (Settings → Smart Nudges)
 export interface NotificationSettings {
-  nudgesEnabled: boolean;
-  nudgeTime: string; // '20:00' format
-  subscriptionReminders: boolean;
-  recurringReminders: boolean;
-  periodicNudgesEnabled: boolean;
+  nudgeTime: string; // '20:00' format for the daily nudge
+  dailyNudgeEnabled: boolean;
+  periodicNudgesEnabled: boolean; // every-4-hours nudges
+  lowBalanceAlertEnabled: boolean;
+  lowBalanceThreshold: number; // alert when any wallet drops below this
+  subscriptionRemindersEnabled: boolean;
+  subscriptionDaysBefore: number; // days before billing to remind (0-7)
+  recurringRemindersEnabled: boolean;
+  recurringDaysBefore: number; // days before charge to remind (0-7)
+  salaryReminderEnabled: boolean; // remind on salary day morning
 }
 
 // App Settings

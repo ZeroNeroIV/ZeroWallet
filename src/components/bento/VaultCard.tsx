@@ -9,6 +9,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { WALLET_META } from '../../utils/wallets';
 
 interface VaultCardProps {
   mainBalance: number;
@@ -34,9 +35,9 @@ export const VaultCard: React.FC<VaultCardProps> = ({
 
   const formatAmount = (amount: number) => {
     if (accountCurrency === 'USD') {
-      return `$${amount.toFixed(2)}`;
+      return `$${amount.toFixed(3)}`;
     }
-    return `${amount.toFixed(2)} ${accountCurrency}`;
+    return `${amount.toFixed(3)} ${accountCurrency}`;
   };
 
   const calculatePercentage = (amount: number) => {
@@ -46,22 +47,22 @@ export const VaultCard: React.FC<VaultCardProps> = ({
 
   const vaults = [
     {
-      name: 'Main',
-      icon: 'wallet',
+      name: WALLET_META.main.name,
+      icon: WALLET_META.main.icon,
       balance: mainBalance,
       color: themeColors.primary,
       percentage: calculatePercentage(mainBalance),
     },
     {
-      name: 'Savings',
-      icon: 'piggy-bank',
+      name: WALLET_META.savings.name,
+      icon: WALLET_META.savings.icon,
       balance: savingsBalance,
       color: themeColors.success,
       percentage: calculatePercentage(savingsBalance),
     },
     {
-      name: 'Held',
-      icon: 'lock',
+      name: WALLET_META.held.name,
+      icon: WALLET_META.held.icon,
       balance: heldBalance,
       color: themeColors.warning,
       percentage: calculatePercentage(heldBalance),
@@ -77,7 +78,7 @@ export const VaultCard: React.FC<VaultCardProps> = ({
     >
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Vaults</Text>
+        <Text style={styles.title}>Wallets</Text>
         {onPress && (
           <MaterialCommunityIcons
             name="chevron-right"
@@ -92,11 +93,11 @@ export const VaultCard: React.FC<VaultCardProps> = ({
         <Text style={styles.availableLabel}>Available to Spend</Text>
         <Text style={styles.availableAmount}>{formatAmount(availableBalance)}</Text>
         <Text style={styles.availableHint}>
-          Main + Savings (Held excluded)
+          Investment + Savings (Recurring excluded)
         </Text>
       </View>
 
-      {/* Vault Breakdown */}
+      {/* Wallet Breakdown */}
       <View style={styles.vaultsContainer}>
         {vaults.map((vault, index) => (
           <View key={vault.name} style={styles.vaultItem}>

@@ -210,7 +210,7 @@ export class DataMutationService {
   async createTransactionAction(params: CreateTransactionParams): Promise<PendingAction> {
     return this.createAction(params, 'transaction', WRITE_FUNCTION_NAMES.CREATE_TRANSACTION,
       (p) => this.validator.validateTransactionInput(p),
-      (v) => `Add ${v.amount.toFixed(2)} ${v.type} to ${v.categoryName}${params.description ? ` (${params.description})` : ''}`,
+      (v) => `Add ${v.amount.toFixed(3)} ${v.type} to ${v.categoryName}${params.description ? ` (${params.description})` : ''}`,
     );
   }
 
@@ -235,7 +235,7 @@ export class DataMutationService {
       if (params.amount !== undefined) {
         this.validator.validatePositiveNumber(params.amount, 'Amount');
         resolvedData.amount = params.amount;
-        updates.push(`amount: ${params.amount.toFixed(2)}`);
+        updates.push(`amount: ${params.amount.toFixed(3)}`);
       }
 
       if (params.date) {
@@ -268,7 +268,7 @@ export class DataMutationService {
   async createGoalAction(params: CreateGoalParams): Promise<PendingAction> {
     return this.createAction(params, 'goal', WRITE_FUNCTION_NAMES.CREATE_GOAL,
       (p) => this.validator.validateGoalInput(p),
-      (v) => `Create goal "${v.name}" with target ${v.targetAmount.toFixed(2)}`,
+      (v) => `Create goal "${v.name}" with target ${v.targetAmount.toFixed(3)}`,
     );
   }
 
@@ -288,7 +288,7 @@ export class DataMutationService {
       if (params.targetAmount !== undefined) {
         this.validator.validatePositiveNumber(params.targetAmount, 'Target amount');
         resolvedData.targetAmount = params.targetAmount;
-        updates.push(`target: ${params.targetAmount.toFixed(2)}`);
+        updates.push(`target: ${params.targetAmount.toFixed(3)}`);
       }
 
       if (params.fundingSource) {
@@ -304,7 +304,7 @@ export class DataMutationService {
 
   async updateGoalProgressAction(params: UpdateGoalProgressParams): Promise<PendingAction> {
     return this.simpleUpdateAction(params, 'goal', WRITE_FUNCTION_NAMES.UPDATE_GOAL_PROGRESS, params.goalId,
-      () => `Update goal progress to ${params.currentAmount.toFixed(2)}`,
+      () => `Update goal progress to ${params.currentAmount.toFixed(3)}`,
     );
   }
 
@@ -325,7 +325,7 @@ export class DataMutationService {
   async createDebtAction(params: CreateDebtParams): Promise<PendingAction> {
     return this.createAction(params, 'debt', WRITE_FUNCTION_NAMES.CREATE_DEBT,
       (p) => this.validator.validateDebtInput(p),
-      (v) => `Record ${v.amount.toFixed(2)} ${params.type} ${params.type === 'lent' ? 'to' : 'from'} ${v.personName}`,
+      (v) => `Record ${v.amount.toFixed(3)} ${params.type} ${params.type === 'lent' ? 'to' : 'from'} ${v.personName}`,
     );
   }
 
@@ -345,7 +345,7 @@ export class DataMutationService {
       if (params.amount !== undefined) {
         this.validator.validatePositiveNumber(params.amount, 'Amount');
         resolvedData.amount = params.amount;
-        updates.push(`amount: ${params.amount.toFixed(2)}`);
+        updates.push(`amount: ${params.amount.toFixed(3)}`);
       }
 
       if (params.dueDate) {
@@ -367,7 +367,7 @@ export class DataMutationService {
     try {
       await this.validator.validateEntityExists('debt', params.debtId);
       this.validator.validatePositiveNumber(params.paymentAmount, 'Payment amount');
-      return this.createPendingAction(WRITE_FUNCTION_NAMES.RECORD_DEBT_PAYMENT, 'update', 'debt', params, params as any, `Record payment of ${params.paymentAmount.toFixed(2)} for debt`);
+      return this.createPendingAction(WRITE_FUNCTION_NAMES.RECORD_DEBT_PAYMENT, 'update', 'debt', params, params as any, `Record payment of ${params.paymentAmount.toFixed(3)} for debt`);
     } catch (error) {
       throw this.handleError(error, 'record debt payment');
     }
@@ -390,7 +390,7 @@ export class DataMutationService {
   async createSubscriptionAction(params: CreateSubscriptionParams): Promise<PendingAction> {
     return this.createAction(params, 'subscription', WRITE_FUNCTION_NAMES.CREATE_SUBSCRIPTION,
       (p) => this.validator.validateSubscriptionInput(p),
-      (v) => `Create subscription "${v.name}" - ${v.amount.toFixed(2)} on day ${v.billingDay}`,
+      (v) => `Create subscription "${v.name}" - ${v.amount.toFixed(3)} on day ${v.billingDay}`,
     );
   }
 
@@ -410,7 +410,7 @@ export class DataMutationService {
       if (params.amount !== undefined) {
         this.validator.validatePositiveNumber(params.amount, 'Amount');
         resolvedData.amount = params.amount;
-        updates.push(`amount: ${params.amount.toFixed(2)}`);
+        updates.push(`amount: ${params.amount.toFixed(3)}`);
       }
 
       if (params.categoryName) {
@@ -454,7 +454,7 @@ export class DataMutationService {
   async createRecurringExpenseAction(params: CreateRecurringExpenseParams): Promise<PendingAction> {
     return this.createAction(params, 'recurringExpense', WRITE_FUNCTION_NAMES.CREATE_RECURRING_EXPENSE,
       (p) => this.validator.validateRecurringExpenseInput(p),
-      (v) => `Create recurring expense "${v.name}" - ${v.amount.toFixed(2)} ${params.frequency}`,
+      (v) => `Create recurring expense "${v.name}" - ${v.amount.toFixed(3)} ${params.frequency}`,
     );
   }
 
@@ -474,7 +474,7 @@ export class DataMutationService {
       if (params.amount !== undefined) {
         this.validator.validatePositiveNumber(params.amount, 'Amount');
         resolvedData.amount = params.amount;
-        updates.push(`amount: ${params.amount.toFixed(2)}`);
+        updates.push(`amount: ${params.amount.toFixed(3)}`);
       }
 
       if (params.categoryName) {

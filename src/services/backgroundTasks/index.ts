@@ -82,6 +82,11 @@ export async function runAllBackgroundTasks(accountId: string): Promise<void> {
     // 5. Check for low balance warnings
     await checkLowBalanceWarnings();
 
+    // 6. Refresh due-date + salary reminders from Smart Nudges settings
+    const { scheduleDueReminders, scheduleSalaryReminder } = await import('../notifications/scheduleNudges');
+    await scheduleDueReminders(accountId);
+    await scheduleSalaryReminder();
+
     console.log('[BackgroundTasks] All tasks completed successfully');
   } catch (error) {
     console.error('[BackgroundTasks] Error running background tasks:', error);
@@ -127,6 +132,11 @@ export async function runMissedTasks(accountId: string): Promise<void> {
     // 5. Check low balance warnings
     await checkLowBalanceWarnings();
 
+    // 6. Refresh due-date + salary reminders from Smart Nudges settings
+    const { scheduleDueReminders, scheduleSalaryReminder } = await import('../notifications/scheduleNudges');
+    await scheduleDueReminders(accountId);
+    await scheduleSalaryReminder();
+
     console.log('[BackgroundTasks] Missed tasks check completed');
   } catch (error) {
     console.error('[BackgroundTasks] Error checking missed tasks:', error);
@@ -149,26 +159,30 @@ export async function runMissedTasks(accountId: string): Promise<void> {
  *   - Sends low balance notifications if balance < $50
  */
 async function checkLowBalanceWarnings(): Promise<void> {
-  const LOW_BALANCE_THRESHOLD = 50;
-
   try {
+    const { notificationSettings } = useSettingsStore.getState();
+    if (!notificationSettings.lowBalanceAlertEnabled) {
+      return;
+    }
+    const threshold = notificationSettings.lowBalanceThreshold;
+
     const accountStore = useAccountStore.getState();
     const { balances } = accountStore;
 
-    // Check each account's vaults
+    // Check each account's wallets
     for (const [accountId, balance] of Object.entries(balances)) {
-      // Check main vault
-      if (balance.mainBalance < LOW_BALANCE_THRESHOLD && balance.mainBalance > 0) {
+      // Check investment wallet
+      if (balance.mainBalance < threshold && balance.mainBalance > 0) {
         await showLowBalanceWarning('main', balance.mainBalance);
       }
 
-      // Check savings vault
-      if (balance.savingsBalance < LOW_BALANCE_THRESHOLD && balance.savingsBalance > 0) {
+      // Check savings wallet
+      if (balance.savingsBalance < threshold && balance.savingsBalance > 0) {
         await showLowBalanceWarning('savings', balance.savingsBalance);
       }
 
-      // Check held vault
-      if (balance.heldBalance < LOW_BALANCE_THRESHOLD && balance.heldBalance > 0) {
+      // Check recurring wallet
+      if (balance.heldBalance < threshold && balance.heldBalance > 0) {
         await showLowBalanceWarning('held', balance.heldBalance);
       }
     }

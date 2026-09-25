@@ -193,7 +193,7 @@ export default function DebtsScreen() {
                             Total {activeTab === 'lent' ? 'owed to you' : 'you owe'}
                         </Text>
                         <Text style={[styles.summaryAmount, { color: themeColors.text }]}>
-                            ${currentTabStats.toFixed(2)}
+                            ${currentTabStats.toFixed(3)}
                         </Text>
                     </View>
                     <View style={styles.summaryRow}>

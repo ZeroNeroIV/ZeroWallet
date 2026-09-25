@@ -51,7 +51,7 @@ export const DebtSummaryCard: React.FC<DebtSummaryCardProps> = ({ stats, onPress
                                 <Icon name="arrow-up-circle" size={16} color="#06D6A0" />
                             </View>
                             <Text style={styles.rowLabel}>Owed to me</Text>
-                            <Text style={styles.rowAmount}>${stats.totalLent.toFixed(2)}</Text>
+                            <Text style={styles.rowAmount}>${stats.totalLent.toFixed(3)}</Text>
                         </View>
 
                         {/* Borrowed Money */}
@@ -60,7 +60,7 @@ export const DebtSummaryCard: React.FC<DebtSummaryCardProps> = ({ stats, onPress
                                 <Icon name="arrow-down-circle" size={16} color="#FF6B6B" />
                             </View>
                             <Text style={styles.rowLabel}>I owe</Text>
-                            <Text style={styles.rowAmount}>${stats.totalBorrowed.toFixed(2)}</Text>
+                            <Text style={styles.rowAmount}>${stats.totalBorrowed.toFixed(3)}</Text>
                         </View>
 
                         {/* Footer with counts */}

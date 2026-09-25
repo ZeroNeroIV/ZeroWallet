@@ -18,6 +18,7 @@ import RecurringExpensesScreen from '../screens/recurring/RecurringExpensesScree
 import AddRecurringExpenseScreen from '../screens/recurring/AddRecurringExpenseScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import SalarySettingsScreen from '../screens/settings/SalarySettingsScreen';
+import SmartNudgesScreen from '../screens/settings/SmartNudgesScreen';
 import SecuritySettingsScreen from '../screens/security/SecuritySettingsScreen';
 import GoalsScreen from '../screens/goals/GoalsScreen';
 import CreateGoalScreen from '../screens/goals/CreateGoalScreen';
@@ -151,6 +152,11 @@ export function MainNavigator() {
         name="SalarySettings"
         component={SalarySettingsScreen}
         options={{ title: 'Salary Settings' }}
+      />
+      <Stack.Screen
+        name="SmartNudges"
+        component={SmartNudgesScreen}
+        options={{ title: 'Smart Nudges' }}
       />
       <Stack.Screen
         name="SecuritySettings"

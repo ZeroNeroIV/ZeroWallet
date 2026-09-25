@@ -54,6 +54,7 @@ export type MainStackParamList = {
   };
   Settings: undefined;
   SalarySettings: undefined;
+  SmartNudges: undefined;
   SecuritySettings: undefined;
   GoalsScreen: undefined;
   CreateGoal: Record<string, never>;

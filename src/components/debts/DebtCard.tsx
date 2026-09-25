@@ -105,17 +105,17 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, onPress }) => {
                             {debt.type === 'lent' ? 'They owe you' : 'You owe them'}
                         </Text>
                         <Text style={[styles.amount, { color: themeColors.text }]}>
-                            ${remainingAmount.toFixed(2)}
+                            ${remainingAmount.toFixed(3)}
                         </Text>
                     </View>
 
                     {debt.status === 'partial' && (
                         <View style={styles.partialInfo}>
                             <Text style={[styles.partialLabel, { color: themeColors.textSecondary }]}>
-                                Paid: ${debt.amountPaid.toFixed(2)}
+                                Paid: ${debt.amountPaid.toFixed(3)}
                             </Text>
                             <Text style={[styles.partialLabel, { color: themeColors.textSecondary }]}>
-                                of ${debt.amount.toFixed(2)}
+                                of ${debt.amount.toFixed(3)}
                             </Text>
                         </View>
                     )}

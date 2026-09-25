@@ -128,7 +128,7 @@ export const CalculatorModal: React.FC<CalculatorModalProps> = ({
     }
 
     // Format to 2 decimal places
-    const formattedValue = finalResult.toFixed(2);
+    const formattedValue = finalResult.toFixed(3);
     onConfirm(formattedValue);
   };
 
@@ -232,7 +232,7 @@ export const CalculatorModal: React.FC<CalculatorModalProps> = ({
                 {currency}
               </Text>
               <Text style={[styles.resultText, { color: themeColors.text }]}>
-                {result !== null ? result.toFixed(2) : '0.00'}
+                {result !== null ? result.toFixed(3) : '0.000'}
               </Text>
             </View>
           </View>

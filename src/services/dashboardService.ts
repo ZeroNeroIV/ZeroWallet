@@ -130,19 +130,19 @@ export class DashboardService {
       const salaryResult = await checkAndProcessAutoSalary();
       if (salaryResult.processed && salaryResult.count > 0) {
         const monthText = salaryResult.count === 1 ? '1 month' : `${salaryResult.count} months`;
-        notifications.push(`💰 Salary: ${monthText} added (${salaryResult.totalAmount.toFixed(2)})`);
+        notifications.push(`💰 Salary: ${monthText} added (${salaryResult.totalAmount.toFixed(3)})`);
       }
 
       const { checkAndProcessSubscriptions } = await import('./backgroundTasks/subscriptionTask');
       const subscriptionResult = await checkAndProcessSubscriptions(this.accountId);
       if (subscriptionResult.processed > 0) {
-        notifications.push(`📱 Subscriptions: ${subscriptionResult.processed} processed (-${subscriptionResult.totalAmount.toFixed(2)})`);
+        notifications.push(`📱 Subscriptions: ${subscriptionResult.processed} processed (-${subscriptionResult.totalAmount.toFixed(3)})`);
       }
 
       const { checkAndProcessRecurringExpenses } = await import('./backgroundTasks/recurringExpenseTask');
       const recurringResult = await checkAndProcessRecurringExpenses(this.accountId);
       if (recurringResult.processed > 0) {
-        notifications.push(`🔄 Recurring: ${recurringResult.processed} processed (-${recurringResult.totalAmount.toFixed(2)})`);
+        notifications.push(`🔄 Recurring: ${recurringResult.processed} processed (-${recurringResult.totalAmount.toFixed(3)})`);
       }
 
       const { checkAndCompleteGoals } = await import('./backgroundTasks/goalTask');

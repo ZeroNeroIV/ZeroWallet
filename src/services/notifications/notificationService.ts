@@ -14,6 +14,15 @@
  */
 
 import notifee, { AuthorizationStatus, AndroidImportance } from '@notifee/react-native';
+import { walletName } from '../../utils/wallets';
+import type { VaultType } from '../../types/models';
+
+function displayWalletName(vaultType: string): string {
+  if (vaultType === 'main' || vaultType === 'savings' || vaultType === 'held') {
+    return walletName(vaultType as VaultType);
+  }
+  return `${vaultType} wallet`;
+}
 
 // ============================================
 // Channel IDs (Android)
@@ -210,7 +219,7 @@ export async function showSalaryNotification(
 
     return await notifee.displayNotification({
       title: '💰 Salary Added',
-      body: `$${amount.toFixed(2)} has been added to your ${vaultType} vault`,
+      body: `$${amount.toFixed(3)} has been added to your ${displayWalletName(vaultType)}`,
       android: {
         channelId: CHANNEL_IDS.TRANSACTIONS,
         color: '#06D6A0',
@@ -254,7 +263,7 @@ export async function showSubscriptionNotification(
 
     return await notifee.displayNotification({
       title: '🔄 Subscription Charged',
-      body: `${name} - $${amount.toFixed(2)} charged from your account`,
+      body: `${name} - $${amount.toFixed(3)} charged from your account`,
       android: {
         channelId: CHANNEL_IDS.TRANSACTIONS,
         color: '#FFD166',
@@ -298,7 +307,7 @@ export async function showRecurringExpenseNotification(
 
     return await notifee.displayNotification({
       title: '⏰ Recurring Expense',
-      body: `${name} - $${amount.toFixed(2)} deducted automatically`,
+      body: `${name} - $${amount.toFixed(3)} deducted automatically`,
       android: {
         channelId: CHANNEL_IDS.TRANSACTIONS,
         color: '#FF8B94',
@@ -342,7 +351,7 @@ export async function showLowBalanceWarning(
 
     return await notifee.displayNotification({
       title: '⚠️ Low Balance Alert',
-      body: `Your ${vaultType} vault is low: $${balance.toFixed(2)} remaining`,
+      body: `Your ${displayWalletName(vaultType)} is low: $${balance.toFixed(3)} remaining`,
       android: {
         channelId: CHANNEL_IDS.ALERTS,
         color: '#EF476F',
@@ -391,7 +400,7 @@ export async function showSubscriptionReminder(
 
     return await notifee.displayNotification({
       title: '📅 Upcoming Subscription',
-      body: `${name} ($${amount.toFixed(2)}) will be charged ${dayText}`,
+      body: `${name} ($${amount.toFixed(3)}) will be charged ${dayText}`,
       android: {
         channelId: CHANNEL_IDS.REMINDERS,
         color: '#118AB2',

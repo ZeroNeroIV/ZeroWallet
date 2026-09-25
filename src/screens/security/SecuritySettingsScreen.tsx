@@ -39,6 +39,14 @@ import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 
+const AUTO_LOCK_OPTIONS = [
+  { seconds: 0, label: 'Immediately', hint: 'Lock every time you leave the app' },
+  { seconds: 30, label: 'After 30 seconds', hint: 'Brief grace period' },
+  { seconds: 60, label: 'After 1 minute', hint: 'Quick check-ins stay unlocked' },
+  { seconds: 300, label: 'After 5 minutes', hint: 'Relaxed for active use' },
+  { seconds: 1800, label: 'After 30 minutes', hint: 'Only lock after long breaks' },
+];
+
 const SecuritySettingsScreen = ({ navigation }: any) => {
   const themeColors = useThemeColors();
   const { securitySettings, updateSecuritySettings } = useSettingsStore();
@@ -282,6 +290,63 @@ const SecuritySettingsScreen = ({ navigation }: any) => {
         </View>
       </View>
 
+      {/* Auto-lock delay (only shown if enabled) */}
+      {securitySettings.isEnabled && (
+        <View style={[styles.section, { backgroundColor: themeColors.surface }]}>
+          <Text style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
+            Auto-Lock Delay
+          </Text>
+          <Text style={[styles.sectionHint, { color: themeColors.textSecondary }]}>
+            Lock the app after being away this long
+          </Text>
+
+          {AUTO_LOCK_OPTIONS.map((option) => {
+            const isSelected = securitySettings.autoLockTimeout === option.seconds;
+            return (
+              <TouchableOpacity
+                key={option.seconds}
+                style={styles.settingRow}
+                onPress={() => {
+                  lightHaptic();
+                  updateSecuritySettings({ autoLockTimeout: option.seconds });
+                }}
+              >
+                <View style={styles.settingLeft}>
+                  <View style={[styles.iconContainer, { backgroundColor: colors.semantic.infoLight }]}>
+                    <MaterialCommunityIcons
+                      name="timer-outline"
+                      size={20}
+                      color={colors.semantic.info}
+                    />
+                  </View>
+                  <View style={styles.settingInfo}>
+                    <Text style={[styles.settingLabel, { color: themeColors.text }]}>
+                      {option.label}
+                    </Text>
+                    <Text style={[styles.settingDescription, { color: themeColors.textSecondary }]}>
+                      {option.hint}
+                    </Text>
+                  </View>
+                </View>
+                {isSelected ? (
+                  <MaterialCommunityIcons
+                    name="check-circle"
+                    size={24}
+                    color={colors.primary.main}
+                  />
+                ) : (
+                  <MaterialCommunityIcons
+                    name="circle-outline"
+                    size={24}
+                    color={themeColors.textSecondary}
+                  />
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+
       {/* Authentication Method (only shown if enabled) */}
       {securitySettings.isEnabled && (
         <View style={[styles.section, { backgroundColor: themeColors.surface }]}>
@@ -495,6 +560,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  sectionHint: {
+    ...typography.caption,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.xs,
   },
   settingRow: {
     flexDirection: 'row',

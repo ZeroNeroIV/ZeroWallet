@@ -36,7 +36,6 @@ import { convertCurrency } from '../../services/currencyService';
 import { formatCurrency } from '../../constants/currencies';
 import { CategorySuggestionBanner } from '../../components/transactions/CategorySuggestionBanner';
 import { useAutoCategorize } from '../../hooks/useAutoCategorize';
-import { useSettingsStore } from '../../store/settingsStore';
 
 type AddTransactionScreenNavigationProp = StackNavigationProp<
   MainStackParamList,
@@ -82,7 +81,6 @@ export const AddTransactionScreen: React.FC = () => {
   const categoryRepo = new CategoryRepository();
   const transactionRepo = new TransactionRepository();
   const accountRepo = new AccountRepository();
-  const aiConfigured = useSettingsStore((s) => s.aiSettings.isConfigured);
 
   const {
     suggestion: categorySuggestion,
@@ -477,11 +475,9 @@ export const AddTransactionScreen: React.FC = () => {
               {suggestLoading ? 'Laya is thinking…' : 'Auto-categorize with Laya'}
             </Text>
           </TouchableOpacity>
-          {!aiConfigured ? (
-            <Text style={styles.suggestHint}>
-              Tip: add a Gemini API key in Settings for smarter suggestions. Offline keyword matching is used for now.
-            </Text>
-          ) : null}
+          <Text style={styles.suggestHint}>
+            Powered by LAYA · works offline, no setup needed.
+          </Text>
           {suggestError ? <Text style={styles.suggestError}>{suggestError}</Text> : null}
           {categorySuggestion || suggestLoading ? (
             <CategorySuggestionBanner
@@ -522,9 +518,9 @@ export const AddTransactionScreen: React.FC = () => {
             </View>
           )}
 
-          {/* Vault Type Picker */}
+          {/* Wallet Picker */}
           <View style={styles.fieldContainer}>
-            <Text style={styles.label}>Vault</Text>
+            <Text style={styles.label}>Wallet</Text>
             <View style={styles.vaultOptions}>
               <TouchableOpacity
                 style={[
@@ -539,7 +535,7 @@ export const AddTransactionScreen: React.FC = () => {
                     vaultType === 'main' && styles.vaultButtonTextActive,
                   ]}
                 >
-                  Main
+                  Investment
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -571,7 +567,7 @@ export const AddTransactionScreen: React.FC = () => {
                     vaultType === 'held' && styles.vaultButtonTextActive,
                   ]}
                 >
-                  Held
+                  Recurring
                 </Text>
               </TouchableOpacity>
             </View>

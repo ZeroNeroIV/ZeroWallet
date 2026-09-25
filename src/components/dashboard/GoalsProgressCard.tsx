@@ -1,11 +1,9 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, Dimensions, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = (SCREEN_WIDTH - 24 * 2 - 12) / 2;
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
@@ -71,8 +69,8 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
     card: {
       backgroundColor: themeColors.glass.background,
       borderRadius: 16,
-      padding: spacing.md,
-      width: CARD_WIDTH,
+      padding: spacing.lg,
+      flex: 1,
       overflow: 'hidden',
     },
     title: {

@@ -33,15 +33,46 @@ import { getNextSalaryDate } from '../../services/backgroundTasks/autoSalaryTask
 import { ThemePickerModal } from '../../components/common/ThemePickerModal';
 import { ThemeMode } from '../../contexts/ThemeContext';
 import { lightHaptic, mediumHaptic, heavyHaptic } from '../../services/haptics/hapticFeedback';
-import { schedulePeriodicNudges, cancelPeriodicNudges } from '../../services/notifications/scheduleNudges';
+import { ordinalDay } from '../../utils/wallets';
 import { exportAllData } from '../../services/dataTransfer/exportService';
 import { pickAndImportData } from '../../services/dataTransfer/importService';
 import { database } from '../../database';
 import { clearAllMMKVData } from '../../store/middleware/mmkvStorage';
 import { useThemeColors } from '../../hooks/useThemeColors';
 
+function smartNudgesSummary(notificationSettings: {
+  dailyNudgeEnabled: boolean;
+  nudgeTime: string;
+  lowBalanceAlertEnabled: boolean;
+  subscriptionRemindersEnabled: boolean;
+  recurringRemindersEnabled: boolean;
+  salaryReminderEnabled: boolean;
+  periodicNudgesEnabled: boolean;
+}): string {
+  const active: string[] = [];
+  if (notificationSettings.dailyNudgeEnabled) {
+    active.push(`daily ${notificationSettings.nudgeTime}`);
+  }
+  if (notificationSettings.lowBalanceAlertEnabled) {
+    active.push('low money');
+  }
+  if (notificationSettings.subscriptionRemindersEnabled) {
+    active.push('subscriptions');
+  }
+  if (notificationSettings.recurringRemindersEnabled) {
+    active.push('recurring');
+  }
+  if (notificationSettings.salaryReminderEnabled) {
+    active.push('salary day');
+  }
+  if (notificationSettings.periodicNudgesEnabled) {
+    active.push('4-hour');
+  }
+  return active.length > 0 ? active.join(' · ') : 'All nudges off';
+}
+
 const SettingsScreen = ({ navigation }: any) => {
-  const { salarySettings, notificationSettings, appSettings, securitySettings, aiSettings, updateNotificationSettings, updateAppSettings } =
+  const { salarySettings, notificationSettings, appSettings, securitySettings, aiSettings, updateAppSettings } =
     useSettingsStore();
   const { logout, currentAccountId, currentUser } = useAuthStore();
   const { clearAccounts } = useAccountStore();
@@ -221,7 +252,7 @@ const SettingsScreen = ({ navigation }: any) => {
               <Text style={styles.settingLabel}>Monthly Salary</Text>
               <Text style={styles.settingValue}>
                 {salarySettings.isEnabled
-                  ? `$${salarySettings.amount.toFixed(2)} on 1st of month`
+                  ? `$${salarySettings.amount.toFixed(3)} on ${ordinalDay(salarySettings.payDay ?? 1)} of month`
                   : 'Not configured'}
               </Text>
             </View>
@@ -251,7 +282,13 @@ const SettingsScreen = ({ navigation }: any) => {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Notifications</Text>
 
-        <View style={styles.settingRow}>
+        <TouchableOpacity
+          style={[styles.settingRow, styles.lastRow]}
+          onPress={() => {
+            lightHaptic();
+            navigation.navigate('SmartNudges');
+          }}
+        >
           <View style={styles.settingLeft}>
             <View style={[styles.iconContainer, { backgroundColor: colors.semantic.warningLight }]}>
               <MaterialCommunityIcons
@@ -263,130 +300,16 @@ const SettingsScreen = ({ navigation }: any) => {
             <View style={styles.settingInfo}>
               <Text style={styles.settingLabel}>Smart Nudges</Text>
               <Text style={styles.settingDescription}>
-                Daily reminders at {notificationSettings.nudgeTime}
+                {smartNudgesSummary(notificationSettings)}
               </Text>
             </View>
           </View>
-          <Switch
-            value={notificationSettings.nudgesEnabled}
-            onValueChange={(value) =>
-              updateNotificationSettings({ nudgesEnabled: value })
-            }
-            trackColor={{
-              false: colors.neutral.gray300,
-              true: colors.primary.light,
-            }}
-            thumbColor={
-              notificationSettings.nudgesEnabled
-                ? colors.primary.main
-                : colors.neutral.gray500
-            }
+          <MaterialCommunityIcons
+            name="chevron-right"
+            size={24}
+            color={themeColors.textSecondary}
           />
-        </View>
-
-        <View style={styles.settingRow}>
-          <View style={styles.settingLeft}>
-            <View style={[styles.iconContainer, { backgroundColor: colors.secondary.light }]}>
-              <MaterialCommunityIcons
-                name="repeat"
-                size={20}
-                color={colors.secondary.main}
-              />
-            </View>
-            <View style={styles.settingInfo}>
-              <Text style={styles.settingLabel}>Subscription Reminders</Text>
-              <Text style={styles.settingDescription}>
-                Notify before subscriptions charge
-              </Text>
-            </View>
-          </View>
-          <Switch
-            value={notificationSettings.subscriptionReminders}
-            onValueChange={(value) =>
-              updateNotificationSettings({ subscriptionReminders: value })
-            }
-            trackColor={{
-              false: colors.neutral.gray300,
-              true: colors.primary.light,
-            }}
-            thumbColor={
-              notificationSettings.subscriptionReminders
-                ? colors.primary.main
-                : colors.neutral.gray500
-            }
-          />
-        </View>
-
-        <View style={styles.settingRow}>
-          <View style={styles.settingLeft}>
-            <View style={[styles.iconContainer, { backgroundColor: colors.semantic.infoLight }]}>
-              <MaterialCommunityIcons
-                name="clock-outline"
-                size={20}
-                color={colors.semantic.info}
-              />
-            </View>
-            <View style={styles.settingInfo}>
-              <Text style={styles.settingLabel}>Recurring Reminders</Text>
-              <Text style={styles.settingDescription}>
-                Notify before recurring expenses
-              </Text>
-            </View>
-          </View>
-          <Switch
-            value={notificationSettings.recurringReminders}
-            onValueChange={(value) =>
-              updateNotificationSettings({ recurringReminders: value })
-            }
-            trackColor={{
-              false: colors.neutral.gray300,
-              true: colors.primary.light,
-            }}
-            thumbColor={
-              notificationSettings.recurringReminders
-                ? colors.primary.main
-                : colors.neutral.gray500
-            }
-          />
-        </View>
-
-        <View style={styles.settingRow}>
-          <View style={styles.settingLeft}>
-            <View style={[styles.iconContainer, { backgroundColor: colors.semantic.warningLight }]}>
-              <MaterialCommunityIcons
-                name="bell-ring-outline"
-                size={20}
-                color={colors.semantic.warning}
-              />
-            </View>
-            <View style={styles.settingInfo}>
-              <Text style={styles.settingLabel}>Every 4-Hour Nudges</Text>
-              <Text style={styles.settingDescription}>
-                Reminders every 4 hours when away from app
-              </Text>
-            </View>
-          </View>
-          <Switch
-            value={notificationSettings.periodicNudgesEnabled ?? false}
-            onValueChange={(value) => {
-              updateNotificationSettings({ periodicNudgesEnabled: value });
-              if (value) {
-                schedulePeriodicNudges();
-              } else {
-                cancelPeriodicNudges();
-              }
-            }}
-            trackColor={{
-              false: colors.neutral.gray300,
-              true: colors.primary.light,
-            }}
-            thumbColor={
-              notificationSettings.periodicNudgesEnabled
-                ? colors.primary.main
-                : colors.neutral.gray500
-            }
-          />
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* AI Assistant Section */}

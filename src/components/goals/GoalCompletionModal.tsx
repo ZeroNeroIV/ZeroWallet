@@ -95,7 +95,7 @@ export const GoalCompletionModal: React.FC<GoalCompletionModalProps> = ({
                     {/* Amount */}
                     {goal.targetAmount && (
                         <Text style={styles.amount}>
-                            ${goal.targetAmount.toFixed(2)}
+                            ${goal.targetAmount.toFixed(3)}
                         </Text>
                     )}
 

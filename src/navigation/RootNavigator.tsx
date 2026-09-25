@@ -22,7 +22,7 @@ import {
   schedulePeriodicTaskRunner,
   stopPeriodicTaskRunner,
 } from '../services/backgroundTasks';
-import { scheduleDailyNudge, schedulePeriodicNudges } from '../services/notifications/scheduleNudges';
+import { scheduleDailyNudge, schedulePeriodicNudges, scheduleSalaryReminder } from '../services/notifications/scheduleNudges';
 import { useTheme } from '../contexts/ThemeContext';
 import { useThemeColors } from '../hooks/useThemeColors';
 
@@ -88,9 +88,10 @@ export function RootNavigator() {
           await runMissedTasks(currentAccountId);
         }
 
-        // 5. Schedule daily nudge and periodic nudges
+        // 5. Schedule daily nudge, periodic nudges and salary reminder
         await scheduleDailyNudge();
         await schedulePeriodicNudges();
+        await scheduleSalaryReminder();
 
         // 6. Start periodic task runner (runs every hour while app is active)
         taskRunnerIntervalRef.current = schedulePeriodicTaskRunner(60);

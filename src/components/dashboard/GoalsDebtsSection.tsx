@@ -104,7 +104,7 @@ export const GoalsDebtsSection: React.FC<GoalsDebtsSectionProps> = React.memo(({
           {item.title}
         </Text>
         <Text style={styles.cardSubtitle}>
-          ${remaining.toFixed(2)} {isGoal ? 'of' : 'Remaining'} ${item.target.toFixed(0)}
+          ${remaining.toFixed(3)} {isGoal ? 'of' : 'Remaining'} ${item.target.toFixed(0)}
         </Text>
 
         {/* Progress Bar */}

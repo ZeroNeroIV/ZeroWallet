@@ -45,9 +45,9 @@ export const AmountInput: React.FC<AmountInputProps> = ({
       cleaned = parts[0] + '.' + parts.slice(1).join('');
     }
 
-    // Limit to 2 decimal places
-    if (parts.length === 2 && parts[1].length > 2) {
-      cleaned = parts[0] + '.' + parts[1].slice(0, 2);
+    // Limit to 3 decimal places
+    if (parts.length === 2 && parts[1].length > 3) {
+      cleaned = parts[0] + '.' + parts[1].slice(0, 3);
     }
 
     return cleaned;

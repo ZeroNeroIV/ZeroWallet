@@ -52,9 +52,9 @@ export const MovementsList: React.FC<MovementsListProps> = React.memo(({
     }
     const sign = type === 'income' ? '+' : '-';
     if (accountCurrency === 'USD') {
-      return `${sign}$${Math.abs(amount).toFixed(2)}`;
+      return `${sign}$${Math.abs(amount).toFixed(3)}`;
     }
-    return `${sign}${Math.abs(amount).toFixed(2)} ${accountCurrency}`;
+    return `${sign}${Math.abs(amount).toFixed(3)} ${accountCurrency}`;
   }, [accountCurrency, isBalanceHidden]);
 
   const getIconGradient = useCallback((type: string): [string, string] => {

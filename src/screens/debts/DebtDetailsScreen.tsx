@@ -78,7 +78,7 @@ export default function DebtDetailsScreen() {
         if (amount > remainingAmount) {
             Alert.alert(
                 'Amount Too Large',
-                `Payment amount ($${amount.toFixed(2)}) exceeds remaining debt ($${remainingAmount.toFixed(2)})`
+                `Payment amount ($${amount.toFixed(3)}) exceeds remaining debt ($${remainingAmount.toFixed(3)})`
             );
             return;
         }
@@ -101,7 +101,7 @@ export default function DebtDetailsScreen() {
         const remainingAmount = debt.amount - debt.amountPaid;
         Alert.alert(
             'Mark as Paid',
-            `Are you sure you want to mark this debt as fully paid?${remainingAmount > 0 ? `\n\nThis will record a final payment of $${remainingAmount.toFixed(2)}.` : ''}`,
+            `Are you sure you want to mark this debt as fully paid?${remainingAmount > 0 ? `\n\nThis will record a final payment of $${remainingAmount.toFixed(3)}.` : ''}`,
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
@@ -178,7 +178,7 @@ export default function DebtDetailsScreen() {
                         <Text style={styles.headerLabel}>
                             {debt.type === 'lent' ? 'They owe you' : 'You owe them'}
                         </Text>
-                        <Text style={styles.headerAmount}>${remainingAmount.toFixed(2)}</Text>
+                        <Text style={styles.headerAmount}>${remainingAmount.toFixed(3)}</Text>
                         <Text style={styles.headerPerson}>{debt.personName}</Text>
                     </View>
                     <DebtStatusBadge status={debt.status} isOverdue={isOverdue} size="large" />
@@ -190,7 +190,7 @@ export default function DebtDetailsScreen() {
                             <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
                         </View>
                         <Text style={styles.progressText}>
-                            {`${progressPercent.toFixed(0)}% paid • $${debt.amountPaid.toFixed(2)} of $${debt.amount.toFixed(2)}`}
+                            {`${progressPercent.toFixed(0)}% paid • $${debt.amountPaid.toFixed(3)} of $${debt.amount.toFixed(3)}`}
                         </Text>
                     </View>
                 )}

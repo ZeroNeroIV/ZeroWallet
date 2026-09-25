@@ -68,7 +68,7 @@ You: "Vacation goal updated to $3,000.00!"
 **CURRENT ACCOUNT CONTEXT:**
 - Account ID: ${accountId}
 - Currency: ${currency}
-- Current Balance: ${(balance ?? 0).toFixed(2)} ${currency}
+- Current Balance: ${(balance ?? 0).toFixed(3)} ${currency}
 
 **AVAILABLE FUNCTIONS:**
 You have access to 8 READ functions and 20 WRITE functions.

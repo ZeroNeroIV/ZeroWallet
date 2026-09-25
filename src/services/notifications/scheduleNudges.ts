@@ -80,7 +80,7 @@ export async function scheduleDailyNudge(): Promise<void> {
     const { notificationSettings } = settingsStore;
 
     // Check if nudges are enabled
-    if (!notificationSettings.nudgesEnabled) {
+    if (!notificationSettings.dailyNudgeEnabled) {
       console.log('[ScheduleNudges] Nudges are disabled');
       await cancelDailyNudge();
       return;
@@ -284,7 +284,7 @@ export async function scheduleSubscriptionReminder(
     const settingsStore = useSettingsStore.getState();
     const { notificationSettings } = settingsStore;
 
-    if (!notificationSettings.subscriptionReminders) {
+    if (!notificationSettings.subscriptionRemindersEnabled) {
       console.log('[ScheduleNudges] Subscription reminders disabled');
       return;
     }
@@ -305,7 +305,7 @@ export async function scheduleSubscriptionReminder(
       {
         id: `subscription-reminder-${subscriptionId}`,
         title: '📅 Upcoming Subscription',
-        body: `${name} ($${amount.toFixed(2)}) will be charged ${dayText}`,
+        body: `${name} ($${amount.toFixed(3)}) will be charged ${dayText}`,
         android: {
           channelId: CHANNEL_IDS.REMINDERS,
           color: '#118AB2',
@@ -360,7 +360,7 @@ export async function scheduleRecurringReminder(
     const settingsStore = useSettingsStore.getState();
     const { notificationSettings } = settingsStore;
 
-    if (!notificationSettings.recurringReminders) {
+    if (!notificationSettings.recurringRemindersEnabled) {
       console.log('[ScheduleNudges] Recurring reminders disabled');
       return;
     }
@@ -381,7 +381,7 @@ export async function scheduleRecurringReminder(
       {
         id: `recurring-reminder-${recurringId}`,
         title: '⏰ Upcoming Recurring Expense',
-        body: `${name} ($${amount.toFixed(2)}) will be charged ${dayText}`,
+        body: `${name} ($${amount.toFixed(3)}) will be charged ${dayText}`,
         android: {
           channelId: CHANNEL_IDS.REMINDERS,
           color: '#FF8B94',
@@ -401,5 +401,135 @@ export async function scheduleRecurringReminder(
     );
   } catch (error) {
     console.error('[ScheduleNudges] Failed to schedule recurring reminder:', error);
+  }
+}
+
+// ============================================
+// Salary Day Reminder
+// ============================================
+
+/**
+ * Purpose: Schedule a reminder on salary day morning (9 AM on payday)
+ *
+ * Inputs: None (reads salary + nudge settings from store)
+ *
+ * Outputs:
+ *   - Returns (Promise<void>): Completes when reminder is scheduled
+ *
+ * Side effects:
+ *   - Creates a one-time notification trigger on the next payday
+ */
+export async function scheduleSalaryReminder(): Promise<void> {
+  try {
+    const hasPermission = await checkNotificationPermission();
+    if (!hasPermission) return;
+
+    const settingsStore = useSettingsStore.getState();
+    const { notificationSettings, salarySettings } = settingsStore;
+
+    if (!notificationSettings.salaryReminderEnabled || !salarySettings.isEnabled) {
+      await cancelSalaryReminder();
+      return;
+    }
+
+    const payDay = salarySettings.payDay ?? 1;
+    const nextPayday = salarySettings.nextProcessing || Date.now();
+    const triggerDate = new Date(nextPayday);
+    triggerDate.setHours(9, 0, 0, 0);
+
+    // If this payday's morning passed, aim at the following month
+    if (triggerDate.getTime() <= Date.now()) {
+      const { getNextPayDate } = await import('../backgroundTasks/autoSalaryTask');
+      const upcoming = getNextPayDate(new Date(), payDay);
+      upcoming.setHours(9, 0, 0, 0);
+      triggerDate.setTime(upcoming.getTime());
+    }
+
+    const trigger: TimestampTrigger = {
+      type: TriggerType.TIMESTAMP,
+      timestamp: triggerDate.getTime(),
+    };
+
+    await notifee.createTriggerNotification(
+      {
+        id: 'salary-day-reminder',
+        title: '💰 Salary Day',
+        body: `Payday is here! Your $${salarySettings.amount.toFixed(3)} salary lands today.`,
+        android: {
+          channelId: CHANNEL_IDS.REMINDERS,
+          color: '#06D6A0',
+          pressAction: { id: 'default' },
+        },
+        ios: { sound: 'default' },
+      },
+      trigger
+    );
+
+    console.log('[ScheduleNudges] Salary day reminder scheduled');
+  } catch (error) {
+    console.error('[ScheduleNudges] Failed to schedule salary reminder:', error);
+  }
+}
+
+export async function cancelSalaryReminder(): Promise<void> {
+  try {
+    await notifee.cancelNotification('salary-day-reminder');
+    console.log('[ScheduleNudges] Salary day reminder cancelled');
+  } catch (error) {
+    console.error('[ScheduleNudges] Failed to cancel salary reminder:', error);
+  }
+}
+
+// ============================================
+// Due-Date Reminders (subscriptions + recurring)
+// ============================================
+
+/**
+ * Purpose: Scan active subscriptions and recurring expenses and schedule
+ * reminders for anything billing within the configured days-before window
+ *
+ * Inputs:
+ *   - accountId (string): Account to scan
+ *
+ * Outputs:
+ *   - Returns (Promise<void>): Completes when reminders are scheduled
+ *
+ * Side effects:
+ *   - Creates notification triggers for upcoming charges
+ */
+export async function scheduleDueReminders(accountId: string): Promise<void> {
+  try {
+    const hasPermission = await checkNotificationPermission();
+    if (!hasPermission) return;
+
+    const { notificationSettings } = useSettingsStore.getState();
+    const now = Date.now();
+    const msPerDay = 24 * 60 * 60 * 1000;
+
+    if (notificationSettings.subscriptionRemindersEnabled) {
+      const { SubscriptionRepository } = await import('../../database/repositories/SubscriptionRepository');
+      const subs = await new SubscriptionRepository().findActiveByAccount(accountId);
+      const daysBefore = Math.max(0, notificationSettings.subscriptionDaysBefore);
+      for (const sub of subs) {
+        const daysUntil = Math.ceil((sub.nextProcessing - now) / msPerDay);
+        if (daysUntil >= 1 && daysUntil <= Math.max(1, daysBefore)) {
+          await scheduleSubscriptionReminder(sub.id, sub.name, sub.amount, daysUntil);
+        }
+      }
+    }
+
+    if (notificationSettings.recurringRemindersEnabled) {
+      const { RecurringExpenseRepository } = await import('../../database/repositories/RecurringExpenseRepository');
+      const expenses = await new RecurringExpenseRepository().findActiveByAccount(accountId);
+      const daysBefore = Math.max(0, notificationSettings.recurringDaysBefore);
+      for (const expense of expenses) {
+        const daysUntil = Math.ceil((expense.nextOccurrence - now) / msPerDay);
+        if (daysUntil >= 1 && daysUntil <= Math.max(1, daysBefore)) {
+          await scheduleRecurringReminder(expense.id, expense.name, expense.amount, daysUntil);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[ScheduleNudges] Failed to schedule due reminders:', error);
   }
 }
