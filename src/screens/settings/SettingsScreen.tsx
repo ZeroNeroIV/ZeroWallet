@@ -498,38 +498,9 @@ const SettingsScreen = ({ navigation }: any) => {
               />
             </View>
             <View style={styles.settingInfo}>
-              <Text style={styles.settingLabel}>Account Currency</Text>
+              <Text style={styles.settingLabel}>Currency</Text>
               <Text style={styles.settingValue}>
                 {currentAccountCurrency}
-              </Text>
-            </View>
-          </View>
-          <MaterialCommunityIcons
-            name="chevron-right"
-            size={24}
-            color={themeColors.textSecondary}
-          />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.settingRow}
-          onPress={() => {
-            lightHaptic();
-            navigation.navigate('AccountsList');
-          }}
-        >
-          <View style={styles.settingLeft}>
-            <View style={[styles.iconContainer, { backgroundColor: colors.semantic.infoLight }]}>
-              <MaterialCommunityIcons
-                name="account-switch"
-                size={20}
-                color={colors.semantic.info}
-              />
-            </View>
-            <View style={styles.settingInfo}>
-              <Text style={styles.settingLabel}>Switch Account</Text>
-              <Text style={styles.settingDescription}>
-                Manage your accounts
               </Text>
             </View>
           </View>

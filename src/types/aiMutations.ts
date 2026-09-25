@@ -9,6 +9,8 @@
  * Side effects: None
  */
 
+import type { VaultType } from './models';
+
 // ============================================================================
 // Core Types
 // ============================================================================
@@ -124,7 +126,7 @@ export interface CreateTransactionParams {
   categoryName: string;
   description?: string;
   date?: string;
-  vaultType?: 'main' | 'savings' | 'held';
+  vaultType?: VaultType;
 }
 
 export interface UpdateTransactionParams {
@@ -133,7 +135,7 @@ export interface UpdateTransactionParams {
   categoryName?: string;
   description?: string;
   date?: string;
-  vaultType?: 'main' | 'savings' | 'held';
+  vaultType?: VaultType;
 }
 
 export interface DeleteTransactionParams {
@@ -219,7 +221,7 @@ export interface CreateSubscriptionParams {
   amount: number;
   categoryName: string;
   billingDay: number;
-  vaultType?: 'main' | 'savings' | 'held';
+  vaultType?: VaultType;
 }
 
 export interface UpdateSubscriptionParams {
@@ -229,7 +231,7 @@ export interface UpdateSubscriptionParams {
   categoryName?: string;
   billingDay?: number;
   isActive?: boolean;
-  vaultType?: 'main' | 'savings' | 'held';
+  vaultType?: VaultType;
 }
 
 export interface ToggleSubscriptionParams {
@@ -253,7 +255,7 @@ export interface CreateRecurringExpenseParams {
   frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
   interval: number;
   startDate: string;
-  vaultType?: 'main' | 'savings' | 'held';
+  vaultType?: VaultType;
   autoDeduct?: boolean;
 }
 
@@ -265,7 +267,7 @@ export interface UpdateRecurringExpenseParams {
   frequency?: 'daily' | 'weekly' | 'monthly' | 'yearly';
   interval?: number;
   isActive?: boolean;
-  vaultType?: 'main' | 'savings' | 'held';
+  vaultType?: VaultType;
   autoDeduct?: boolean;
 }
 
@@ -307,7 +309,7 @@ export interface ValidatedTransactionInput {
   categoryName: string;
   description: string;
   date: number;
-  vaultType: 'main' | 'savings' | 'held';
+  vaultType: VaultType;
 }
 
 export interface ValidatedGoalInput {
@@ -332,7 +334,7 @@ export interface ValidatedSubscriptionInput {
   categoryId: string;
   categoryName: string;
   billingDay: number;
-  vaultType: 'main' | 'savings' | 'held';
+  vaultType: VaultType;
 }
 
 export interface ValidatedRecurringExpenseInput {
@@ -343,7 +345,7 @@ export interface ValidatedRecurringExpenseInput {
   frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
   interval: number;
   nextOccurrence: number;
-  vaultType: 'main' | 'savings' | 'held';
+  vaultType: VaultType;
   autoDeduct: boolean;
 }
 

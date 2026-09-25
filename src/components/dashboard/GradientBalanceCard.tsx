@@ -22,20 +22,18 @@ import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { useUIStore } from '../../store/uiStore';
+import { ALL_WALLETS, WALLET_META, getWalletBalance } from '../../utils/wallets';
+import type { VaultBalances } from '../../utils/balanceCalculator';
 
 interface GradientBalanceCardProps {
   totalBalance: number;
-  mainBalance: number;
-  savingsBalance: number;
-  heldBalance: number;
+  balances: VaultBalances;
   accountCurrency?: string;
 }
 
 export const GradientBalanceCard: React.FC<GradientBalanceCardProps> = React.memo(({
   totalBalance,
-  mainBalance,
-  savingsBalance,
-  heldBalance,
+  balances,
   accountCurrency = 'USD',
 }) => {
   const themeColors = useThemeColors();
@@ -101,29 +99,23 @@ export const GradientBalanceCard: React.FC<GradientBalanceCardProps> = React.mem
 
         {/* Breakdown Section */}
         <View style={styles.breakdown}>
-          {/* Investment Balance */}
-          <View style={styles.breakdownItem}>
-            <Text style={styles.breakdownLabel}>INVESTMENT</Text>
-            <Text style={[styles.breakdownValue, { color: themeColors.primary }]}>
-              {formatAmount(mainBalance)}
-            </Text>
-          </View>
-
-          {/* Savings */}
-          <View style={styles.breakdownItem}>
-            <Text style={styles.breakdownLabel}>SAVINGS</Text>
-            <Text style={styles.breakdownValue}>
-              {formatAmount(savingsBalance)}
-            </Text>
-          </View>
-
-          {/* Recurring Money */}
-          <View style={styles.breakdownItem}>
-            <Text style={styles.breakdownLabel}>RECURRING</Text>
-            <Text style={styles.breakdownValue}>
-              {formatAmount(heldBalance)}
-            </Text>
-          </View>
+          {ALL_WALLETS.map((wallet) => (
+            <View key={wallet} style={styles.breakdownRow}>
+              <View style={styles.breakdownLeft}>
+                <MaterialCommunityIcons
+                  name={WALLET_META[wallet].icon as any}
+                  size={16}
+                  color={themeColors.textSecondary}
+                />
+                <Text style={styles.breakdownLabel}>
+                  {WALLET_META[wallet].shortName.toUpperCase()}
+                </Text>
+              </View>
+              <Text style={styles.breakdownValue}>
+                {formatAmount(getWalletBalance(balances, wallet))}
+              </Text>
+            </View>
+          ))}
         </View>
       </View>
     </LinearGradient>
@@ -191,18 +183,23 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) => StyleSh
     lineHeight: 42,
   },
   breakdown: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     paddingTop: spacing.md,
     borderTopWidth: 1,
     borderTopColor: themeColors.isDark
       ? 'rgba(255, 255, 255, 0.1)'
       : 'rgba(0, 0, 0, 0.08)',
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
-  breakdownItem: {
-    flex: 1,
-    gap: 4,
+  breakdownRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 2,
+  },
+  breakdownLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   breakdownLabel: {
     fontSize: 9,

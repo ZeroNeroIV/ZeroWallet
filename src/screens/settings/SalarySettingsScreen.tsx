@@ -33,7 +33,7 @@ import { typography } from '../../theme/typography';
 import { AmountInput } from '../../components/forms/AmountInput';
 import { Button } from '../../components/forms/Button';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { walletShortName, ordinalDay } from '../../utils/wallets';
+import { ALL_WALLETS, WALLET_META, walletShortName, ordinalDay } from '../../utils/wallets';
 import type { Category, VaultType } from '../../types/models';
 
 const SalarySettingsScreen = ({ navigation }: any) => {
@@ -141,6 +141,7 @@ const SalarySettingsScreen = ({ navigation }: any) => {
 
     return (
       <TouchableOpacity
+        key={vault}
         style={[styles.vaultOption, isSelected && styles.vaultOptionSelected]}
         onPress={() => setSelectedVault(vault)}
       >
@@ -308,9 +309,7 @@ const SalarySettingsScreen = ({ navigation }: any) => {
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Target Wallet</Text>
           <View style={styles.vaultGrid}>
-            {renderVaultOption('main', 'trending-up', walletShortName('main'))}
-            {renderVaultOption('savings', 'piggy-bank-outline', walletShortName('savings'))}
-            {renderVaultOption('held', 'repeat', walletShortName('held'))}
+            {ALL_WALLETS.map((wallet) => renderVaultOption(wallet, WALLET_META[wallet].icon, walletShortName(wallet)))}
           </View>
         </View>
 

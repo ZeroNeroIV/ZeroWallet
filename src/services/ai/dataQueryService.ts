@@ -230,6 +230,10 @@ export class DataQueryService {
         main: b.mainBalance,
         savings: b.savingsBalance,
         held: b.heldBalance,
+        salary: b.salaryBalance,
+        emergency: b.emergencyBalance,
+        card: b.cardBalance,
+        physical: b.physicalBalance,
         total: b.totalBalance,
         currency: account.currency || 'USD',
       };

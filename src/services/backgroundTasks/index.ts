@@ -28,6 +28,8 @@ import {
 } from '../notifications/notificationService';
 import { useAccountStore } from '../../store/accountStore';
 import { useAuthStore } from '../../store/authStore';
+import { ALL_WALLETS, getWalletBalance } from '../../utils/wallets';
+import type { VaultType } from '../../types/models';
 
 // ============================================
 // Run All Background Tasks
@@ -179,11 +181,10 @@ async function checkLowBalanceWarnings(): Promise<void> {
 
     // Check each account's wallets (throttled: at most one alert per wallet per day)
     for (const [accountId, balance] of Object.entries(balances)) {
-      const checks = [
-        { key: 'main', value: balance.mainBalance },
-        { key: 'savings', value: balance.savingsBalance },
-        { key: 'held', value: balance.heldBalance },
-      ];
+      const checks = (ALL_WALLETS as string[]).map((key) => ({
+        key,
+        value: getWalletBalance(balance as unknown as Record<string, number | undefined>, key as VaultType),
+      }));
       for (const check of checks) {
         if (check.value < threshold && check.value > 0) {
           const stampKey = `${accountId}:${check.key}`;

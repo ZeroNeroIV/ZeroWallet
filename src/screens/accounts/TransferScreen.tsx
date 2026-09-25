@@ -1,3 +1,16 @@
+/**
+ * Purpose: Transfer money between two wallets of the current account
+ *
+ * Inputs: None (screen; uses current account + user from stores)
+ *
+ * Outputs:
+ *   - Returns (JSX.Element): Wallet-to-wallet transfer form
+ *
+ * Side effects:
+ *   - Records paired transfer transactions and updates balances
+ *   - Navigates back on success
+ */
+
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
@@ -6,7 +19,6 @@ import {
   ScrollView,
   Alert,
   TouchableOpacity,
-  Animated,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -18,13 +30,13 @@ import { AmountInput } from '../../components/forms/AmountInput';
 import { useAuthStore } from '../../store/authStore';
 import { useAccountStore } from '../../store/accountStore';
 import { AccountRepository } from '../../database/repositories/AccountRepository';
-import { TransactionRepository } from '../../database/repositories/TransactionRepository';
-import { calculateVaultBalances } from '../../utils/balanceCalculator';
+import { transferBetweenWallets } from '../../services/walletTransferService';
+import { ALL_WALLETS, WALLET_META, getWalletBalance, walletShortName } from '../../utils/wallets';
+import type { VaultType } from '../../types/models';
 import { colors } from '../../theme/colors';
 import { spacing, borderRadius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import type { Account } from '../../types/models';
 
 type TransferNavigationProp = StackNavigationProp<MainStackParamList, 'Transfer'>;
 
@@ -33,45 +45,34 @@ export default function TransferScreen() {
   const currentUser = useAuthStore((state) => state.currentUser);
   const currentAccountId = useAuthStore((state) => state.currentAccountId);
   const balances = useAccountStore((state) => state.balances);
-  const updateBalance = useAccountStore((state) => state.updateBalance);
   const themeColors = useThemeColors();
 
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [fromAccountId, setFromAccountId] = useState<string>(currentAccountId || '');
-  const [toAccountId, setToAccountId] = useState<string>('');
+  const [fromWallet, setFromWallet] = useState<VaultType>('main');
+  const [toWallet, setToWallet] = useState<VaultType>('savings');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
+  const [accountCurrency, setAccountCurrency] = useState('USD');
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<{ amount?: string; to?: string }>({});
-  const [selectionAnim] = useState(() => new Animated.Value(1));
+  const [errors, setErrors] = useState<{ amount?: string }>({});
 
-  const styles = useMemo(() => createStyles(themeColors, selectionAnim), [themeColors]);
+  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
 
   useEffect(() => {
-    loadAccounts();
-  }, []);
-
-  const loadAccounts = async () => {
-    if (!currentUser) return;
-    const accountRepo = new AccountRepository();
-    const userAccounts = await accountRepo.findByUser(currentUser.id);
-    setAccounts(userAccounts);
-
-    if (userAccounts.length >= 2) {
-      const other = userAccounts.find((a) => a.id !== currentAccountId);
-      if (other && !toAccountId) {
-        setToAccountId(other.id);
+    const loadCurrency = async () => {
+      if (!currentAccountId) return;
+      try {
+        const account = await new AccountRepository().findById(currentAccountId);
+        if (account?.currency) setAccountCurrency(account.currency);
+      } catch {
+        // keep default
       }
-    }
-  };
+    };
+    loadCurrency();
+  }, [currentAccountId]);
 
-  const fromAccount = accounts.find((a) => a.id === fromAccountId);
-  const toAccount = accounts.find((a) => a.id === toAccountId);
-  const fromBalance = fromAccountId ? balances[fromAccountId] : null;
-  // Transfers debit the source account's main (Investment) wallet, so the
-  // limit is the main balance — not the available balance (which also
-  // counts savings and would allow overdrawing main into the negative).
-  const maxAmount = fromBalance ? Math.max(0, fromBalance.mainBalance) : 0;
+  const accountBalances = currentAccountId ? balances[currentAccountId] : undefined;
+  const fromBalance = getWalletBalance(accountBalances, fromWallet);
+  const maxAmount = Math.max(0, fromBalance);
 
   const handleTransfer = async () => {
     setErrors({});
@@ -82,18 +83,13 @@ export default function TransferScreen() {
       return;
     }
 
-    if (!fromAccountId) {
-      Alert.alert('Error', 'Please select a source account');
+    if (!currentAccountId || !currentUser) {
+      Alert.alert('Error', 'User not found');
       return;
     }
 
-    if (!toAccountId) {
-      setErrors({ to: 'Please select a destination account' });
-      return;
-    }
-
-    if (fromAccountId === toAccountId) {
-      Alert.alert('Error', 'Source and destination accounts must be different');
+    if (fromWallet === toWallet) {
+      Alert.alert('Error', 'Source and destination wallets must be different');
       return;
     }
 
@@ -105,150 +101,107 @@ export default function TransferScreen() {
     setLoading(true);
 
     try {
-      if (!currentUser) {
-        Alert.alert('Error', 'User not found');
-        setLoading(false);
-        return;
-      }
-      const txRepo = new TransactionRepository();
-      const result = await txRepo.transferBetweenAccounts({
-        fromAccountId,
-        toAccountId,
-        userId: currentUser.id,
-        amount: numAmount,
-        fromVaultType: 'main',
-        toVaultType: 'main',
-        description: description.trim() || `Transfer to ${toAccount?.name}`,
-        currency: fromAccount?.currency || 'USD',
-      });
-
-      // Recalculate and sync both account balances
-      const fromTxs = await txRepo.findByAccount(fromAccountId);
-      const toTxs = await txRepo.findByAccount(toAccountId);
-      updateBalance(fromAccountId, calculateVaultBalances(fromTxs));
-      updateBalance(toAccountId, calculateVaultBalances(toTxs));
+      await transferBetweenWallets(
+        currentAccountId,
+        currentUser.id,
+        fromWallet,
+        toWallet,
+        numAmount,
+        description.trim() || undefined,
+        accountCurrency,
+      );
 
       Alert.alert(
         'Transfer Complete',
-        `${numAmount.toFixed(3)} ${fromAccount?.currency || 'USD'} transferred from ${fromAccount?.name} to ${toAccount?.name}`,
+        `${numAmount.toFixed(3)} ${accountCurrency} moved from ${walletShortName(fromWallet)} to ${walletShortName(toWallet)}`,
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
-    } catch (error) {
+    } catch (error: any) {
       console.error('[Transfer] Failed:', error);
-      Alert.alert('Error', 'Transfer failed. Please try again.');
+      Alert.alert('Error', error?.message || 'Transfer failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const renderAccountCard = (
-    account: Account,
-    isSelected: boolean,
-    onPress: () => void,
-    balance: number,
-  ) => (
-    <TouchableOpacity
-      key={account.id}
-      activeOpacity={0.7}
-      onPress={onPress}
-    >
-      <Animated.View
-        style={[
-          styles.accountCard,
-          isSelected && styles.accountCardSelected,
-          { borderColor: isSelected ? account.color : themeColors.border },
-          { opacity: isSelected ? selectionAnim : 1 },
-        ]}
-      >
-        <View style={[styles.accountIcon, { backgroundColor: account.color + '20' }]}>
-          <Icon name={account.icon} size={24} color={account.color} />
-        </View>
-        <View style={styles.accountInfo}>
-          <Text style={styles.accountName}>{account.name}</Text>
-          <Text style={styles.accountBalance}>
-            {balance.toFixed(3)} {account.currency}
-          </Text>
-        </View>
-        {isSelected && (
-          <Icon name="check-circle" size={24} color={account.color} />
-        )}
-      </Animated.View>
-    </TouchableOpacity>
-  );
-
-  if (accounts.length < 2) {
+  const renderWalletOption = (wallet: VaultType, selected: VaultType, onSelect: (w: VaultType) => void) => {
+    const isSelected = selected === wallet;
+    const balance = getWalletBalance(accountBalances, wallet);
     return (
-      <View style={styles.emptyContainer}>
-        <Icon name="bank-transfer" size={64} color={themeColors.textSecondary} />
-        <Text style={styles.emptyTitle}>Need at least 2 accounts</Text>
-        <Text style={styles.emptySubtitle}>
-          Create another account first to make transfers
-        </Text>
-        <Button
-          title="Create Account"
-          onPress={() => navigation.navigate('CreateAccount')}
-          style={styles.emptyButton}
+      <TouchableOpacity
+        key={wallet}
+        style={[styles.walletButton, isSelected && styles.walletButtonActive]}
+        onPress={() => onSelect(wallet)}
+        activeOpacity={0.7}
+      >
+        <Icon
+          name={WALLET_META[wallet].icon as any}
+          size={20}
+          color={isSelected ? colors.primary.main : colors.neutral.gray600}
         />
-      </View>
+        <Text
+          style={[
+            styles.walletButtonText,
+            isSelected && styles.walletButtonTextActive,
+          ]}
+        >
+          {walletShortName(wallet)}
+        </Text>
+        <Text style={styles.walletBalance}>
+          {balance.toFixed(3)}
+        </Text>
+      </TouchableOpacity>
     );
-  }
+  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* From Account */}
+      {/* From Wallet */}
       <Text style={styles.sectionTitle}>Transfer From</Text>
-      {accounts.map((account) => {
-        const bal = balances[account.id];
-        return renderAccountCard(
-          account,
-          account.id === fromAccountId,
-          () => setFromAccountId(account.id),
-          bal ? bal.availableBalance : 0,
-        );
-      })}
+      <View style={styles.walletGrid}>
+        {ALL_WALLETS.map((w) =>
+          renderWalletOption(w, fromWallet, (next) => {
+            setFromWallet(next);
+            if (toWallet === next) {
+              const fallback = ALL_WALLETS.find((candidate) => candidate !== next);
+              if (fallback) setToWallet(fallback);
+            }
+          })
+        )}
+      </View>
 
       {/* Amount */}
       <View style={styles.amountSection}>
         <AmountInput
           value={amount}
           onChangeText={setAmount}
-          label="Amount"
-          currency={fromAccount?.currency ? `${fromAccount.currency} ` : '$'}
+          label={`Amount (${accountCurrency})`}
           error={errors.amount}
           enableCalculator
         />
-        {fromBalance && (
-          <TouchableOpacity
-            style={styles.maxButton}
-            onPress={() => setAmount(maxAmount.toFixed(3))}
-          >
-            <Text style={styles.maxButtonText}>
-              MAX: {maxAmount.toFixed(3)}
-            </Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity
+          style={styles.maxButton}
+          onPress={() => setAmount(maxAmount.toFixed(3))}
+        >
+          <Text style={styles.maxButtonText}>
+            MAX: {maxAmount.toFixed(3)}
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {/* To Account */}
+      {/* To Wallet */}
       <Text style={styles.sectionTitle}>Transfer To</Text>
-      {errors.to && <Text style={styles.errorText}>{errors.to}</Text>}
-      {accounts
-        .filter((a) => a.id !== fromAccountId)
-        .map((account) => {
-          const bal = balances[account.id];
-          return renderAccountCard(
-            account,
-            account.id === toAccountId,
-            () => setToAccountId(account.id),
-            bal ? bal.availableBalance : 0,
-          );
-        })}
+      <View style={styles.walletGrid}>
+        {ALL_WALLETS.filter((w) => w !== fromWallet).map((w) =>
+          renderWalletOption(w, toWallet, setToWallet)
+        )}
+      </View>
 
       {/* Description */}
       <View style={styles.descriptionSection}>
         <Input
           label="Description (optional)"
-          placeholder="e.g., Move savings to checking"
+          placeholder="e.g., Move salary to savings"
           value={description}
           onChangeText={setDescription}
           leftIcon="text"
@@ -256,22 +209,22 @@ export default function TransferScreen() {
       </View>
 
       {/* Transfer Summary */}
-      {amount && parseFloat(amount) > 0 && fromAccount && toAccount && (
+      {amount && parseFloat(amount) > 0 && (
         <View style={styles.summary}>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>From</Text>
-            <Text style={styles.summaryValue}>{fromAccount.name}</Text>
+            <Text style={styles.summaryValue}>{walletShortName(fromWallet)}</Text>
           </View>
           <Icon name="arrow-down" size={20} color={themeColors.textSecondary} style={styles.summaryArrow} />
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>To</Text>
-            <Text style={styles.summaryValue}>{toAccount.name}</Text>
+            <Text style={styles.summaryValue}>{walletShortName(toWallet)}</Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Amount</Text>
             <Text style={styles.summaryAmount}>
-              {parseFloat(amount).toFixed(3)} {fromAccount.currency}
+              {parseFloat(amount).toFixed(3)} {accountCurrency}
             </Text>
           </View>
         </View>
@@ -283,7 +236,7 @@ export default function TransferScreen() {
           title="Transfer"
           onPress={handleTransfer}
           loading={loading}
-          disabled={loading || !amount || !fromAccountId || !toAccountId}
+          disabled={loading || !amount || fromWallet === toWallet}
           leftIcon="bank-transfer"
         />
       </View>
@@ -291,7 +244,7 @@ export default function TransferScreen() {
   );
 }
 
-const createStyles = (themeColors: ReturnType<typeof useThemeColors>, selectionAnim: Animated.Value) =>
+const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
   StyleSheet.create({
     container: {
       flex: 1,
@@ -299,6 +252,7 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>, selectionA
     },
     content: {
       padding: spacing.lg,
+      paddingBottom: spacing.xl,
     },
     sectionTitle: {
       fontSize: typography.fontSize.md,
@@ -307,41 +261,38 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>, selectionA
       marginBottom: spacing.md,
       marginTop: spacing.lg,
     },
-    accountCard: {
+    walletGrid: {
       flexDirection: 'row',
-      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+    },
+    walletButton: {
+      flexBasis: '30%',
+      flexGrow: 1,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.sm,
+      borderRadius: 12,
       backgroundColor: themeColors.surface,
-      padding: spacing.md,
-      borderRadius: borderRadius.lg,
-      borderWidth: 2,
+      borderWidth: 1,
       borderColor: themeColors.border,
-      marginBottom: spacing.sm,
-    },
-    accountCardSelected: {
-      borderWidth: 4,
-      borderColor: themeColors.primary,
-      transform: [{ scale: selectionAnim }],
-    },
-    accountIcon: {
-      width: 48,
-      height: 48,
-      borderRadius: borderRadius.md,
-      justifyContent: 'center',
       alignItems: 'center',
-      marginRight: spacing.md,
+      gap: spacing.xs,
     },
-    accountInfo: {
-      flex: 1,
+    walletButtonActive: {
+      backgroundColor: colors.primary.light,
+      borderColor: colors.primary.main,
     },
-    accountName: {
-      fontSize: typography.fontSize.md,
-      fontWeight: typography.fontWeight.semiBold,
-      color: themeColors.text,
+    walletButtonText: {
+      ...typography.caption,
+      color: colors.neutral.gray600,
+      fontWeight: '600',
     },
-    accountBalance: {
-      fontSize: typography.fontSize.sm,
-      color: themeColors.textSecondary,
-      marginTop: 2,
+    walletButtonTextActive: {
+      color: colors.primary.main,
+    },
+    walletBalance: {
+      ...typography.caption,
+      color: colors.neutral.gray500,
     },
     amountSection: {
       marginTop: spacing.lg,
@@ -400,32 +351,5 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>, selectionA
     footer: {
       marginTop: spacing.xl,
       marginBottom: spacing.lg,
-    },
-    errorText: {
-      fontSize: typography.fontSize.sm,
-      color: themeColors.error,
-      marginBottom: spacing.sm,
-    },
-    emptyContainer: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: spacing.xl,
-      backgroundColor: themeColors.background,
-    },
-    emptyTitle: {
-      fontSize: typography.fontSize.xl,
-      fontWeight: typography.fontWeight.semiBold,
-      color: themeColors.text,
-      marginTop: spacing.lg,
-    },
-    emptySubtitle: {
-      fontSize: typography.fontSize.md,
-      color: themeColors.textSecondary,
-      textAlign: 'center',
-      marginTop: spacing.sm,
-    },
-    emptyButton: {
-      marginTop: spacing.xl,
     },
   });

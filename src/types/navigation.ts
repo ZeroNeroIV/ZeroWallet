@@ -28,8 +28,6 @@ export type MainStackParamList = {
   TransactionDetails: {
     transactionId: string;
   };
-  AccountsList: undefined;
-  CreateAccount: undefined;
   AccountSettings: {
     accountId: string;
   };

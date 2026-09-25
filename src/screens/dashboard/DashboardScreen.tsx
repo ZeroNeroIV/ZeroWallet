@@ -120,9 +120,7 @@ export const DashboardScreen: React.FC = () => {
               <View style={styles.section}>
                 <GradientBalanceCard
                   totalBalance={data.balance.totalBalance}
-                  mainBalance={data.balance.mainBalance}
-                  savingsBalance={data.balance.savingsBalance}
-                  heldBalance={data.balance.heldBalance}
+                  balances={data.balance}
                   accountCurrency={data.currency}
                 />
               </View>

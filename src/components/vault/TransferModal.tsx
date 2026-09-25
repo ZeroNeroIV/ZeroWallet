@@ -14,24 +14,21 @@ import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { VaultType } from '../../types/models';
-import { WALLET_META, walletShortName } from '../../utils/wallets';
+import { ALL_WALLETS, WALLET_META, getWalletBalance, walletShortName } from '../../utils/wallets';
+import type { VaultBalances } from '../../utils/balanceCalculator';
 
 interface TransferModalProps {
   visible: boolean;
   onClose: () => void;
   onTransfer: (from: VaultType, to: VaultType, amount: number) => Promise<void>;
-  mainBalance: number;
-  savingsBalance: number;
-  heldBalance: number;
+  balances: VaultBalances;
 }
 
 export const TransferModal: React.FC<TransferModalProps> = ({
   visible,
   onClose,
   onTransfer,
-  mainBalance,
-  savingsBalance,
-  heldBalance,
+  balances,
 }) => {
   const [fromVault, setFromVault] = useState<VaultType>('main');
   const [toVault, setToVault] = useState<VaultType>('savings');
@@ -39,21 +36,15 @@ export const TransferModal: React.FC<TransferModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const vaults = [
-    { value: 'main' as VaultType, label: walletShortName('main'), icon: WALLET_META.main.icon, balance: mainBalance },
-    { value: 'savings' as VaultType, label: walletShortName('savings'), icon: WALLET_META.savings.icon, balance: savingsBalance },
-    { value: 'held' as VaultType, label: walletShortName('held'), icon: WALLET_META.held.icon, balance: heldBalance },
-  ];
+  const vaults = ALL_WALLETS.map((value) => ({
+    value,
+    label: walletShortName(value),
+    icon: WALLET_META[value].icon,
+    balance: getWalletBalance(balances, value),
+  }));
 
   const getVaultBalance = (vault: VaultType) => {
-    switch (vault) {
-      case 'main':
-        return mainBalance;
-      case 'savings':
-        return savingsBalance;
-      case 'held':
-        return heldBalance;
-    }
+    return getWalletBalance(balances, vault);
   };
 
   const validate = () => {
@@ -285,10 +276,12 @@ const styles = StyleSheet.create({
   },
   vaultOptions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.sm,
   },
   vaultButton: {
-    flex: 1,
+    flexBasis: '30%',
+    flexGrow: 1,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.sm,
     borderRadius: 12,

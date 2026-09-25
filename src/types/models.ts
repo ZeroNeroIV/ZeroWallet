@@ -32,11 +32,15 @@ export interface Account {
 // Balance Model (MMKV only - fast access)
 export interface AccountBalance {
   accountId: string;
-  mainBalance: number; // Available spending money
-  savingsBalance: number; // Savings vault
-  heldBalance: number; // Third-party held money
-  totalBalance: number; // Computed: main + savings + held
-  availableBalance: number; // Computed: main + savings (excludes held)
+  mainBalance: number; // Investment wallet
+  savingsBalance: number; // Savings wallet
+  heldBalance: number; // Recurring wallet (reserved)
+  salaryBalance: number; // Salary wallet
+  emergencyBalance: number; // Emergency fund wallet
+  cardBalance: number; // Card wallet
+  physicalBalance: number; // Physical cash wallet
+  totalBalance: number; // Computed: sum of all wallets
+  availableBalance: number; // Computed: total minus held (excludes recurring)
   lastUpdated: number;
 }
 
@@ -45,7 +49,14 @@ export interface AccountBalance {
 // ============================================
 
 export type TransactionType = 'income' | 'expense';
-export type VaultType = 'main' | 'savings' | 'held';
+export type VaultType =
+  | 'main'
+  | 'savings'
+  | 'held'
+  | 'salary'
+  | 'emergency'
+  | 'card'
+  | 'physical';
 
 export interface Transaction {
   id: string; // UUID

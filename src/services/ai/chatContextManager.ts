@@ -106,7 +106,15 @@ export class ChatContextManager {
       const storeBalances = useAccountStore.getState().balances;
       const b = storeBalances[accountId];
       const totalBalance = b
-        ? (b.mainBalance ?? 0) + (b.savingsBalance ?? 0) + (b.heldBalance ?? 0)
+        ? (b.totalBalance ?? (
+          (b.mainBalance ?? 0) +
+          (b.savingsBalance ?? 0) +
+          (b.heldBalance ?? 0) +
+          ((b as Record<string, number>).salaryBalance ?? 0) +
+          ((b as Record<string, number>).emergencyBalance ?? 0) +
+          ((b as Record<string, number>).cardBalance ?? 0) +
+          ((b as Record<string, number>).physicalBalance ?? 0)
+        ))
         : 0;
 
       const snapshot: AccountSnapshot = {

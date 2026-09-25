@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { ValidationService } from './validationService';
+import { VAULT_TYPE_VALUES } from '../../domain/vault/VaultType';
 import { TransactionRepository } from '../../database/repositories/TransactionRepository';
 import { GoalRepository } from '../../database/repositories/GoalRepository';
 import { DebtRepository } from '../../database/repositories/DebtRepository';
@@ -248,7 +249,7 @@ export class DataMutationService {
       }
 
       if (params.vaultType) {
-        resolvedData.vaultType = this.validator.validateEnum(params.vaultType, ['main', 'savings', 'held'] as const, 'Vault type');
+        resolvedData.vaultType = this.validator.validateEnum(params.vaultType, VAULT_TYPE_VALUES, 'Vault type');
       }
 
       return this.createPendingAction(WRITE_FUNCTION_NAMES.UPDATE_TRANSACTION, 'update', 'transaction', params, resolvedData, `Update transaction - ${updates.join(', ')}`);

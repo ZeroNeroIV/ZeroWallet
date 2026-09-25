@@ -41,6 +41,7 @@ import { spacing, borderRadius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import type { Category, VaultType, RecurringFrequency } from '../../types/models';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { ALL_WALLETS, WALLET_META } from '../../utils/wallets';
 
 type AddRecurringNavigationProp = StackNavigationProp<
   MainStackParamList,
@@ -49,11 +50,11 @@ type AddRecurringNavigationProp = StackNavigationProp<
 
 type AddRecurringRouteProp = RouteProp<MainStackParamList, 'AddRecurring'>;
 
-const VAULT_OPTIONS: { value: VaultType; label: string; icon: string }[] = [
-  { value: 'main', label: 'Main Wallet', icon: 'wallet' },
-  { value: 'savings', label: 'Savings', icon: 'piggy-bank' },
-  { value: 'held', label: 'Held Funds', icon: 'lock' },
-];
+const VAULT_OPTIONS: { value: VaultType; label: string; icon: string }[] = ALL_WALLETS.map((wallet) => ({
+  value: wallet,
+  label: WALLET_META[wallet].name,
+  icon: WALLET_META[wallet].icon,
+}));
 
 const FREQUENCY_OPTIONS: {
   value: RecurringFrequency;

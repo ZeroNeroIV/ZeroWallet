@@ -96,11 +96,11 @@ export const getMotivationalMessage = (goal: Goal): string => {
 export const getFundingSourceName = (source: GoalFundingSource): string => {
     switch (source) {
         case 'main':
-            return 'Main Balance';
+            return 'Investment Wallet';
         case 'savings':
-            return 'Savings';
+            return 'Savings Wallet';
         case 'both':
-            return 'Main & Savings';
+            return 'Investment & Savings';
         default:
             return 'Unknown';
     }

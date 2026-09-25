@@ -7,7 +7,7 @@ export const config = {
   database: {
     name: 'wallet.db',
     location: 'default',
-    schemaVersion: 5,
+    schemaVersion: 6,
   },
 
   // Currency exchange

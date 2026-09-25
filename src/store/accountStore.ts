@@ -3,7 +3,6 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { mmkvStorage } from './middleware/mmkvStorage';
 
-import { VaultType } from '../domain/vault/VaultType';
 import type { AccountState } from '../types/store';
 
 // ============================================
@@ -25,6 +24,10 @@ export const useAccountStore = create<AccountState>()(
             mainBalance: 0,
             savingsBalance: 0,
             heldBalance: 0,
+            salaryBalance: 0,
+            emergencyBalance: 0,
+            cardBalance: 0,
+            physicalBalance: 0,
             totalBalance: 0,
             availableBalance: 0,
             lastUpdated: Date.now(),
@@ -36,14 +39,18 @@ export const useAccountStore = create<AccountState>()(
             lastUpdated: Date.now(),
           };
 
-          // Recalculate computed fields
-          newBalance.totalBalance =
-            newBalance.mainBalance +
-            newBalance.savingsBalance +
-            newBalance.heldBalance;
+          // Recalculate computed fields (missing wallet keys default to 0
+          // for balances persisted before the wallet existed)
+          const m = newBalance.mainBalance ?? 0;
+          const s = newBalance.savingsBalance ?? 0;
+          const h = newBalance.heldBalance ?? 0;
+          const sal = (newBalance as Record<string, number>).salaryBalance ?? 0;
+          const em = (newBalance as Record<string, number>).emergencyBalance ?? 0;
+          const ca = (newBalance as Record<string, number>).cardBalance ?? 0;
+          const ph = (newBalance as Record<string, number>).physicalBalance ?? 0;
 
-          newBalance.availableBalance =
-            newBalance.mainBalance + newBalance.savingsBalance;
+          newBalance.totalBalance = m + s + h + sal + em + ca + ph;
+          newBalance.availableBalance = newBalance.totalBalance - h;
 
           return {
             balances: {
@@ -56,47 +63,6 @@ export const useAccountStore = create<AccountState>()(
 
 
         console.log('[AccountStore] Balance updated for account:', accountId);
-      },
-
-      transferBetweenVaults: (accountId, from, to, amount) => {
-        set((state) => {
-          const currentBalance = state.balances[accountId];
-
-          if (!currentBalance) {
-            console.error('[AccountStore] Account not found:', accountId);
-            return state;
-          }
-
-          const fromVt = VaultType.parse(from);
-          const fromBalance = fromVt.getBalance(currentBalance);
-
-          if (fromBalance < amount) {
-            console.error('[AccountStore] Insufficient balance in', from);
-            throw new Error(`Insufficient balance in ${from} vault`);
-          }
-
-          const toVt = VaultType.parse(to);
-          const newBalance = { ...currentBalance };
-          newBalance[fromVt.key] -= amount;
-          newBalance[toVt.key] += amount;
-
-          newBalance.totalBalance =
-            newBalance.mainBalance +
-            newBalance.savingsBalance +
-            newBalance.heldBalance;
-
-          newBalance.availableBalance =
-            newBalance.mainBalance + newBalance.savingsBalance;
-
-          newBalance.lastUpdated = Date.now();
-
-          return {
-            balances: {
-              ...state.balances,
-              [accountId]: newBalance,
-            },
-          };
-        });
       },
 
       getCurrentBalance: () => {
@@ -131,6 +97,10 @@ export const useAccountStore = create<AccountState>()(
                 mainBalance: 0,
                 savingsBalance: 0,
                 heldBalance: 0,
+                salaryBalance: 0,
+                emergencyBalance: 0,
+                cardBalance: 0,
+                physicalBalance: 0,
                 totalBalance: 0,
                 availableBalance: 0,
                 lastUpdated: Date.now(),

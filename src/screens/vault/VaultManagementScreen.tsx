@@ -18,11 +18,61 @@ import { VaultType } from '../../types/models';
 import { useAuthStore } from '../../store/authStore';
 import { useAccountStore } from '../../store/accountStore';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { WALLET_META } from '../../utils/wallets';
+import { ALL_WALLETS, WALLET_META, getWalletBalance } from '../../utils/wallets';
+import { transferBetweenWallets } from '../../services/walletTransferService';
+import { AccountRepository } from '../../database/repositories/AccountRepository';
+
+const WALLET_FEATURES: Record<VaultType, string[]> = {
+  main: [
+    'Use for daily expenses',
+    'Included in available balance',
+    'Quick access for transactions',
+  ],
+  savings: [
+    'Save for future purchases',
+    'Included in available balance',
+    'Transfer to investment wallet when needed',
+  ],
+  held: [
+    'Excluded from available balance',
+    'For bills and recurring commitments',
+    'Prevents accidental spending',
+  ],
+  salary: [
+    'Receives your salary each payday',
+    'Included in available balance',
+    'Move to spending wallets as needed',
+  ],
+  emergency: [
+    'Emergency fund for tough times',
+    'Included in available balance',
+    'Avoid spending unless necessary',
+  ],
+  card: [
+    'Money available on your card',
+    'Included in available balance',
+    'Use for card payments',
+  ],
+  physical: [
+    'Physical cash on hand',
+    'Included in available balance',
+    'Use for cash payments',
+  ],
+};
+
+const WALLET_COLORS: Record<VaultType, string> = {
+  main: colors.primary.main,
+  savings: colors.semantic.success,
+  held: colors.semantic.warning,
+  salary: '#06D6A0',
+  emergency: '#EF476F',
+  card: '#118AB2',
+  physical: '#F77F00',
+};
 
 export const VaultManagementScreen: React.FC = () => {
-  const { currentAccountId } = useAuthStore();
-  const { balances, transferBetweenVaults } = useAccountStore();
+  const { currentAccountId, currentUser } = useAuthStore();
+  const { balances } = useAccountStore();
   const themeColors = useThemeColors();
 
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
@@ -32,6 +82,10 @@ export const VaultManagementScreen: React.FC = () => {
     mainBalance: 0,
     savingsBalance: 0,
     heldBalance: 0,
+    salaryBalance: 0,
+    emergencyBalance: 0,
+    cardBalance: 0,
+    physicalBalance: 0,
     totalBalance: 0,
     availableBalance: 0,
   });
@@ -49,6 +103,10 @@ export const VaultManagementScreen: React.FC = () => {
       mainBalance: 0,
       savingsBalance: 0,
       heldBalance: 0,
+      salaryBalance: 0,
+      emergencyBalance: 0,
+      cardBalance: 0,
+      physicalBalance: 0,
       totalBalance: 0,
       availableBalance: 0,
     };
@@ -57,68 +115,43 @@ export const VaultManagementScreen: React.FC = () => {
   };
 
   const handleTransfer = async (from: VaultType, to: VaultType, amount: number) => {
-    if (!currentAccountId) {
-      throw new Error('No account selected');
+    if (!currentAccountId || !currentUser) {
+      throw new Error('User not found');
     }
 
     try {
-      transferBetweenVaults(currentAccountId, from, to, amount);
+      // Record the move as paired transfer transactions so it stays
+      // visible in history and survives balance recalculation
+      let currency = 'USD';
+      try {
+        const account = await new AccountRepository().findById(currentAccountId);
+        if (account?.currency) currency = account.currency;
+      } catch {
+        // keep default
+      }
+      await transferBetweenWallets(currentAccountId, currentUser.id, from, to, amount, undefined, currency);
       loadBalance();
     } catch (error: any) {
       throw error;
     }
   };
 
-  const vaultDetails = [
-    {
-      name: WALLET_META.main.name,
-      category: WALLET_META.main.category,
-      description: 'Your active everyday money',
-      icon: WALLET_META.main.icon,
-      color: colors.primary.main,
-      balance: currentBalance.mainBalance,
-      features: [
-        'Use for daily expenses',
-        'Included in available balance',
-        'Quick access for transactions',
-      ],
-    },
-    {
-      name: WALLET_META.savings.name,
-      category: WALLET_META.savings.category,
-      description: 'Money set aside for future goals',
-      icon: WALLET_META.savings.icon,
-      color: colors.semantic.success,
-      balance: currentBalance.savingsBalance,
-      features: [
-        'Save for future purchases',
-        'Included in available balance',
-        'Transfer to investment wallet when needed',
-      ],
-    },
-    {
-      name: WALLET_META.held.name,
-      category: WALLET_META.held.category,
-      description: 'Reserved money not available to spend',
-      icon: WALLET_META.held.icon,
-      color: colors.semantic.warning,
-      balance: currentBalance.heldBalance,
-      features: [
-        'Excluded from available balance',
-        'For bills and recurring commitments',
-        'Prevents accidental spending',
-      ],
-    },
-  ];
+  const vaultDetails = ALL_WALLETS.map((wallet) => ({
+    name: WALLET_META[wallet].name,
+    category: WALLET_META[wallet].category,
+    description: WALLET_META[wallet].description,
+    icon: WALLET_META[wallet].icon,
+    color: WALLET_COLORS[wallet],
+    balance: getWalletBalance(currentBalance, wallet),
+    features: WALLET_FEATURES[wallet],
+  }));
 
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Vault Summary Card */}
         <VaultCard
-          mainBalance={currentBalance.mainBalance}
-          savingsBalance={currentBalance.savingsBalance}
-          heldBalance={currentBalance.heldBalance}
+          balances={currentBalance}
           totalBalance={currentBalance.totalBalance}
           availableBalance={currentBalance.availableBalance}
         />
@@ -192,8 +225,8 @@ export const VaultManagementScreen: React.FC = () => {
           />
           <Text style={styles.infoText}>
             <Text style={styles.infoTextBold}>Available to Spend</Text> includes
-            money from Investment and Savings wallets, but excludes money in the Recurring
-            wallet to prevent overspending.
+            money from every wallet except Recurring, which is reserved for
+            bills to prevent overspending.
           </Text>
         </View>
       </ScrollView>
@@ -203,9 +236,7 @@ export const VaultManagementScreen: React.FC = () => {
         visible={transferModalVisible}
         onClose={() => setTransferModalVisible(false)}
         onTransfer={handleTransfer}
-        mainBalance={currentBalance.mainBalance}
-        savingsBalance={currentBalance.savingsBalance}
-        heldBalance={currentBalance.heldBalance}
+        balances={currentBalance}
       />
     </View>
   );

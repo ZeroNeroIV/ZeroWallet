@@ -14,13 +14,12 @@
  */
 
 import notifee, { AuthorizationStatus, AndroidImportance } from '@notifee/react-native';
-import { walletName } from '../../utils/wallets';
+import { WALLET_META } from '../../utils/wallets';
 import type { VaultType } from '../../types/models';
 
 function displayWalletName(vaultType: string): string {
-  if (vaultType === 'main' || vaultType === 'savings' || vaultType === 'held') {
-    return walletName(vaultType as VaultType);
-  }
+  const meta = (WALLET_META as Record<string, { name: string }>)[vaultType];
+  if (meta) return meta.name;
   return `${vaultType} wallet`;
 }
 

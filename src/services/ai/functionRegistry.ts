@@ -1,6 +1,7 @@
 // Declarative function registry for Gemini function calling
 // Each entry maps 1:1 to a Gemini function_declaration object
 import type { WriteFunctionName } from '../../types/aiMutations';
+import { VAULT_TYPE_VALUES } from '../../domain/vault/VaultType';
 
 export interface FunctionParamProperty {
   type: string;
@@ -141,7 +142,7 @@ const WRITE_FUNCTIONS: FunctionRegistryEntry[] = [
         categoryName: { type: 'string', description: 'Category name (will be resolved to category ID)' },
         description: { type: 'string', description: 'Optional description or notes' },
         date: { type: 'string', description: 'Optional date in YYYY-MM-DD format (defaults to today)' },
-        vaultType: { type: 'string', enum: ['main', 'savings', 'held'] as const, description: 'Which vault to affect (defaults to main)' },
+        vaultType: { type: 'string', enum: VAULT_TYPE_VALUES, description: 'Which vault to affect (defaults to main)' },
       },
       required: ['type', 'amount', 'categoryName'],
     },
@@ -159,7 +160,7 @@ const WRITE_FUNCTIONS: FunctionRegistryEntry[] = [
         categoryName: { type: 'string', description: 'New category name' },
         description: { type: 'string', description: 'New description' },
         date: { type: 'string', description: 'New date (YYYY-MM-DD)' },
-        vaultType: { type: 'string', enum: ['main', 'savings', 'held'] as const, description: 'New vault type' },
+        vaultType: { type: 'string', enum: VAULT_TYPE_VALUES, description: 'New vault type' },
       },
       required: ['transactionId'],
     },
@@ -345,7 +346,7 @@ const WRITE_FUNCTIONS: FunctionRegistryEntry[] = [
         amount: { type: 'number', description: 'Monthly amount' },
         categoryName: { type: 'string', description: 'Category name' },
         billingDay: { type: 'number', description: 'Day of month for billing (1-31)' },
-        vaultType: { type: 'string', enum: ['main', 'savings', 'held'] as const, description: 'Which vault to deduct from (defaults to main)' },
+        vaultType: { type: 'string', enum: VAULT_TYPE_VALUES, description: 'Which vault to deduct from (defaults to main)' },
       },
       required: ['name', 'amount', 'categoryName', 'billingDay'],
     },
@@ -412,7 +413,7 @@ const WRITE_FUNCTIONS: FunctionRegistryEntry[] = [
         frequency: { type: 'string', enum: ['daily', 'weekly', 'monthly', 'yearly'] as const, description: 'How often it recurs' },
         interval: { type: 'number', description: 'Every X frequency units (e.g., interval=2, frequency=weekly = every 2 weeks)' },
         startDate: { type: 'string', description: 'Start date (YYYY-MM-DD)' },
-        vaultType: { type: 'string', enum: ['main', 'savings', 'held'] as const, description: 'Which vault to deduct from' },
+        vaultType: { type: 'string', enum: VAULT_TYPE_VALUES, description: 'Which vault to deduct from' },
         autoDeduct: { type: 'boolean', description: 'Auto-create transaction on occurrence' },
       },
       required: ['name', 'amount', 'categoryName', 'frequency', 'interval', 'startDate'],

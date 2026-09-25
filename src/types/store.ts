@@ -44,12 +44,6 @@ export interface AccountState {
     accountId: string,
     updates: Partial<AccountBalance>
   ) => void;
-  transferBetweenVaults: (
-    accountId: string,
-    from: VaultType,
-    to: VaultType,
-    amount: number
-  ) => void;
   getCurrentBalance: () => AccountBalance | null;
   getAccountBalance: (accountId: string) => AccountBalance | null;
   initializeBalance: (accountId: string) => void;

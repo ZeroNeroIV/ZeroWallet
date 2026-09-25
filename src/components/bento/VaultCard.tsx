@@ -9,12 +9,21 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { WALLET_META } from '../../utils/wallets';
+import { ALL_WALLETS, WALLET_META, getWalletBalance } from '../../utils/wallets';
+import type { VaultBalances } from '../../utils/balanceCalculator';
+
+const WALLET_CARD_COLORS = [
+  '#6366F1',
+  '#06D6A0',
+  '#F59E0B',
+  '#10B981',
+  '#EF476F',
+  '#118AB2',
+  '#F77F00',
+];
 
 interface VaultCardProps {
-  mainBalance: number;
-  savingsBalance: number;
-  heldBalance: number;
+  balances: VaultBalances;
   totalBalance: number;
   availableBalance: number;
   onPress?: () => void;
@@ -22,9 +31,7 @@ interface VaultCardProps {
 }
 
 export const VaultCard: React.FC<VaultCardProps> = ({
-  mainBalance,
-  savingsBalance,
-  heldBalance,
+  balances,
   totalBalance,
   availableBalance,
   onPress,
@@ -45,29 +52,16 @@ export const VaultCard: React.FC<VaultCardProps> = ({
     return ((amount / totalBalance) * 100).toFixed(0);
   };
 
-  const vaults = [
-    {
-      name: WALLET_META.main.name,
-      icon: WALLET_META.main.icon,
-      balance: mainBalance,
-      color: themeColors.primary,
-      percentage: calculatePercentage(mainBalance),
-    },
-    {
-      name: WALLET_META.savings.name,
-      icon: WALLET_META.savings.icon,
-      balance: savingsBalance,
-      color: themeColors.success,
-      percentage: calculatePercentage(savingsBalance),
-    },
-    {
-      name: WALLET_META.held.name,
-      icon: WALLET_META.held.icon,
-      balance: heldBalance,
-      color: themeColors.warning,
-      percentage: calculatePercentage(heldBalance),
-    },
-  ];
+  const vaults = ALL_WALLETS.map((wallet, index) => {
+    const balance = getWalletBalance(balances, wallet);
+    return {
+      name: WALLET_META[wallet].name,
+      icon: WALLET_META[wallet].icon,
+      balance,
+      color: WALLET_CARD_COLORS[index % WALLET_CARD_COLORS.length],
+      percentage: calculatePercentage(balance),
+    };
+  });
 
   return (
     <TouchableOpacity
@@ -93,7 +87,7 @@ export const VaultCard: React.FC<VaultCardProps> = ({
         <Text style={styles.availableLabel}>Available to Spend</Text>
         <Text style={styles.availableAmount}>{formatAmount(availableBalance)}</Text>
         <Text style={styles.availableHint}>
-          Investment + Savings (Recurring excluded)
+          Total minus Recurring wallet
         </Text>
       </View>
 

@@ -40,6 +40,7 @@ import { colors } from '../../theme/colors';
 import { spacing, borderRadius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { ALL_WALLETS, WALLET_META } from '../../utils/wallets';
 import type { Category, VaultType } from '../../types/models';
 
 type AddSubscriptionNavigationProp = StackNavigationProp<
@@ -49,11 +50,11 @@ type AddSubscriptionNavigationProp = StackNavigationProp<
 
 type AddSubscriptionRouteProp = RouteProp<MainStackParamList, 'AddSubscription'>;
 
-const VAULT_OPTIONS: { value: VaultType; label: string; icon: string }[] = [
-  { value: 'main', label: 'Main Wallet', icon: 'wallet' },
-  { value: 'savings', label: 'Savings', icon: 'piggy-bank' },
-  { value: 'held', label: 'Held Funds', icon: 'lock' },
-];
+const VAULT_OPTIONS: { value: VaultType; label: string; icon: string }[] = ALL_WALLETS.map((wallet) => ({
+  value: wallet,
+  label: WALLET_META[wallet].name,
+  icon: WALLET_META[wallet].icon,
+}));
 
 export default function AddSubscriptionScreen() {
   const navigation = useNavigation<AddSubscriptionNavigationProp>();

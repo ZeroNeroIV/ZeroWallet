@@ -1,6 +1,9 @@
 // SQLite Database Schema Definitions
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
+
+// All wallet keys allowed in vault_type columns (v6+)
+export const VAULT_TYPE_CHECK = `('main', 'savings', 'held', 'salary', 'emergency', 'card', 'physical')`;
 
 // ============================================
 // Table Creation SQL
@@ -55,7 +58,7 @@ export const CREATE_TRANSACTIONS_TABLE = `
     category_id TEXT NOT NULL,
     description TEXT,
     date INTEGER NOT NULL,
-    vault_type TEXT NOT NULL CHECK(vault_type IN ('main', 'savings', 'held')),
+    vault_type TEXT NOT NULL CHECK(vault_type IN ('main', 'savings', 'held', 'salary', 'emergency', 'card', 'physical')),
     is_recurring INTEGER NOT NULL DEFAULT 0,
     recurring_expense_id TEXT,
     subscription_id TEXT,
@@ -80,7 +83,7 @@ export const CREATE_SUBSCRIPTIONS_TABLE = `
     category_id TEXT NOT NULL,
     billing_day INTEGER NOT NULL CHECK(billing_day >= 1 AND billing_day <= 31),
     is_active INTEGER NOT NULL DEFAULT 1,
-    vault_type TEXT NOT NULL CHECK(vault_type IN ('main', 'savings')),
+    vault_type TEXT NOT NULL CHECK(vault_type IN ('main', 'savings', 'held', 'salary', 'emergency', 'card', 'physical')),
     last_processed INTEGER,
     next_processing INTEGER NOT NULL,
     created_at INTEGER NOT NULL,
@@ -100,7 +103,7 @@ export const CREATE_RECURRING_EXPENSES_TABLE = `
     frequency TEXT NOT NULL CHECK(frequency IN ('daily', 'weekly', 'monthly', 'yearly')),
     interval INTEGER NOT NULL DEFAULT 1,
     next_occurrence INTEGER NOT NULL,
-    vault_type TEXT NOT NULL CHECK(vault_type IN ('main', 'savings')),
+    vault_type TEXT NOT NULL CHECK(vault_type IN ('main', 'savings', 'held', 'salary', 'emergency', 'card', 'physical')),
     is_active INTEGER NOT NULL DEFAULT 1,
     auto_deduct INTEGER NOT NULL DEFAULT 1,
     last_processed INTEGER,

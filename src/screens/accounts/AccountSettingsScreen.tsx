@@ -163,7 +163,7 @@ export default function AccountSettingsScreen() {
                 <CurrencyPicker
                     selectedCurrency={selectedCurrency}
                     onSelectCurrency={setSelectedCurrency}
-                    label="Account Currency"
+                    label="Currency"
                 />
                 {selectedCurrency !== account.currency && (
                     <View style={styles.warningBox}>

@@ -5,7 +5,6 @@ import { BaseRepository } from '../BaseRepository';
 import type { Transaction, TransactionInput } from '../../types/models';
 import type { FieldMapping } from '../types';
 import { deleteTransactionImage } from '../../utils/imageStorage';
-import { CategoryRepository } from './CategoryRepository';
 
 const FIELD_MAPPINGS: FieldMapping[] = [
   { field: 'accountId', column: 'account_id' },
@@ -190,51 +189,4 @@ export class TransactionRepository extends BaseRepository<Transaction, Transacti
     return (rows[0]?.count ?? 0) > 0;
   }
 
-  async transferBetweenAccounts(params: {
-    fromAccountId: string;
-    toAccountId: string;
-    userId: string;
-    amount: number;
-    fromVaultType: string;
-    toVaultType: string;
-    description?: string;
-    currency?: string;
-  }): Promise<{ fromTransactionId: string; toTransactionId: string }> {
-    const now = Date.now();
-    const description = params.description || `Transfer between accounts`;
-
-    // Transfer legs must use real categories or they vanish from every list
-    const categoryRepo = new CategoryRepository();
-    const outCategory = await categoryRepo.ensureTransferCategory(params.userId, 'expense');
-    const inCategory = await categoryRepo.ensureTransferCategory(params.userId, 'income');
-
-    // Create expense transaction on source account
-    const fromTx = await this.create({
-      accountId: params.fromAccountId,
-      type: 'expense',
-      amount: params.amount,
-      categoryId: outCategory.id,
-      description: `Transfer out: ${description}`,
-      date: now,
-      vaultType: params.fromVaultType as Transaction['vaultType'],
-      currency: params.currency || 'USD',
-    });
-
-    // Create income transaction on destination account
-    const toTx = await this.create({
-      accountId: params.toAccountId,
-      type: 'income',
-      amount: params.amount,
-      categoryId: inCategory.id,
-      description: `Transfer in: ${description}`,
-      date: now,
-      vaultType: params.toVaultType as Transaction['vaultType'],
-      currency: params.currency || 'USD',
-    });
-
-    return {
-      fromTransactionId: fromTx.id,
-      toTransactionId: toTx.id,
-    };
-  }
 }

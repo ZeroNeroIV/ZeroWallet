@@ -13,6 +13,7 @@
  */
 
 import * as v from '../../utils/validation/primitives';
+import { VAULT_TYPE_VALUES } from '../../domain/vault/VaultType';
 import { CategoryRepository } from '../../database/repositories/CategoryRepository';
 import { TransactionRepository } from '../../database/repositories/TransactionRepository';
 import { GoalRepository } from '../../database/repositories/GoalRepository';
@@ -268,7 +269,7 @@ export class ValidationService {
     const vaultType = params.vaultType
       ? this.validateEnum(
           params.vaultType,
-          ['main', 'savings', 'held'] as const,
+          VAULT_TYPE_VALUES,
           'Vault type'
         )
       : DEFAULT_VAULT_TYPE;
@@ -385,7 +386,7 @@ export class ValidationService {
     const vaultType = params.vaultType
       ? this.validateEnum(
           params.vaultType,
-          ['main', 'savings', 'held'] as const,
+          VAULT_TYPE_VALUES,
           'Vault type'
         )
       : DEFAULT_VAULT_TYPE;
@@ -441,7 +442,7 @@ export class ValidationService {
     const vaultType = params.vaultType
       ? this.validateEnum(
           params.vaultType,
-          ['main', 'savings', 'held'] as const,
+          VAULT_TYPE_VALUES,
           'Vault type'
         )
       : DEFAULT_VAULT_TYPE;

@@ -36,6 +36,7 @@ import { convertCurrency } from '../../services/currencyService';
 import { formatCurrency } from '../../constants/currencies';
 import { CategorySuggestionBanner } from '../../components/transactions/CategorySuggestionBanner';
 import { useAutoCategorize } from '../../hooks/useAutoCategorize';
+import { ALL_WALLETS, walletShortName } from '../../utils/wallets';
 
 type AddTransactionScreenNavigationProp = StackNavigationProp<
   MainStackParamList,
@@ -755,54 +756,26 @@ export const AddTransactionScreen: React.FC = () => {
           <View style={styles.fieldContainer}>
             <Text style={styles.label}>Wallet</Text>
             <View style={styles.vaultOptions}>
-              <TouchableOpacity
-                style={[
-                  styles.vaultButton,
-                  vaultType === 'main' && styles.vaultButtonActive,
-                ]}
-                onPress={() => setVaultType('main')}
-              >
-                <Text
+              {ALL_WALLETS.map((wallet) => (
+                <TouchableOpacity
+                  key={wallet}
                   style={[
-                    styles.vaultButtonText,
-                    vaultType === 'main' && styles.vaultButtonTextActive,
+                    styles.vaultButton,
+                    styles.vaultButtonGrid,
+                    vaultType === wallet && styles.vaultButtonActive,
                   ]}
+                  onPress={() => setVaultType(wallet)}
                 >
-                  Investment
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.vaultButton,
-                  vaultType === 'savings' && styles.vaultButtonActive,
-                ]}
-                onPress={() => setVaultType('savings')}
-              >
-                <Text
-                  style={[
-                    styles.vaultButtonText,
-                    vaultType === 'savings' && styles.vaultButtonTextActive,
-                  ]}
-                >
-                  Savings
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.vaultButton,
-                  vaultType === 'held' && styles.vaultButtonActive,
-                ]}
-                onPress={() => setVaultType('held')}
-              >
-                <Text
-                  style={[
-                    styles.vaultButtonText,
-                    vaultType === 'held' && styles.vaultButtonTextActive,
-                  ]}
-                >
-                  Recurring
-                </Text>
-              </TouchableOpacity>
+                  <Text
+                    style={[
+                      styles.vaultButtonText,
+                      vaultType === wallet && styles.vaultButtonTextActive,
+                    ]}
+                  >
+                    {walletShortName(wallet)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
           </View>
 
@@ -893,6 +866,7 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) => StyleSh
   },
   vaultOptions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.sm,
   },
   vaultButton: {
@@ -903,6 +877,11 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) => StyleSh
     borderWidth: 1,
     borderColor: themeColors.border,
     alignItems: 'center',
+  },
+  vaultButtonGrid: {
+    flexBasis: '30%',
+    flexGrow: 1,
+    paddingVertical: spacing.sm,
   },
   vaultButtonActive: {
     backgroundColor: themeColors.primary + '15',

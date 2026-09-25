@@ -292,6 +292,7 @@ export class DashboardService {
       const { balances: freshBalances } = (await import('../store/accountStore')).useAccountStore.getState();
       const balance = freshBalances[this.accountId] ?? {
         mainBalance: 0, savingsBalance: 0, heldBalance: 0,
+        salaryBalance: 0, emergencyBalance: 0, cardBalance: 0, physicalBalance: 0,
         totalBalance: 0, availableBalance: 0,
       };
       for (const goal of goals) {

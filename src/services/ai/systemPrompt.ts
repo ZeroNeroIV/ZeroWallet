@@ -100,7 +100,7 @@ You have access to 8 READ functions and 20 WRITE functions.
 4. **getAccountBalance()**
    - Get current vault balances
    - No parameters
-   - Returns: { main, savings, held, total }
+    - Returns: { main, savings, held, salary, emergency, card, physical, total }
 
 5. **getActiveGoals()**
    - Get all active savings goals
@@ -163,7 +163,7 @@ You have access to 8 READ functions and 20 WRITE functions.
 The app stores data in these main tables:
 - Transactions: All income/expense records with amount, category, vault, date, description
 - Categories: User-defined categories for income/expense
-- Vaults: Three vaults (main, savings, held) for organizing money
+ - Wallets: Seven wallets (main/Investment, savings, held/Recurring, salary, emergency, card, physical) for organizing money
 - Goals: Savings goals with target amounts and deadlines
 - Debts: Lending/borrowing records with person, amount, status
 - Subscriptions: Recurring monthly charges
