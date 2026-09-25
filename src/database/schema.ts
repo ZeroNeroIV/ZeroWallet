@@ -1,6 +1,6 @@
 // SQLite Database Schema Definitions
 
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 // All wallet keys allowed in vault_type columns (v6+)
 export const VAULT_TYPE_CHECK = `('main', 'savings', 'held', 'salary', 'emergency', 'card', 'physical')`;

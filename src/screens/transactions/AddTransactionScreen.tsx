@@ -34,7 +34,6 @@ import { ImagePickerButton } from '../../components/forms/ImagePickerButton';
 import { compressAndSaveImage, deleteTransactionImage } from '../../utils/imageStorage';
 import { convertCurrency } from '../../services/currencyService';
 import { formatCurrency } from '../../constants/currencies';
-import { CategorySuggestionBanner } from '../../components/transactions/CategorySuggestionBanner';
 import { useAutoCategorize } from '../../hooks/useAutoCategorize';
 import { ALL_WALLETS, walletShortName } from '../../utils/wallets';
 
@@ -93,12 +92,13 @@ export const AddTransactionScreen: React.FC = () => {
   const {
     suggestion: categorySuggestion,
     loading: suggestLoading,
-    error: suggestError,
     clear: clearCategorySuggestion,
     resolve: resolveCategorySuggestion,
-    suggestAndAutoApply: suggestAndAutoApplyCategory,
+    suggest: suggestCategoryFn,
   } = useAutoCategorize(type);
   const [creatingCategory, setCreatingCategory] = useState(false);
+  const [layaStatus, setLayaStatus] = useState<string | null>(null);
+  const [layaPendingName, setLayaPendingName] = useState<string | null>(null);
 
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
 
@@ -248,50 +248,73 @@ export const AddTransactionScreen: React.FC = () => {
     console.log('[AddTransaction] Conversion complete:', result);
   };
 
-  const handleAutoCategorize = async () => {
+  /**
+   * LAYA icon tap: suggest a category for the current description.
+   * - Existing category -> applied immediately, status shows what + confidence
+   * - No match -> category set to Other and a Create button appears below
+   * All outcomes (including errors) are shown inline — nothing is silent.
+   */
+  const handleLayaSuggest = async () => {
     if (!description.trim()) {
-      Alert.alert('Add a description', 'Type a description first so Laya can suggest a category.');
+      setLayaStatus('Type a description first, then tap ✨.');
       return;
     }
     const numericAmount = parseFloat(amount);
-    setCreatingCategory(true);
+    setLayaStatus(null);
+    setLayaPendingName(null);
     try {
-      // Autonomous: LAYA suggests, and creates the category on demand
-      // when the suggestion doesn't exist yet
-      const result = await suggestAndAutoApplyCategory(
+      const outcome = await suggestCategoryFn(
         description,
         Number.isFinite(numericAmount) ? numericAmount : undefined,
         categories,
-        async () => {
-          await loadCategories();
-        },
       );
-      if (result.createdNew && result.category) {
-        setSelectedCategory(result.category);
-        setErrors((prev) => ({ ...prev, category: '' }));
-        clearCategorySuggestion();
-        Alert.alert('Category created', `Laya created "${result.category.name}" and selected it.`);
+      if (!outcome) {
+        setLayaStatus('Laya could not suggest a category. Pick one manually.');
+        return;
       }
-      // Existing-category matches stay visible in the banner for one-tap Apply
-    } catch (error) {
-      console.error('[AddTransaction] Laya auto-categorize failed:', error);
-      Alert.alert('Error', 'Laya could not categorize this transaction');
-    } finally {
-      setCreatingCategory(false);
+      if (outcome.kind === 'match' && outcome.choice.categoryId) {
+        const match = categories.find((c) => c.id === outcome.choice.categoryId);
+        if (match) {
+          setSelectedCategory(match);
+          setErrors((prev) => ({ ...prev, category: '' }));
+          const pct = Math.round(outcome.choice.confidence * 100);
+          setLayaStatus(`✓ ${match.name} · ${pct}% · LAYA`);
+          clearCategorySuggestion();
+          return;
+        }
+      }
+      // No usable match: fall back to Other and offer one-tap creation
+      const other = categories.find(
+        (c) => c.type === type && c.name.toLowerCase() === 'other'
+      );
+      if (other) {
+        setSelectedCategory(other);
+        setErrors((prev) => ({ ...prev, category: '' }));
+      }
+      const proposed =
+        outcome.kind === 'create_new' ? outcome.newCategory.name : outcome.choice.categoryName;
+      setLayaPendingName(proposed);
+      setLayaStatus(`No match — set to Other. Create “${proposed}”?`);
+      clearCategorySuggestion();
+    } catch (error: any) {
+      console.error('[AddTransaction] Laya suggest failed:', error);
+      setLayaStatus(`Laya failed: ${error?.message || 'unknown error'}. Pick manually.`);
     }
   };
 
-  const handleApplySuggestedMatch = (categoryId: string) => {
-    const match = categories.find((c) => c.id === categoryId);
-    if (match) {
-      setSelectedCategory(match);
-      setErrors((prev) => ({ ...prev, category: '' }));
+  /**
+   * One-tap creation of the LAYA-proposed category. Success and failure
+   * are both reported explicitly with the real message.
+   */
+  const handleLayaCreate = async () => {
+    if (!categorySuggestion || categorySuggestion.kind !== 'create_new') {
+      setLayaStatus('Nothing to create — tap ✨ to get a suggestion first.');
+      return;
     }
-    clearCategorySuggestion();
-  };
-
-  const handleCreateSuggestedCategory = async () => {
-    if (!categorySuggestion || categorySuggestion.kind !== 'create_new') return;
+    if (!currentUser) {
+      setLayaStatus('Sign in again to create categories.');
+      return;
+    }
     setCreatingCategory(true);
     try {
       const created = await resolveCategorySuggestion(categorySuggestion, categories);
@@ -299,12 +322,17 @@ export const AddTransactionScreen: React.FC = () => {
         await loadCategories();
         setSelectedCategory(created);
         setErrors((prev) => ({ ...prev, category: '' }));
+        setLayaPendingName(null);
+        setLayaStatus(`✓ Created “${created.name}” and selected it.`);
         clearCategorySuggestion();
-        Alert.alert('Category created', `"${created.name}" was created and selected.`);
+      } else {
+        setLayaStatus('Could not create the category. Try again.');
       }
-    } catch (error) {
-      console.error('[AddTransaction] Failed to create suggested category:', error);
-      Alert.alert('Error', 'Failed to create the suggested category');
+    } catch (error: any) {
+      console.error('[AddTransaction] Laya create failed:', error);
+      const message = error?.userMessage || error?.message || 'Failed to create the suggested category';
+      setLayaStatus(`Create failed: ${message}`);
+      Alert.alert('Create Failed', message);
     } finally {
       setCreatingCategory(false);
     }
@@ -625,6 +653,7 @@ export const AddTransactionScreen: React.FC = () => {
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.content}>
           {/* Type Toggle */}
+          <Text style={styles.sectionTitle}>Type</Text>
           <View style={styles.typeToggle}>
             <TouchableOpacity
               style={[
@@ -635,6 +664,8 @@ export const AddTransactionScreen: React.FC = () => {
                 setType('expense');
                 setSelectedCategory(undefined);
                 clearCategorySuggestion();
+                setLayaStatus(null);
+                setLayaPendingName(null);
               }}
             >
               <Text
@@ -655,6 +686,8 @@ export const AddTransactionScreen: React.FC = () => {
                 setType('income');
                 setSelectedCategory(undefined);
                 clearCategorySuggestion();
+                setLayaStatus(null);
+                setLayaPendingName(null);
               }}
             >
               <Text
@@ -669,66 +702,76 @@ export const AddTransactionScreen: React.FC = () => {
           </View>
 
           {/* Amount Input */}
+          <Text style={styles.sectionTitle}>Amount</Text>
           <AmountInput
             value={amount}
             onChangeText={setAmount}
-            label="Amount"
+            label=""
             error={errors.amount}
             enableCalculator={true}
           />
 
           {/* Description Input */}
+          <Text style={styles.sectionTitle}>Description</Text>
           <Input
-            label="Description (Optional)"
+            label=""
             value={description}
             onChangeText={setDescription}
-            placeholder="Add a note..."
+            placeholder="Add a note... (optional)"
             multiline
             numberOfLines={3}
           />
 
-          {/* Category Picker */}
+          {/* Category Picker with LAYA icon */}
+          <View style={styles.categoryLabelRow}>
+            <Text style={styles.sectionTitle}>Category</Text>
+            <TouchableOpacity
+              style={styles.layaIconButton}
+              onPress={handleLayaSuggest}
+              disabled={suggestLoading || creatingCategory}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Auto-categorize with Laya"
+            >
+              {suggestLoading ? (
+                <Icon name="loading" size={20} color={themeColors.primary} />
+              ) : (
+                <Icon name="sparkles" size={20} color={themeColors.primary} />
+              )}
+            </TouchableOpacity>
+          </View>
           <CategoryPicker
             categories={categories}
             selectedCategory={selectedCategory}
-            onSelectCategory={setSelectedCategory}
+            onSelectCategory={(c) => {
+              setSelectedCategory(c);
+              setLayaPendingName(null);
+            }}
             type={type}
-            label="Category"
+            label=""
             error={errors.category}
           />
-
-          {/* Laya auto-categorize */}
-          <TouchableOpacity
-            style={styles.suggestButton}
-            onPress={handleAutoCategorize}
-            disabled={suggestLoading || creatingCategory}
-            activeOpacity={0.8}
-          >
-            <Icon name="sparkles" size={18} color={themeColors.primary} />
-            <Text style={styles.suggestButtonText}>
-              {suggestLoading ? 'Laya is thinking…' : 'Auto-categorize with Laya'}
-            </Text>
-          </TouchableOpacity>
-          <Text style={styles.suggestHint}>
-            Powered by LAYA · works offline, no setup needed.
-          </Text>
-          {suggestError ? <Text style={styles.suggestError}>{suggestError}</Text> : null}
-          {categorySuggestion || suggestLoading ? (
-            <CategorySuggestionBanner
-              suggestion={categorySuggestion}
-              loading={suggestLoading}
-              creating={creatingCategory}
-              onApplyMatch={handleApplySuggestedMatch}
-              onCreateNew={handleCreateSuggestedCategory}
-              onDismiss={clearCategorySuggestion}
-            />
+          {layaStatus ? <Text style={styles.layaStatus}>{layaStatus}</Text> : null}
+          {layaPendingName ? (
+            <TouchableOpacity
+              style={[styles.createCategoryButton, creatingCategory && styles.buttonDisabled]}
+              onPress={handleLayaCreate}
+              disabled={creatingCategory}
+              activeOpacity={0.8}
+            >
+              <Icon name="plus" size={18} color="#FFF" />
+              <Text style={styles.createCategoryText}>
+                {creatingCategory ? 'Creating…' : `Create “${layaPendingName}”`}
+              </Text>
+            </TouchableOpacity>
           ) : null}
 
           {/* Currency Picker */}
+          <Text style={styles.sectionTitle}>Currency</Text>
           <CurrencyPicker
             selectedCurrency={selectedCurrency}
             onSelectCurrency={setSelectedCurrency}
-            label="Currency"
+            label=""
           />
 
           {/* Currency Conversion Info & Button */}
@@ -754,7 +797,7 @@ export const AddTransactionScreen: React.FC = () => {
 
           {/* Wallet Picker */}
           <View style={styles.fieldContainer}>
-            <Text style={styles.label}>Wallet</Text>
+            <Text style={styles.sectionTitle}>Wallet</Text>
             <View style={styles.vaultOptions}>
               {ALL_WALLETS.map((wallet) => (
                 <TouchableOpacity
@@ -780,19 +823,46 @@ export const AddTransactionScreen: React.FC = () => {
           </View>
 
           {/* Date Picker */}
+          <Text style={styles.sectionTitle}>Date</Text>
           <DatePicker
             value={date}
             onChange={setDate}
-            label="Date"
+            label=""
             maximumDate={new Date()}
           />
 
           {/* Image Picker */}
+          <Text style={styles.sectionTitle}>Receipts</Text>
           <ImagePickerButton
             onImagesChanged={setSelectedImageUris}
             selectedImageUris={selectedImageUris}
             disabled={loading}
           />
+
+          {/* Summary */}
+          {amount && parseFloat(amount) > 0 && selectedCategory && (
+            <View style={styles.summary}>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Type</Text>
+                <Text style={styles.summaryValue}>{type === 'income' ? 'Income' : 'Expense'}</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Category</Text>
+                <Text style={styles.summaryValue}>{selectedCategory.name}</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Wallet</Text>
+                <Text style={styles.summaryValue}>{walletShortName(vaultType)}</Text>
+              </View>
+              <View style={styles.summaryDivider} />
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Amount</Text>
+                <Text style={styles.summaryAmount}>
+                  {parseFloat(amount).toFixed(3)} {selectedCurrency}
+                </Text>
+              </View>
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -864,6 +934,46 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) => StyleSh
     color: themeColors.textSecondary,
     marginBottom: spacing.xs,
   },
+  sectionTitle: {
+    ...typography.body,
+    fontWeight: '600',
+    color: themeColors.text,
+    marginBottom: spacing.sm,
+    marginTop: spacing.md,
+  },
+  summary: {
+    backgroundColor: themeColors.surface,
+    padding: spacing.md,
+    borderRadius: 12,
+    marginTop: spacing.lg,
+    borderWidth: 1,
+    borderColor: themeColors.border,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.xs,
+  },
+  summaryLabel: {
+    ...typography.body,
+    color: themeColors.textSecondary,
+  },
+  summaryValue: {
+    ...typography.body,
+    fontWeight: '600',
+    color: themeColors.text,
+  },
+  summaryAmount: {
+    ...typography.body,
+    fontWeight: '700',
+    color: themeColors.primary,
+  },
+  summaryDivider: {
+    height: 1,
+    backgroundColor: themeColors.border,
+    marginVertical: spacing.sm,
+  },
   vaultOptions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -926,32 +1036,39 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) => StyleSh
     marginTop: spacing.xs,
     textAlign: 'center',
   },
-  suggestButton: {
+  categoryLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.xs,
+  },
+  layaIconButton: {
+    padding: spacing.xs,
+    borderRadius: 8,
+  },
+  layaStatus: {
+    ...typography.caption,
+    color: themeColors.textSecondary,
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  createCategoryButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
+    backgroundColor: themeColors.primary,
+    borderRadius: 12,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: themeColors.primary + '40',
-    backgroundColor: themeColors.primary + '10',
-    marginBottom: spacing.xs,
+    marginBottom: spacing.md,
   },
-  suggestButtonText: {
+  createCategoryText: {
     ...typography.body,
-    color: themeColors.primary,
     fontWeight: '700',
+    color: '#FFF',
   },
-  suggestHint: {
-    ...typography.caption,
-    color: themeColors.textSecondary,
-    marginBottom: spacing.sm,
-  },
-  suggestError: {
-    ...typography.caption,
-    color: '#EF4444',
-    marginBottom: spacing.sm,
+  buttonDisabled: {
+    opacity: 0.6,
   },
 });

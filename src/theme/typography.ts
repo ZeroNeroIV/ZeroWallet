@@ -8,16 +8,16 @@ const baseTypography = {
     bold: undefined,
   },
 
-  // Font Sizes
+  // Font Sizes (compact scale)
   fontSize: {
-    xs: 12,
-    sm: 14,
-    md: 16,
-    lg: 18,
-    xl: 20,
-    xxl: 24,
-    xxxl: 32,
-    huge: 48,
+    xs: 11,
+    sm: 13,
+    md: 15,
+    lg: 17,
+    xl: 19,
+    xxl: 22,
+    xxxl: 30,
+    huge: 44,
   },
 
   // Font Weights

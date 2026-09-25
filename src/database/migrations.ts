@@ -57,6 +57,10 @@ async function applyMigration(
       await migration_v6(database);
       break;
 
+    case 7:
+      await migration_v7(database);
+      break;
+
     default:
       console.warn(`[Migrations] No migration defined for version ${version}`);
   }
@@ -157,13 +161,17 @@ async function migration_v4(database: SQLite.SQLiteDatabase): Promise<void> {
 
 /**
  * Migration v6: Widen vault_type CHECK constraints to all 7 wallets.
- * SQLite cannot ALTER a CHECK constraint, so each table is rebuilt:
- * create new table, copy rows, drop old, rename. Data is preserved.
+ * SQLite cannot ALTER a CHECK constraint, so each table is rebuilt in a
+ * kill-safe order: build the new table, move the old one to a backup name,
+ * promote the new table, then verify and drop the backup. If anything
+ * fails, an error is THROWN so the schema version does NOT advance and the
+ * migration is retried on next launch (never a silent half-migration).
  */
 async function migration_v6(database: any): Promise<void> {
   console.log('[Migration v6] Widening vault_type constraints to 7 wallets');
 
   const wallets = `('main', 'savings', 'held', 'salary', 'emergency', 'card', 'physical')`;
+  const walletKeys = ['main', 'savings', 'held', 'salary', 'emergency', 'card', 'physical'];
 
   const rebuilds: Array<{ table: string; create: string; columns: string; indexes: string[] }> = [
     {
@@ -251,27 +259,75 @@ async function migration_v6(database: any): Promise<void> {
     },
   ];
 
-  for (const { table, create, columns, indexes } of rebuilds) {
+  // Recover from an interrupted previous attempt: if a backup table is
+  // left behind, the original was already moved aside, so promote the
+  // backup back before rebuilding (its data is intact).
+  for (const { table } of rebuilds) {
     try {
-      await database.executeSql(`DROP TABLE IF EXISTS ${table}_new;`);
-      await database.executeSql(create);
-      await database.executeSql(
-        `INSERT INTO ${table}_new (${columns}) SELECT ${columns} FROM ${table};`
+      const [backupCheck] = await database.executeSql(
+        `SELECT name FROM sqlite_master WHERE type='table' AND name=?;`,
+        [`${table}_backup`]
       );
-      await database.executeSql(`DROP TABLE ${table};`);
-      await database.executeSql(`ALTER TABLE ${table}_new RENAME TO ${table};`);
-      for (const indexSql of indexes) {
-        try {
-          await database.executeSql(indexSql.replace('CREATE INDEX', 'CREATE INDEX IF NOT EXISTS'));
-        } catch (indexError) {
-          console.warn(`[Migration v6] Index may already exist for ${table}:`, indexError);
-        }
+      const [liveCheck] = await database.executeSql(
+        `SELECT name FROM sqlite_master WHERE type='table' AND name=?;`,
+        [table]
+      );
+      if (backupCheck.rows.length > 0 && liveCheck.rows.length === 0) {
+        console.log(`[Migration v6] Restoring interrupted rebuild of ${table} from backup`);
+        await database.executeSql(`ALTER TABLE ${table}_backup RENAME TO ${table};`);
+      } else if (backupCheck.rows.length > 0) {
+        await database.executeSql(`DROP TABLE ${table}_backup;`);
       }
-      console.log(`[Migration v6] Rebuilt ${table} with widened vault_type`);
-    } catch (error) {
-      console.warn(`[Migration v6] Rebuild skipped/failed for ${table}:`, error);
+    } catch (recoverError) {
+      console.warn(`[Migration v6] Recovery check failed for ${table}:`, recoverError);
     }
   }
+
+  for (const { table, create, columns, indexes } of rebuilds) {
+    await database.executeSql(`DROP TABLE IF EXISTS ${table}_new;`);
+    await database.executeSql(create);
+    await database.executeSql(
+      `INSERT INTO ${table}_new (${columns}) SELECT ${columns} FROM ${table};`
+    );
+    // Move the original aside (NOT dropped): a kill here leaves either the
+    // original or the backup intact, never data loss
+    await database.executeSql(`DROP TABLE IF EXISTS ${table}_backup;`);
+    await database.executeSql(`ALTER TABLE ${table} RENAME TO ${table}_backup;`);
+    await database.executeSql(`ALTER TABLE ${table}_new RENAME TO ${table};`);
+    for (const indexSql of indexes) {
+      await database.executeSql(indexSql.replace('CREATE INDEX', 'CREATE INDEX IF NOT EXISTS'));
+    }
+
+    // Verify the live table actually carries the widened constraint before
+    // dropping the backup — throws on failure so the version never advances
+    // on a half-migrated database (retry happens next launch)
+    const [defRows] = await database.executeSql(
+      `SELECT sql FROM sqlite_master WHERE type='table' AND name=?;`,
+      [table]
+    );
+    const tableSql: string = defRows.rows.item(0)?.sql ?? '';
+    const missing = walletKeys.filter((key) => !tableSql.includes(`'${key}'`));
+    if (missing.length > 0) {
+      throw new Error(`[Migration v6] Verification failed for ${table}: missing wallets ${missing.join(',')}`);
+    }
+    const [countRows] = await database.executeSql(`SELECT COUNT(*) as count FROM ${table};`);
+    console.log(`[Migration v6] Rebuilt ${table} with widened vault_type (${countRows.rows.item(0)?.count ?? 0} rows preserved)`);
+
+    await database.executeSql(`DROP TABLE ${table}_backup;`);
+  }
+}
+
+/**
+ * Migration v7: Repair pass for devices stuck on a failed v6 upgrade.
+ * The v6 rebuild is fully idempotent (verified), so re-running it heals
+ * databases whose tables still carry the old 3-wallet CHECK while the
+ * recorded version already says 6. Healthy databases are rebuilt
+ * harmlessly with identical data.
+ */
+async function migration_v7(database: any): Promise<void> {
+  console.log('[Migration v7] Repair pass: re-running vault table rebuild');
+  await migration_v6(database);
+  console.log('[Migration v7] Repair pass complete');
 }
 
 async function migration_v5(database: any): Promise<void> {

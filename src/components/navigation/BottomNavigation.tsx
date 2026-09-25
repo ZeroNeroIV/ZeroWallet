@@ -20,6 +20,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { spacing } from '../../theme/spacing';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { useSettingsStore } from '../../store/settingsStore';
+import { QuickAddSheet, type QuickAddAction } from './QuickAddSheet';
 import { MainStackParamList } from '../../types/navigation';
 
 type NavigationProp = StackNavigationProp<MainStackParamList>;
@@ -44,11 +45,23 @@ export const BottomNavigation: React.FC = React.memo(() => {
   const route = useRoute();
   const themeColors = useThemeColors();
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
+  const [showQuickAdd, setShowQuickAdd] = React.useState(false);
+
+  const handleQuickAdd = useCallback((action: QuickAddAction) => {
+    setShowQuickAdd(false);
+    if (action === 'expense') {
+      navigation.navigate('AddTransaction', { type: 'expense' });
+    } else if (action === 'income') {
+      navigation.navigate('AddTransaction', { type: 'income' });
+    } else {
+      navigation.navigate('Transfer');
+    }
+  }, [navigation]);
 
   const handleTabPress = useCallback((tab: TabConfig) => {
     if (tab.isCenter) {
-      // Center button - navigate to AddTransaction
-      navigation.navigate('AddTransaction', {});
+      // Center button - open the quick-add sheet (expense / income / transfer)
+      setShowQuickAdd(true);
       return;
     }
 
@@ -79,6 +92,11 @@ export const BottomNavigation: React.FC = React.memo(() => {
 
   return (
     <View style={styles.container}>
+      <QuickAddSheet
+        visible={showQuickAdd}
+        onClose={() => setShowQuickAdd(false)}
+        onSelect={handleQuickAdd}
+      />
       {tabs.map((tab) => {
         const active = isActive(tab);
 

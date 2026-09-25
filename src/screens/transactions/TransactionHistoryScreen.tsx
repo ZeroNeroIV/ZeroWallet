@@ -30,6 +30,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { TransactionItem } from '../../components/transactions/TransactionItem';
+import { QuickAddSheet, type QuickAddAction } from '../../components/navigation/QuickAddSheet';
 import { spacing, borderRadius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { MainStackParamList } from '../../types/navigation';
@@ -74,6 +75,7 @@ export const TransactionHistoryScreen: React.FC = () => {
   const themeColors = useThemeColors();
 
   const [transactions, setTransactions] = useState<TransactionWithCategory[]>([]);
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [accountCurrency, setAccountCurrency] = useState('USD');
@@ -165,6 +167,19 @@ export const TransactionHistoryScreen: React.FC = () => {
 
   const handleAdd = (initialDate?: number) => {
     navigation.navigate('AddTransaction', initialDate ? { initialDate } : {});
+  };
+
+  const handleQuickAdd = (action: QuickAddAction) => {
+    setShowQuickAdd(false);
+    if (action === 'transfer') {
+      navigation.navigate('Transfer');
+      return;
+    }
+    const initialDate = view === 'calendar' ? selectedDateTimestamp : undefined;
+    navigation.navigate(
+      'AddTransaction',
+      initialDate ? { type: action, initialDate } : { type: action },
+    );
   };
 
   const formatMoney = useCallback((value: number) => {
@@ -580,11 +595,17 @@ export const TransactionHistoryScreen: React.FC = () => {
       {/* FAB */}
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: themeColors.primary }]}
-        onPress={() => handleAdd(view === 'calendar' ? selectedDateTimestamp : undefined)}
+        onPress={() => setShowQuickAdd(true)}
         activeOpacity={0.8}
       >
         <MaterialCommunityIcons name="plus" size={28} color="#fff" />
       </TouchableOpacity>
+
+      <QuickAddSheet
+        visible={showQuickAdd}
+        onClose={() => setShowQuickAdd(false)}
+        onSelect={handleQuickAdd}
+      />
     </View>
   );
 };
