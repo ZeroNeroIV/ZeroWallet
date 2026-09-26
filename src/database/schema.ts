@@ -144,6 +144,20 @@ export const CREATE_TRANSACTION_IMAGES_TABLE = `
   );
 `;
 
+export const CREATE_WALLETS_TABLE = `
+  CREATE TABLE IF NOT EXISTS wallets (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    icon TEXT NOT NULL,
+    color TEXT NOT NULL,
+    is_default INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+  );
+`;
+
 export const CREATE_DEBTS_TABLE = `
   CREATE TABLE IF NOT EXISTS debts (
     id TEXT PRIMARY KEY,
@@ -202,6 +216,9 @@ export const CREATE_INDEXES = [
   'CREATE INDEX IF NOT EXISTS idx_debts_status ON debts(status);',
   'CREATE INDEX IF NOT EXISTS idx_debts_due_date ON debts(due_date);',
   'CREATE INDEX IF NOT EXISTS idx_debts_type ON debts(type);',
+
+  // Wallets indexes
+  'CREATE INDEX IF NOT EXISTS idx_wallets_account ON wallets(account_id);',
 ];
 
 // ============================================
@@ -218,4 +235,5 @@ export const ALL_TABLES = [
   CREATE_RECURRING_EXPENSES_TABLE,
   CREATE_GOALS_TABLE,
   CREATE_DEBTS_TABLE,
+  CREATE_WALLETS_TABLE,
 ];

@@ -43,26 +43,35 @@ export const useAccountStore = create<AccountState>()(
           // Recalculate computed fields (missing wallet keys default to 0
           // for balances persisted before the wallet existed). Every wallet
           // value is rounded to 3 decimals so float dust can never break
-          // exact-amount comparisons (e.g. transfer MAX).
-          const nb = newBalance as Record<string, number>;
-          newBalance.mainBalance = roundMoney(nb.mainBalance ?? 0);
-          newBalance.savingsBalance = roundMoney(nb.savingsBalance ?? 0);
-          newBalance.heldBalance = roundMoney(nb.heldBalance ?? 0);
-          nb.salaryBalance = roundMoney(nb.salaryBalance ?? 0);
-          nb.emergencyBalance = roundMoney(nb.emergencyBalance ?? 0);
-          nb.cardBalance = roundMoney(nb.cardBalance ?? 0);
-          nb.physicalBalance = roundMoney(nb.physicalBalance ?? 0);
-
-          newBalance.totalBalance = roundMoney(
-            newBalance.mainBalance +
-            newBalance.savingsBalance +
-            newBalance.heldBalance +
-            nb.salaryBalance +
-            nb.emergencyBalance +
-            nb.cardBalance +
-            nb.physicalBalance
-          );
-          newBalance.availableBalance = roundMoney(newBalance.totalBalance - newBalance.heldBalance);
+          // exact-amount comparisons (e.g. transfer MAX). Totals sum every
+          // *Balance key dynamically so custom wallets are included.
+          const nb = newBalance as unknown as Record<string, number>;
+          // Keep the 7 built-in keys present even on legacy shapes
+          for (const key of [
+            'mainBalance',
+            'savingsBalance',
+            'heldBalance',
+            'salaryBalance',
+            'emergencyBalance',
+            'cardBalance',
+            'physicalBalance',
+          ]) {
+            if (!(key in nb)) nb[key] = 0;
+          }
+          let total = 0;
+          for (const key of Object.keys(nb).filter(
+            (k) =>
+              k !== 'totalBalance' &&
+              k !== 'availableBalance' &&
+              k !== 'lastUpdated' &&
+              k !== 'accountId' &&
+              k.endsWith('Balance')
+          )) {
+            nb[key] = roundMoney(nb[key] ?? 0);
+            total += nb[key];
+          }
+          newBalance.totalBalance = roundMoney(total);
+          newBalance.availableBalance = roundMoney(total - (nb.heldBalance ?? 0));
 
           return {
             balances: {

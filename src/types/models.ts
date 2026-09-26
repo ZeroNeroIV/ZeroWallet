@@ -56,7 +56,8 @@ export type VaultType =
   | 'salary'
   | 'emergency'
   | 'card'
-  | 'physical';
+  | 'physical'
+  | (string & {});
 
 export interface Transaction {
   id: string; // UUID
@@ -108,6 +109,23 @@ export interface Category {
 }
 
 export type CategoryInput = Omit<Category, 'id' | 'createdAt'>;
+
+// ============================================
+// Wallets
+// ============================================
+
+export interface Wallet {
+  id: string; // UUID, or a fixed vault key ('main', 'savings', ...) for defaults
+  accountId: string; // FK to Account
+  name: string;
+  icon: string; // Icon name from react-native-vector-icons
+  color: string; // Hex color
+  isDefault: boolean; // Built-in wallets (cannot delete, can rename)
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type WalletInput = Omit<Wallet, 'id' | 'createdAt' | 'updatedAt'>;
 
 // ============================================
 // Subscriptions

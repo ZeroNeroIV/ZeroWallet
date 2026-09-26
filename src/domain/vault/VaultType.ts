@@ -5,7 +5,8 @@ export type VaultTypeString =
   | 'salary'
   | 'emergency'
   | 'card'
-  | 'physical';
+  | 'physical'
+  | (string & {});
 
 export const VAULT_TYPE_VALUES: readonly VaultTypeString[] = [
   'main',
@@ -17,7 +18,7 @@ export const VAULT_TYPE_VALUES: readonly VaultTypeString[] = [
   'physical',
 ] as const;
 
-const KEYS: Record<VaultTypeString, keyof AccountBalanceShape> = {
+const KEYS: Record<string, keyof AccountBalanceShape> = {
   main: 'mainBalance',
   savings: 'savingsBalance',
   held: 'heldBalance',
@@ -26,6 +27,15 @@ const KEYS: Record<VaultTypeString, keyof AccountBalanceShape> = {
   card: 'cardBalance',
   physical: 'physicalBalance',
 };
+
+/**
+ * Purpose: Derive the balance field name for any wallet id.
+ * The 7 built-in wallets use fixed fields; custom wallets (ids like
+ * 'w_abc123') use `<id>Balance` so no schema change is ever needed.
+ */
+export function walletBalanceKey(vault: string): string {
+  return KEYS[vault] ?? `${vault}Balance`;
+}
 
 export interface AccountBalanceShape {
   mainBalance: number;
@@ -69,13 +79,14 @@ export class VaultType {
   };
 
   static parse(s: string): VaultType {
+    if (!s || typeof s !== 'string') throw new Error(`Invalid vault type: '${s}'.`);
     const vt = VaultType.ALL[s as VaultTypeString];
-    if (!vt) throw new Error(`Invalid vault type: '${s}'. Must be one of: ${VAULT_TYPE_VALUES.join(', ')}.`);
-    return vt;
+    // Custom wallets are valid too — they resolve to generic instances
+    return vt ?? new VaultType(s);
   }
 
   get key(): keyof AccountBalanceShape {
-    return KEYS[this.type];
+    return (KEYS[this.type] ?? `${this.type}Balance`) as keyof AccountBalanceShape;
   }
 
   getBalance(balances: AccountBalanceShape): number {

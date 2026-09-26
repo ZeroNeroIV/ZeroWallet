@@ -58,6 +58,28 @@ const KEYWORD_ICON_HINTS: Array<{ keywords: string[]; icon: string }> = [
   { keywords: ['barber', 'salon', 'haircut', 'spa'], icon: 'content-cut' },
   { keywords: ['baby', 'kids', 'toy'], icon: 'baby-face-outline' },
   { keywords: ['pet', 'vet'], icon: 'paw' },
+  { keywords: ['desk', 'chair', 'sofa', 'furniture', 'table', 'bed'], icon: 'sofa' },
+  { keywords: ['shirt', 'pants', 'shoes', 'dress', 'clothing', 'jacket'], icon: 'tshirt-crew' },
+  { keywords: ['phone', 'laptop', 'electronics', 'charger', 'camera'], icon: 'laptop' },
+];
+
+// General concepts: specific things roll up into a broad category name
+// (e.g. desk OR chair -> Furniture). Each concept optionally maps to an
+// existing default category; otherwise LAYA matches/creates by concept name.
+const GENERALIZATIONS: Array<{ concept: string; icon: string; category?: string; keywords: string[] }> = [
+  { concept: 'Furniture', icon: 'sofa', keywords: ['desk', 'chair', 'sofa', 'couch', 'table', 'bed', 'mattress', 'wardrobe', 'closet', 'shelf', 'shelves', 'lamp', 'furniture', 'drawer', 'cabinet', 'curtain', 'rug', 'carpet', 'pillow', 'blanket', 'office chair'] },
+  { concept: 'Clothing', icon: 'tshirt-crew', keywords: ['shirt', 'pants', 'jeans', 'dress', 'shoes', 'sneakers', 'jacket', 'coat', 'sweater', 'tshirt', 't-shirt', 'skirt', 'suit', 'tie', 'clothing', 'apparel', 'boutique', 'tailor', 'socks', 'hat', 'cap', 'bag', 'handbag', 'wallet'] },
+  { concept: 'Electronics', icon: 'laptop', keywords: ['phone', 'mobile', 'laptop', 'charger', 'cable', 'headphones', 'earbuds', 'tablet', 'camera', 'monitor', 'keyboard', 'mouse', 'speaker', 'television', 'console', 'electronics', 'gadget', 'smartwatch', 'printer', 'router', 'hard drive', 'ssd'] },
+  { concept: 'Groceries', icon: 'cart', category: 'Food & Dining', keywords: ['produce', 'meat', 'milk', 'bread', 'eggs', 'cheese', 'vegetable', 'fruit', 'grocery', 'groceries', 'butcher', 'dairy'] },
+  { concept: 'Transport', icon: 'car', category: 'Transportation', keywords: ['car wash', 'carwash', 'toll', 'parking ticket', 'license', 'registration', 'mechanic', 'oil change', 'tires'] },
+  { concept: 'Pets', icon: 'paw', keywords: ['pet', 'dog', 'cat', 'vet', 'puppy', 'kitten', 'bird', 'fish tank'] },
+  { concept: 'Kids', icon: 'baby-face-outline', keywords: ['baby', 'diaper', 'kids', 'toy', 'toys', 'child', 'stroller', 'school bus'] },
+  { concept: 'Beauty', icon: 'content-cut', keywords: ['salon', 'barber', 'cosmetics', 'perfume', 'skincare', 'haircut', 'spa', 'manicure', 'makeup', 'beauty'] },
+  { concept: 'Sports', icon: 'dumbbell', keywords: ['football', 'basketball', 'tennis', 'swimming', 'sport', 'sports', 'stadium', 'jersey', 'ball', 'racket'] },
+  { concept: 'Home', icon: 'home', keywords: ['cleaning', 'detergent', 'repair', 'plumber', 'electrician', 'decor', 'kitchen', 'bathroom', 'paint', 'faucet', 'locksmith'] },
+  { concept: 'Travel', icon: 'airplane', keywords: ['hotel', 'vacation', 'trip', 'booking', 'travel', 'resort', 'passport', 'visa', 'luggage', 'tour'] },
+  { concept: 'Finance', icon: 'bank', keywords: ['bank', 'fee', 'fees', 'atm', 'commission', 'tax', 'insurance', 'loan', 'interest charge', 'overdraft'] },
+  { concept: 'Work', icon: 'briefcase', keywords: ['office', 'supplies', 'software', 'license key', 'coworking', 'printing'] },
 ];
 
 // Keyword -> existing default category name (LAYA local matching)
@@ -196,7 +218,55 @@ function layaMatch(
     }
   }
 
-  // No good match -> propose on-demand category instead of using Other
+  // No direct match -> generalize: roll specifics up to a broad concept
+  // (desk OR chair -> Furniture), then prefer an already-created category
+  // before proposing anything new.
+  let generalized: { concept: string; icon: string; category?: string; hits: number } | null = null;
+  for (const entry of GENERALIZATIONS) {
+    const hits = entry.keywords.filter((k) => haystack.includes(k)).length;
+    if (hits > 0 && (!generalized || hits > generalized.hits)) {
+      generalized = { concept: entry.concept, icon: entry.icon, category: entry.category, hits };
+    }
+  }
+
+  if (generalized) {
+    // 1. Concept maps to a known default -> match it when present
+    // 2. Concept name matches a user-created category -> match that
+    const candidate = generalized.category ?? generalized.concept;
+    const matched = matchCategoryName(candidate, categories);
+    if (matched && matched.name.toLowerCase() !== 'other') {
+      return {
+        kind: 'match',
+        choice: {
+          categoryName: matched.name,
+          categoryId: matched.id,
+          confidence: 0.6,
+          reasoning: `LAYA generalized "${request.description}" to ${matched.name}.`,
+        },
+        shouldCreateNew: false,
+        newCategory: null,
+        source: 'laya',
+      };
+    }
+    // 3. Nothing suitable exists -> propose the GENERAL concept as new
+    if (allowCreateNew) {
+      return {
+        kind: 'create_new',
+        choice: {
+          categoryName: otherCategory?.name ?? categories[0].name,
+          categoryId: otherCategory?.id ?? null,
+          confidence: 0.45,
+          reasoning: `LAYA generalized "${request.description}" to ${generalized.concept}.`,
+        },
+        shouldCreateNew: true,
+        newCategory: buildProposal(generalized.concept, request.description, generalized.icon),
+        source: 'laya',
+      };
+    }
+  }
+
+  // No good match and no concept -> propose on-demand category from the
+  // description instead of using Other
   if (allowCreateNew) {
     const name = deriveCategoryName(request.description);
     if (name.toLowerCase() !== 'other') {

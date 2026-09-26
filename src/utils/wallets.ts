@@ -10,7 +10,7 @@
  * Side effects: None
  */
 
-import { VAULT_TYPE_VALUES } from '../domain/vault/VaultType';
+import { VAULT_TYPE_VALUES, walletBalanceKey } from '../domain/vault/VaultType';
 import type { VaultType } from '../types/models';
 
 export interface WalletMeta {
@@ -91,12 +91,10 @@ export function walletShortName(vault: VaultType): string {
 /** Read a wallet balance from any balance-like object (tolerates legacy shapes) */
 export function getWalletBalance(
   balances: Record<string, number | undefined> | undefined,
-  vault: VaultType,
+  vault: string,
 ): number {
   if (!balances) return 0;
-  const key = `${vault}Balance`;
-  // main -> mainBalance, emergency -> emergencyBalance, etc.
-  return balances[key] ?? 0;
+  return balances[walletBalanceKey(vault)] ?? 0;
 }
 
 export function ordinalDay(day: number): string {
