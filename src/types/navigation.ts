@@ -42,12 +42,15 @@ export type MainStackParamList = {
     mode: 'edit';
     categoryId: string;
   };
-  SubscriptionsScreen: undefined;
+  Recurring:
+    | {
+        tab?: 'subscriptions' | 'recurring';
+      }
+    | undefined;
   AddSubscription: undefined | {
     mode: 'edit';
     subscriptionId: string;
   };
-  RecurringExpenses: undefined;
   AddRecurring: undefined | {
     mode: 'edit';
     recurringId: string;
@@ -55,6 +58,7 @@ export type MainStackParamList = {
   Settings: undefined;
   SalarySettings: undefined;
   SmartNudges: undefined;
+  Wallets: undefined;
   SecuritySettings: undefined;
   GoalsScreen: undefined;
   CreateGoal: Record<string, never>;

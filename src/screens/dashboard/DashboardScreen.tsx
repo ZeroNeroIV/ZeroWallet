@@ -25,6 +25,7 @@ import { WealthAnalyticsCard } from '../../components/dashboard/WealthAnalyticsC
 import { MovementsList } from '../../components/dashboard/MovementsList';
 import { BottomNavigation } from '../../components/navigation/BottomNavigation';
 import { DashboardCardsGrid } from '../../components/dashboard/DashboardCardsGrid';
+import { useWallets } from '../../hooks/useWallets';
 import { IncomeExpenseChart } from '../../components/dashboard/IncomeExpenseChart';
 import { SpendingDonutChart } from '../../components/dashboard/SpendingDonutChart';
 import { GoalsProgressCard } from '../../components/dashboard/GoalsProgressCard';
@@ -40,6 +41,7 @@ export const DashboardScreen: React.FC = () => {
   const themeColors = useThemeColors();
 
   const [refreshing, setRefreshing] = useState(false);
+  const { wallets } = useWallets();
   const [data, setData] = useState<DashboardData | null>(null);
   const [analyticsTab, setAnalyticsTab] = useState<'income' | 'expense' | 'combined'>('combined');
 
@@ -121,6 +123,7 @@ export const DashboardScreen: React.FC = () => {
                 <GradientBalanceCard
                   totalBalance={data.balance.totalBalance}
                   balances={data.balance}
+                  wallets={wallets}
                   accountCurrency={data.currency}
                 />
               </View>

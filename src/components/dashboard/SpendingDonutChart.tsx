@@ -42,6 +42,9 @@ export const SpendingDonutChart: React.FC<SpendingDonutChartProps> = ({ data, to
   return (
     <View style={styles.card}>
       <Text style={styles.title}>Spending</Text>
+      {totalSpend <= 0 && (
+        <Text style={styles.emptyNote}>No spending this month yet.</Text>
+      )}
       <View style={styles.row}>
         {/* Donut */}
         <PieChart
@@ -103,6 +106,12 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
       fontWeight: '700',
       color: themeColors.text,
       marginBottom: spacing.md,
+    },
+    emptyNote: {
+      ...typography.caption,
+      color: themeColors.textSecondary,
+      textAlign: 'center',
+      marginBottom: spacing.sm,
     },
     row: {
       flexDirection: 'column',

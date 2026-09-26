@@ -43,7 +43,7 @@ import { format } from 'date-fns';
 
 type SubscriptionsNavigationProp = StackNavigationProp<
   MainStackParamList,
-  'SubscriptionsScreen'
+  'Recurring'
 >;
 
 interface SubscriptionWithCategory extends Subscription {

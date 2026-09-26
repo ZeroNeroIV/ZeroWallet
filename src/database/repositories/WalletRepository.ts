@@ -43,10 +43,21 @@ export class WalletRepository extends BaseRepository<Wallet> {
     if (wallet?.isDefault) {
       throw new Error('Cannot delete default wallet');
     }
-    // Refuse while money history references the wallet
+    // Refuse while money history or scheduled items reference the wallet
     const used = await this.countTransactions(id);
     if (used > 0) {
       throw new Error('Cannot delete a wallet that has transactions. Move them first.');
+    }
+    const subRefs = await executeSql<{ count: number }>(
+      'SELECT COUNT(*) as count FROM subscriptions WHERE vault_type = ?',
+      [id]
+    );
+    const recRefs = await executeSql<{ count: number }>(
+      'SELECT COUNT(*) as count FROM recurring_expenses WHERE vault_type = ?',
+      [id]
+    );
+    if ((subRefs[0]?.count ?? 0) + (recRefs[0]?.count ?? 0) > 0) {
+      throw new Error('Cannot delete a wallet used by subscriptions or recurring expenses. Reassign them first.');
     }
     await executeSql('DELETE FROM wallets WHERE id = ?', [id]);
   }

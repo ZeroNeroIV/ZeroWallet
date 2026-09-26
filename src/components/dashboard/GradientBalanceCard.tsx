@@ -22,18 +22,21 @@ import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { useUIStore } from '../../store/uiStore';
-import { ALL_WALLETS, WALLET_META, getWalletBalance } from '../../utils/wallets';
+import { getWalletBalance } from '../../utils/wallets';
 import type { VaultBalances } from '../../utils/balanceCalculator';
+import type { Wallet } from '../../types/models';
 
 interface GradientBalanceCardProps {
   totalBalance: number;
   balances: VaultBalances;
+  wallets: Wallet[];
   accountCurrency?: string;
 }
 
 export const GradientBalanceCard: React.FC<GradientBalanceCardProps> = React.memo(({
   totalBalance,
   balances,
+  wallets,
   accountCurrency = 'USD',
 }) => {
   const themeColors = useThemeColors();
@@ -99,20 +102,20 @@ export const GradientBalanceCard: React.FC<GradientBalanceCardProps> = React.mem
 
         {/* Breakdown Section */}
         <View style={styles.breakdown}>
-          {ALL_WALLETS.map((wallet) => (
-            <View key={wallet} style={styles.breakdownRow}>
+          {wallets.map((wallet) => (
+            <View key={wallet.id} style={styles.breakdownRow}>
               <View style={styles.breakdownLeft}>
                 <MaterialCommunityIcons
-                  name={WALLET_META[wallet].icon as any}
+                  name={wallet.icon as any}
                   size={16}
                   color={themeColors.textSecondary}
                 />
-                <Text style={styles.breakdownLabel}>
-                  {WALLET_META[wallet].shortName.toUpperCase()}
+                <Text style={styles.breakdownLabel} numberOfLines={1}>
+                  {wallet.name.toUpperCase()}
                 </Text>
               </View>
               <Text style={styles.breakdownValue}>
-                {formatAmount(getWalletBalance(balances, wallet))}
+                {formatAmount(getWalletBalance(balances, wallet.id))}
               </Text>
             </View>
           ))}

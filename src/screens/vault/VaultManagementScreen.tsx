@@ -18,8 +18,9 @@ import { VaultType } from '../../types/models';
 import { useAuthStore } from '../../store/authStore';
 import { useAccountStore } from '../../store/accountStore';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { ALL_WALLETS, WALLET_META, getWalletBalance } from '../../utils/wallets';
+import { WALLET_META, getWalletBalance } from '../../utils/wallets';
 import { syncBalancesFromDatabase, transferBetweenWallets } from '../../services/walletTransferService';
+import { useWallets } from '../../hooks/useWallets';
 import { AccountRepository } from '../../database/repositories/AccountRepository';
 
 const WALLET_FEATURES: Record<VaultType, string[]> = {
@@ -58,16 +59,6 @@ const WALLET_FEATURES: Record<VaultType, string[]> = {
     'Included in available balance',
     'Use for cash payments',
   ],
-};
-
-const WALLET_COLORS: Record<VaultType, string> = {
-  main: colors.primary.main,
-  savings: colors.semantic.success,
-  held: colors.semantic.warning,
-  salary: '#06D6A0',
-  emergency: '#EF476F',
-  card: '#118AB2',
-  physical: '#F77F00',
 };
 
 export const VaultManagementScreen: React.FC = () => {
@@ -145,15 +136,23 @@ export const VaultManagementScreen: React.FC = () => {
     }
   };
 
-  const vaultDetails = ALL_WALLETS.map((wallet) => ({
-    name: WALLET_META[wallet].name,
-    category: WALLET_META[wallet].category,
-    description: WALLET_META[wallet].description,
-    icon: WALLET_META[wallet].icon,
-    color: WALLET_COLORS[wallet],
-    balance: getWalletBalance(currentBalance, wallet),
-    features: WALLET_FEATURES[wallet],
-  }));
+  const { wallets } = useWallets();
+  const vaultDetails = wallets.map((wallet) => {
+    const meta = (WALLET_META as Record<string, { name: string; category: string; description: string; icon: string }>)[wallet.id];
+    const features = (WALLET_FEATURES as Record<string, string[]>)[wallet.id] ?? [
+      'Included in available balance',
+      'Use for transactions and transfers',
+    ];
+    return {
+      name: wallet.name,
+      category: meta?.category ?? 'Custom',
+      description: meta?.description ?? 'Your custom wallet',
+      icon: wallet.icon,
+      color: wallet.color,
+      balance: getWalletBalance(currentBalance, wallet.id),
+      features,
+    };
+  });
 
   return (
     <View style={styles.container}>
@@ -161,6 +160,7 @@ export const VaultManagementScreen: React.FC = () => {
         {/* Vault Summary Card */}
         <VaultCard
           balances={currentBalance}
+          wallets={wallets}
           totalBalance={currentBalance.totalBalance}
           availableBalance={currentBalance.availableBalance}
         />

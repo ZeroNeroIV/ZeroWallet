@@ -72,7 +72,7 @@ export const DashboardCardsGrid: React.FC<DashboardCardsGridProps> = React.memo(
   }, [navigation]);
 
   const handleSubscriptionsPress = useCallback(() => {
-    navigation.navigate('SubscriptionsScreen');
+    navigation.navigate('Recurring', { tab: 'subscriptions' });
   }, [navigation]);
 
   const handleCategoriesPress = useCallback(() => {
@@ -80,7 +80,7 @@ export const DashboardCardsGrid: React.FC<DashboardCardsGridProps> = React.memo(
   }, [navigation]);
 
   const handleRecurringPress = useCallback(() => {
-    navigation.navigate('RecurringExpenses');
+    navigation.navigate('Recurring', { tab: 'recurring' });
   }, [navigation]);
 
   const handleViewAllSections = useCallback(() => {

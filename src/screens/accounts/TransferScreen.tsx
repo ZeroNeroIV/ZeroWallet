@@ -31,7 +31,8 @@ import { useAuthStore } from '../../store/authStore';
 import { useAccountStore } from '../../store/accountStore';
 import { AccountRepository } from '../../database/repositories/AccountRepository';
 import { syncBalancesFromDatabase, transferBetweenWallets } from '../../services/walletTransferService';
-import { ALL_WALLETS, WALLET_META, getWalletBalance, walletShortName } from '../../utils/wallets';
+import { getWalletBalance } from '../../utils/wallets';
+import type { Wallet } from '../../types/models';
 import type { VaultType } from '../../types/models';
 import { colors } from '../../theme/colors';
 import { spacing, borderRadius } from '../../theme/spacing';
@@ -49,6 +50,19 @@ export default function TransferScreen() {
 
   const [fromWallet, setFromWallet] = useState<VaultType>('main');
   const [toWallet, setToWallet] = useState<VaultType>('savings');
+  const { wallets } = useWallets();
+
+  // Keep selections valid when wallets load or change
+  useEffect(() => {
+    const ids = wallets.map((w) => w.id);
+    if (ids.length === 0) return;
+    if (!ids.includes(fromWallet)) {
+      setFromWallet(ids[0]);
+    }
+    if (!ids.includes(toWallet) || toWallet === fromWallet) {
+      setToWallet(ids.find((id) => id !== fromWallet) ?? ids[0]);
+    }
+  }, [wallets]);
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [accountCurrency, setAccountCurrency] = useState('USD');
@@ -123,9 +137,11 @@ export default function TransferScreen() {
         accountCurrency,
       );
 
+      const fromName = wallets.find((w) => w.id === fromWallet)?.name ?? fromWallet;
+      const toName = wallets.find((w) => w.id === toWallet)?.name ?? toWallet;
       Alert.alert(
         'Transfer Complete',
-        `${numAmount.toFixed(3)} ${accountCurrency} moved from ${walletShortName(fromWallet)} to ${walletShortName(toWallet)}`,
+        `${numAmount.toFixed(3)} ${accountCurrency} moved from ${fromName} to ${toName}`,
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
     } catch (error: any) {
@@ -136,18 +152,18 @@ export default function TransferScreen() {
     }
   };
 
-  const renderWalletOption = (wallet: VaultType, selected: VaultType, onSelect: (w: VaultType) => void) => {
-    const isSelected = selected === wallet;
-    const balance = getWalletBalance(accountBalances, wallet);
+  const renderWalletOption = (wallet: Wallet, selected: string, onSelect: (id: string) => void) => {
+    const isSelected = selected === wallet.id;
+    const balance = getWalletBalance(accountBalances, wallet.id);
     return (
       <TouchableOpacity
-        key={wallet}
+        key={wallet.id}
         style={[styles.walletButton, isSelected && styles.walletButtonActive]}
-        onPress={() => onSelect(wallet)}
+        onPress={() => onSelect(wallet.id)}
         activeOpacity={0.7}
       >
         <Icon
-          name={WALLET_META[wallet].icon as any}
+          name={wallet.icon as any}
           size={20}
           color={isSelected ? colors.primary.main : colors.neutral.gray600}
         />
@@ -156,8 +172,9 @@ export default function TransferScreen() {
             styles.walletButtonText,
             isSelected && styles.walletButtonTextActive,
           ]}
+          numberOfLines={1}
         >
-          {walletShortName(wallet)}
+          {wallet.name}
         </Text>
         <Text style={styles.walletBalance}>
           {balance.toFixed(3)}
@@ -171,12 +188,12 @@ export default function TransferScreen() {
       {/* From Wallet */}
       <Text style={styles.sectionTitle}>Transfer From</Text>
       <View style={styles.walletGrid}>
-        {ALL_WALLETS.map((w) =>
+        {wallets.map((w) =>
           renderWalletOption(w, fromWallet, (next) => {
             setFromWallet(next);
             if (toWallet === next) {
-              const fallback = ALL_WALLETS.find((candidate) => candidate !== next);
-              if (fallback) setToWallet(fallback);
+              const fallback = wallets.find((candidate) => candidate.id !== next);
+              if (fallback) setToWallet(fallback.id);
             }
           })
         )}
@@ -204,7 +221,7 @@ export default function TransferScreen() {
       {/* To Wallet */}
       <Text style={styles.sectionTitle}>Transfer To</Text>
       <View style={styles.walletGrid}>
-        {ALL_WALLETS.filter((w) => w !== fromWallet).map((w) =>
+        {wallets.filter((w) => w.id !== fromWallet).map((w) =>
           renderWalletOption(w, toWallet, setToWallet)
         )}
       </View>
@@ -225,12 +242,12 @@ export default function TransferScreen() {
         <View style={styles.summary}>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>From</Text>
-            <Text style={styles.summaryValue}>{walletShortName(fromWallet)}</Text>
+            <Text style={styles.summaryValue}>{wallets.find((w) => w.id === fromWallet)?.name ?? fromWallet}</Text>
           </View>
           <Icon name="arrow-down" size={20} color={themeColors.textSecondary} style={styles.summaryArrow} />
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>To</Text>
-            <Text style={styles.summaryValue}>{walletShortName(toWallet)}</Text>
+            <Text style={styles.summaryValue}>{wallets.find((w) => w.id === toWallet)?.name ?? toWallet}</Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryRow}>

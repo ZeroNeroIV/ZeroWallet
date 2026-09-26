@@ -46,7 +46,7 @@ import { useThemeColors } from '../../hooks/useThemeColors';
 
 type RecurringNavigationProp = StackNavigationProp<
   MainStackParamList,
-  'RecurringExpenses'
+  'Recurring'
 >;
 
 interface RecurringExpenseWithCategory extends RecurringExpense {

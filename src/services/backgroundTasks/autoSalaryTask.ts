@@ -122,6 +122,21 @@ export async function checkAndProcessAutoSalary(): Promise<{ processed: boolean;
     return { processed: false, count: 0, totalAmount: 0 };
   }
 
+  // Guard against a target wallet that no longer exists (deleted):
+  // fall back to the main wallet so salary is never lost
+  try {
+    const { WalletRepository } = await import('../../database/repositories/WalletRepository');
+    const target = await new WalletRepository().findById(salarySettings.targetVault);
+    if (!target) {
+      console.warn('[AutoSalaryTask] Target wallet missing, falling back to main');
+      settingsStore.updateSalarySettings({ targetVault: 'main' });
+      salarySettings.targetVault = 'main';
+    }
+  } catch (error) {
+    console.error('[AutoSalaryTask] Wallet check failed:', error);
+    return { processed: false, count: 0, totalAmount: 0 };
+  }
+
   // Get next payment date (migrate legacy 1st-of-month schedules to payday)
   const payDay = salarySettings.payDay ?? 1;
   const nextPaymentDate = salarySettings.nextProcessing || getNextPayDate(new Date(), payDay).getTime();

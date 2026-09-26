@@ -28,8 +28,8 @@ import {
 } from '../notifications/notificationService';
 import { useAccountStore } from '../../store/accountStore';
 import { useAuthStore } from '../../store/authStore';
-import { ALL_WALLETS, getWalletBalance } from '../../utils/wallets';
-import type { VaultType } from '../../types/models';
+import { getWalletBalance } from '../../utils/wallets';
+import { WalletRepository } from '../../database/repositories/WalletRepository';
 
 // ============================================
 // Run All Background Tasks
@@ -60,9 +60,16 @@ export async function runAllBackgroundTasks(accountId: string): Promise<void> {
     if (salaryResult.processed && hasNotificationPermission) {
       const settingsStore = useSettingsStore.getState();
       const { salarySettings } = settingsStore;
+      let walletName = salarySettings.targetVault;
+      try {
+        const wallets = await new WalletRepository().findByAccount(accountId);
+        walletName = wallets.find((w) => w.id === salarySettings.targetVault)?.name ?? walletName;
+      } catch {
+        // fall back to raw vault key
+      }
       await showSalaryNotification(
         salarySettings.amount,
-        salarySettings.targetVault
+        walletName
       );
     }
 
@@ -180,18 +187,26 @@ async function checkLowBalanceWarnings(): Promise<void> {
     const { balances } = accountStore;
 
     // Check each account's wallets (throttled: at most one alert per wallet per day)
+    const walletRepo = new WalletRepository();
     for (const [accountId, balance] of Object.entries(balances)) {
-      const checks = (ALL_WALLETS as string[]).map((key) => ({
-        key,
-        value: getWalletBalance(balance as unknown as Record<string, number | undefined>, key as VaultType),
-      }));
-      for (const check of checks) {
-        if (check.value < threshold && check.value > 0) {
-          const stampKey = `${accountId}:${check.key}`;
+      let wallets;
+      try {
+        wallets = await walletRepo.findByAccount(accountId);
+      } catch {
+        continue;
+      }
+      if (wallets.length === 0) continue;
+      for (const wallet of wallets) {
+        const value = getWalletBalance(
+          balance as unknown as Record<string, number | undefined>,
+          wallet.id
+        );
+        if (value < threshold && value > 0) {
+          const stampKey = `${accountId}:${wallet.id}`;
           if (now - (updated[stampKey] ?? 0) < LOW_BALANCE_ALERT_COOLDOWN_MS) {
             continue;
           }
-          await showLowBalanceWarning(check.key, check.value);
+          await showLowBalanceWarning(wallet.name, value);
           updated[stampKey] = now;
           stamped = true;
         }

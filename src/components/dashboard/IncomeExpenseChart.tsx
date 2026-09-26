@@ -54,6 +54,11 @@ export const IncomeExpenseChart: React.FC<IncomeExpenseChartProps> = ({ data }) 
     return Math.ceil(m / 100) * 100;
   }, [data]);
 
+  const hasData = useMemo(
+    () => data.some((d) => d.income > 0 || d.expense > 0),
+    [data]
+  );
+
   return (
     <View style={styles.card}>
       <View style={styles.header}>
@@ -63,6 +68,12 @@ export const IncomeExpenseChart: React.FC<IncomeExpenseChartProps> = ({ data }) 
           <View style={[styles.legendDot, { backgroundColor: themeColors.error }]} />
         </View>
       </View>
+
+      {!hasData && (
+        <Text style={styles.emptyNote}>
+          No income or expenses in the last 6 months yet.
+        </Text>
+      )}
 
       <BarChart
         key={data.map(d => `${d.income}-${d.expense}`).join('|')}
@@ -119,6 +130,12 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
       ...typography.bodyLarge,
       fontWeight: '700',
       color: themeColors.text,
+    },
+    emptyNote: {
+      ...typography.caption,
+      color: themeColors.textSecondary,
+      textAlign: 'center',
+      marginBottom: spacing.sm,
     },
     legend: {
       flexDirection: 'row',

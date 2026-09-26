@@ -152,6 +152,10 @@ export const WealthAnalyticsCard: React.FC<WealthAnalyticsCardProps> = ({
   const incomeValues = useMemo(() => data.map(d => d.income), [data]);
   const expenseValues = useMemo(() => data.map(d => d.expense), [data]);
   const labels = useMemo(() => data.map(d => d.day.substring(0, 3)), [data]);
+  const hasData = useMemo(
+    () => incomeValues.some((v) => v > 0) || expenseValues.some((v) => v > 0),
+    [incomeValues, expenseValues]
+  );
 
   const BLUE = '#4FC3F7';
   const RED = '#EF5350';
@@ -193,6 +197,12 @@ export const WealthAnalyticsCard: React.FC<WealthAnalyticsCardProps> = ({
           <MaterialCommunityIcons name="finance" size={22} color={themeColors.primary} />
         </View>
       </View>
+
+      {!hasData && (
+        <Text style={styles.emptyNote}>
+          No activity in the last 7 days — log a transaction to see your trend.
+        </Text>
+      )}
 
       {/* Chart — horizontally scrollable */}
       <ScrollView
@@ -328,5 +338,11 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) => StyleSh
   chartContainer: {
     alignItems: 'center',
     paddingHorizontal: spacing.xs,
+  },
+  emptyNote: {
+    ...typography.caption,
+    color: themeColors.textSecondary,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
   },
 });

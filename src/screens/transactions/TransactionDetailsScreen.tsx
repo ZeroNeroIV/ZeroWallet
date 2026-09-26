@@ -45,6 +45,7 @@ export const TransactionDetailsScreen: React.FC = () => {
 
   const [transaction, setTransaction] = useState<Transaction | null>(null);
   const [category, setCategory] = useState<Category | null>(null);
+  const [walletName, setWalletName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
@@ -78,6 +79,9 @@ export const TransactionDetailsScreen: React.FC = () => {
       }
 
       const cat = txn.categoryId ? await categoryRepo.findById(txn.categoryId) : null;
+      const { WalletRepository } = await import('../../database/repositories/WalletRepository');
+      const walletRow = await new WalletRepository().findById(txn.vaultType).catch(() => null);
+      setWalletName(walletRow?.name ?? null);
 
       console.log('[TransactionDetails] Transaction loaded:', {
         id: txn.id,
@@ -159,6 +163,7 @@ export const TransactionDetailsScreen: React.FC = () => {
   };
 
   const getVaultLabel = (vault: string) => {
+    if (walletName) return walletName;
     if (vault === 'main' || vault === 'savings' || vault === 'held') {
       return walletShortName(vault as VaultType);
     }

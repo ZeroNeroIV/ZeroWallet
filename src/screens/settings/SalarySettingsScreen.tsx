@@ -33,7 +33,8 @@ import { typography } from '../../theme/typography';
 import { AmountInput } from '../../components/forms/AmountInput';
 import { Button } from '../../components/forms/Button';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { ALL_WALLETS, WALLET_META, walletShortName, ordinalDay } from '../../utils/wallets';
+import { ordinalDay } from '../../utils/wallets';
+import { useWallets } from '../../hooks/useWallets';
 import type { Category, VaultType } from '../../types/models';
 
 const SalarySettingsScreen = ({ navigation }: any) => {
@@ -135,18 +136,27 @@ const SalarySettingsScreen = ({ navigation }: any) => {
     }, 300);
   };
 
+  const { wallets } = useWallets();
+
+  // Keep the selected wallet valid when wallets load or change
+  useEffect(() => {
+    if (wallets.length > 0 && !wallets.some((w) => w.id === selectedVault)) {
+      setSelectedVault(wallets[0].id);
+    }
+  }, [wallets]);
+
   // Render vault option
-  const renderVaultOption = (vault: VaultType, icon: string, label: string) => {
-    const isSelected = selectedVault === vault;
+  const renderVaultOption = (walletId: string, icon: string, label: string) => {
+    const isSelected = selectedVault === walletId;
 
     return (
       <TouchableOpacity
-        key={vault}
+        key={walletId}
         style={[styles.vaultOption, isSelected && styles.vaultOptionSelected]}
-        onPress={() => setSelectedVault(vault)}
+        onPress={() => setSelectedVault(walletId)}
       >
         <MaterialCommunityIcons
-          name={icon}
+          name={icon as any}
           size={24}
           color={isSelected ? themeColors.primary : themeColors.textSecondary}
         />
@@ -155,6 +165,7 @@ const SalarySettingsScreen = ({ navigation }: any) => {
             styles.vaultOptionText,
             isSelected && styles.vaultOptionTextSelected,
           ]}
+          numberOfLines={1}
         >
           {label}
         </Text>
@@ -309,7 +320,7 @@ const SalarySettingsScreen = ({ navigation }: any) => {
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Target Wallet</Text>
           <View style={styles.vaultGrid}>
-            {ALL_WALLETS.map((wallet) => renderVaultOption(wallet, WALLET_META[wallet].icon, walletShortName(wallet)))}
+            {wallets.map((wallet) => renderVaultOption(wallet.id, wallet.icon, wallet.name))}
           </View>
         </View>
 
@@ -322,7 +333,7 @@ const SalarySettingsScreen = ({ navigation }: any) => {
               color={themeColors.primary}
             />
             <Text style={styles.infoText}>
-              Your salary will be automatically added to your {walletShortName(selectedVault)} wallet on the
+              Your salary will be automatically added to your {wallets.find((w) => w.id === selectedVault)?.name ?? 'selected'} wallet on the
               {ordinalDay(payDay)} of each month. You'll receive a notification when processed.
             </Text>
           </View>

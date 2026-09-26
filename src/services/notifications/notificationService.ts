@@ -14,14 +14,10 @@
  */
 
 import notifee, { AuthorizationStatus, AndroidImportance } from '@notifee/react-native';
-import { WALLET_META } from '../../utils/wallets';
-import type { VaultType } from '../../types/models';
-
-function displayWalletName(vaultType: string): string {
-  const meta = (WALLET_META as Record<string, { name: string }>)[vaultType];
-  if (meta) return meta.name;
-  return `${vaultType} wallet`;
-}
+/**
+ * Purpose: Show a low-balance warning for a wallet (display name resolved
+ * by the caller so custom wallets read correctly too)
+ */
 
 // ============================================
 // Channel IDs (Android)
@@ -197,20 +193,20 @@ export async function showNudgeNotification(message: string): Promise<string | v
 
 /**
  * Purpose: Notify user that salary was automatically added
- * 
+ *
  * Inputs:
  *   - amount (number): Salary amount added
- *   - vaultType (string): Vault where salary was added
- * 
+ *   - walletName (string): Display name of the destination wallet
+ *
  * Outputs:
  *   - Returns (Promise<string | void>): Notification ID
- * 
+ *
  * Side effects:
  *   - Displays notification with success icon
  */
 export async function showSalaryNotification(
   amount: number,
-  vaultType: string
+  walletName: string
 ): Promise<string | void> {
   try {
     const hasPermission = await checkNotificationPermission();
@@ -218,7 +214,7 @@ export async function showSalaryNotification(
 
     return await notifee.displayNotification({
       title: '💰 Salary Added',
-      body: `$${amount.toFixed(3)} has been added to your ${displayWalletName(vaultType)}`,
+      body: `$${amount.toFixed(3)} has been added to your ${walletName}`,
       android: {
         channelId: CHANNEL_IDS.TRANSACTIONS,
         color: '#06D6A0',
@@ -328,20 +324,20 @@ export async function showRecurringExpenseNotification(
 // ============================================
 
 /**
- * Purpose: Warn user about low balance in a vault
- * 
+ * Purpose: Warn user about low balance in a wallet
+ *
  * Inputs:
- *   - vaultType (string): Which vault has low balance
+ *   - walletName (string): Display name of the wallet (resolved by caller)
  *   - balance (number): Current balance
- * 
+ *
  * Outputs:
  *   - Returns (Promise<string | void>): Notification ID
- * 
+ *
  * Side effects:
  *   - Displays warning notification
  */
 export async function showLowBalanceWarning(
-  vaultType: string,
+  walletName: string,
   balance: number
 ): Promise<string | void> {
   try {
@@ -350,7 +346,7 @@ export async function showLowBalanceWarning(
 
     return await notifee.displayNotification({
       title: '⚠️ Low Balance Alert',
-      body: `Your ${displayWalletName(vaultType)} is low: $${balance.toFixed(3)} remaining`,
+      body: `Your ${walletName} is low: $${balance.toFixed(3)} remaining`,
       android: {
         channelId: CHANNEL_IDS.ALERTS,
         color: '#EF476F',

@@ -10,13 +10,13 @@ import { VaultManagementScreen } from '../screens/vault/VaultManagementScreen';
 import { DashboardScreen } from '../screens/dashboard/DashboardScreen';
 import CategoriesScreen from '../screens/categories/CategoriesScreen';
 import CreateCategoryScreen from '../screens/categories/CreateCategoryScreen';
-import SubscriptionsScreen from '../screens/subscriptions/SubscriptionsScreen';
 import AddSubscriptionScreen from '../screens/subscriptions/AddSubscriptionScreen';
-import RecurringExpensesScreen from '../screens/recurring/RecurringExpensesScreen';
+import RecurringHubScreen from '../screens/recurring/RecurringHubScreen';
 import AddRecurringExpenseScreen from '../screens/recurring/AddRecurringExpenseScreen';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import SalarySettingsScreen from '../screens/settings/SalarySettingsScreen';
 import SmartNudgesScreen from '../screens/settings/SmartNudgesScreen';
+import WalletsScreen from '../screens/settings/WalletsScreen';
 import SecuritySettingsScreen from '../screens/security/SecuritySettingsScreen';
 import GoalsScreen from '../screens/goals/GoalsScreen';
 import CreateGoalScreen from '../screens/goals/CreateGoalScreen';
@@ -108,9 +108,9 @@ export function MainNavigator() {
         })}
       />
       <Stack.Screen
-        name="SubscriptionsScreen"
-        component={SubscriptionsScreen}
-        options={{ title: 'Subscriptions' }}
+        name="Recurring"
+        component={RecurringHubScreen}
+        options={{ title: 'Recurring' }}
       />
       <Stack.Screen
         name="AddSubscription"
@@ -122,11 +122,6 @@ export function MainNavigator() {
               : 'Add Subscription',
           presentation: 'modal',
         })}
-      />
-      <Stack.Screen
-        name="RecurringExpenses"
-        component={RecurringExpensesScreen}
-        options={{ title: 'Recurring Expenses' }}
       />
       <Stack.Screen
         name="AddRecurring"
@@ -148,6 +143,11 @@ export function MainNavigator() {
         name="SmartNudges"
         component={SmartNudgesScreen}
         options={{ title: 'Smart Nudges' }}
+      />
+      <Stack.Screen
+        name="Wallets"
+        component={WalletsScreen}
+        options={{ title: 'Wallets' }}
       />
       <Stack.Screen
         name="SecuritySettings"

@@ -41,7 +41,7 @@ import { spacing, borderRadius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import type { Category, VaultType, RecurringFrequency } from '../../types/models';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { ALL_WALLETS, WALLET_META } from '../../utils/wallets';
+import { useWallets } from '../../hooks/useWallets';
 
 type AddRecurringNavigationProp = StackNavigationProp<
   MainStackParamList,
@@ -50,11 +50,12 @@ type AddRecurringNavigationProp = StackNavigationProp<
 
 type AddRecurringRouteProp = RouteProp<MainStackParamList, 'AddRecurring'>;
 
-const VAULT_OPTIONS: { value: VaultType; label: string; icon: string }[] = ALL_WALLETS.map((wallet) => ({
-  value: wallet,
-  label: WALLET_META[wallet].name,
-  icon: WALLET_META[wallet].icon,
-}));
+const buildVaultOptions = (wallets: { id: string; name: string; icon: string }[]): { value: VaultType; label: string; icon: string }[] =>
+  wallets.map((wallet) => ({
+    value: wallet.id as VaultType,
+    label: wallet.name,
+    icon: wallet.icon,
+  }));
 
 const FREQUENCY_OPTIONS: {
   value: RecurringFrequency;
@@ -90,6 +91,15 @@ export default function AddRecurringExpenseScreen() {
   const [showIntervalPicker, setShowIntervalPicker] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ name?: string; amount?: string }>({});
+  const { wallets } = useWallets();
+  const VAULT_OPTIONS = buildVaultOptions(wallets);
+
+  // Keep the selected wallet valid when wallets load or change
+  useEffect(() => {
+    if (wallets.length > 0 && !wallets.some((w) => w.id === selectedVault)) {
+      setSelectedVault(wallets[0].id);
+    }
+  }, [wallets]);
 
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
 

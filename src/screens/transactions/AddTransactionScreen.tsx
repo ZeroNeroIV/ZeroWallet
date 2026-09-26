@@ -35,7 +35,7 @@ import { compressAndSaveImage, deleteTransactionImage } from '../../utils/imageS
 import { convertCurrency } from '../../services/currencyService';
 import { formatCurrency } from '../../constants/currencies';
 import { useAutoCategorize } from '../../hooks/useAutoCategorize';
-import { ALL_WALLETS, walletShortName } from '../../utils/wallets';
+import { useWallets } from '../../hooks/useWallets';
 
 type AddTransactionScreenNavigationProp = StackNavigationProp<
   MainStackParamList,
@@ -99,6 +99,15 @@ export const AddTransactionScreen: React.FC = () => {
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [layaStatus, setLayaStatus] = useState<string | null>(null);
   const [layaPendingName, setLayaPendingName] = useState<string | null>(null);
+  const { wallets } = useWallets();
+
+  // Keep the selected wallet valid when the wallet list loads/changes
+  useEffect(() => {
+    if (wallets.length === 0) return;
+    if (!wallets.some((w) => w.id === vaultType)) {
+      setVaultType(wallets[0].id);
+    }
+  }, [wallets]);
 
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
 
@@ -799,23 +808,24 @@ export const AddTransactionScreen: React.FC = () => {
           <View style={styles.fieldContainer}>
             <Text style={styles.sectionTitle}>Wallet</Text>
             <View style={styles.vaultOptions}>
-              {ALL_WALLETS.map((wallet) => (
+              {wallets.map((wallet) => (
                 <TouchableOpacity
-                  key={wallet}
+                  key={wallet.id}
                   style={[
                     styles.vaultButton,
                     styles.vaultButtonGrid,
-                    vaultType === wallet && styles.vaultButtonActive,
+                    vaultType === wallet.id && styles.vaultButtonActive,
                   ]}
-                  onPress={() => setVaultType(wallet)}
+                  onPress={() => setVaultType(wallet.id)}
                 >
                   <Text
                     style={[
                       styles.vaultButtonText,
-                      vaultType === wallet && styles.vaultButtonTextActive,
+                      vaultType === wallet.id && styles.vaultButtonTextActive,
                     ]}
+                    numberOfLines={1}
                   >
-                    {walletShortName(wallet)}
+                    {wallet.name}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -852,7 +862,7 @@ export const AddTransactionScreen: React.FC = () => {
               </View>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Wallet</Text>
-                <Text style={styles.summaryValue}>{walletShortName(vaultType)}</Text>
+                <Text style={styles.summaryValue}>{wallets.find((w) => w.id === vaultType)?.name ?? vaultType}</Text>
               </View>
               <View style={styles.summaryDivider} />
               <View style={styles.summaryRow}>

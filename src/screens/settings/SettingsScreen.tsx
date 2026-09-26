@@ -284,6 +284,40 @@ const SettingsScreen = ({ navigation }: any) => {
         )}
       </View>
 
+      {/* Wallets Section */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Wallets</Text>
+
+        <TouchableOpacity
+          style={[styles.settingRow, styles.lastRow]}
+          onPress={() => {
+            lightHaptic();
+            navigation.navigate('Wallets');
+          }}
+        >
+          <View style={styles.settingLeft}>
+            <View style={[styles.iconContainer, { backgroundColor: colors.primary.light }]}>
+              <MaterialCommunityIcons
+                name="wallet-outline"
+                size={20}
+                color={colors.primary.main}
+              />
+            </View>
+            <View style={styles.settingInfo}>
+              <Text style={styles.settingLabel}>My Wallets</Text>
+              <Text style={styles.settingDescription}>
+                Add, rename and remove wallets
+              </Text>
+            </View>
+          </View>
+          <MaterialCommunityIcons
+            name="chevron-right"
+            size={24}
+            color={themeColors.textSecondary}
+          />
+        </TouchableOpacity>
+      </View>
+
       {/* Notification Settings Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Notifications</Text>

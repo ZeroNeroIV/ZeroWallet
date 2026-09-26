@@ -38,6 +38,22 @@ export const AllSectionsScreen: React.FC = () => {
 
   const sections: SectionItem[] = useMemo(() => [
     {
+      id: 'wallets',
+      title: 'Wallets',
+      description: 'Add, rename and organize wallets',
+      icon: 'wallet-outline',
+      iconColor: themeColors.primary,
+      route: 'Wallets',
+    },
+    {
+      id: 'recurring',
+      title: 'Recurring',
+      description: 'Subscriptions and repeating expenses',
+      icon: 'refresh-circle',
+      iconColor: '#f59e0b',
+      route: 'Recurring',
+    },
+    {
       id: 'goals',
       title: 'Goals',
       description: 'Manage your financial goals',
@@ -54,28 +70,12 @@ export const AllSectionsScreen: React.FC = () => {
       route: 'DebtsScreen',
     },
     {
-      id: 'subscriptions',
-      title: 'Subscriptions',
-      description: 'Manage recurring payments',
-      icon: 'refresh-circle',
-      iconColor: themeColors.primary,
-      route: 'SubscriptionsScreen',
-    },
-    {
       id: 'categories',
       title: 'Categories',
       description: 'Organize transactions',
       icon: 'tag-multiple',
       iconColor: '#8b5cf6',
       route: 'CategoriesScreen',
-    },
-    {
-      id: 'recurring',
-      title: 'Recurring Expenses',
-      description: 'Automated expense tracking',
-      icon: 'refresh',
-      iconColor: '#f59e0b',
-      route: 'RecurringExpenses',
     },
   ], [themeColors]);
 
@@ -121,6 +121,14 @@ export const AllSectionsScreen: React.FC = () => {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        ListHeaderComponent={
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Quick Access</Text>
+            <Text style={styles.headerSubtitle}>
+              Everything in your wallet, one tap away
+            </Text>
+          </View>
+        }
       />
     </View>
   );
@@ -136,6 +144,18 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) => StyleSh
   listContent: {
     padding: spacing.lg,
     gap: spacing.md,
+  },
+  header: {
+    marginBottom: spacing.sm,
+  },
+  headerTitle: {
+    ...typography.h2,
+    color: themeColors.text,
+  },
+  headerSubtitle: {
+    ...typography.body,
+    color: themeColors.textSecondary,
+    marginTop: 2,
   },
   sectionCard: {
     flexDirection: 'row',

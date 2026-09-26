@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,13 +14,15 @@ import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { VaultType } from '../../types/models';
-import { ALL_WALLETS, WALLET_META, getWalletBalance, walletShortName } from '../../utils/wallets';
+import { getWalletBalance, walletShortName } from '../../utils/wallets';
 import type { VaultBalances } from '../../utils/balanceCalculator';
+import type { Wallet } from '../../types/models';
 
 interface TransferModalProps {
   visible: boolean;
   onClose: () => void;
   onTransfer: (from: VaultType, to: VaultType, amount: number) => Promise<void>;
+  wallets: Wallet[];
   balances: VaultBalances;
 }
 
@@ -28,6 +30,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
   visible,
   onClose,
   onTransfer,
+  wallets,
   balances,
 }) => {
   const [fromVault, setFromVault] = useState<VaultType>('main');
@@ -36,16 +39,28 @@ export const TransferModal: React.FC<TransferModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const vaults = ALL_WALLETS.map((value) => ({
-    value,
-    label: walletShortName(value),
-    icon: WALLET_META[value].icon,
-    balance: getWalletBalance(balances, value),
+  const vaults = wallets.map((wallet) => ({
+    value: wallet.id as VaultType,
+    label: wallet.name,
+    icon: wallet.icon,
+    balance: getWalletBalance(balances, wallet.id),
   }));
 
   const getVaultBalance = (vault: VaultType) => {
     return getWalletBalance(balances, vault);
   };
+
+  // Keep selections valid when the wallet list loads or changes
+  useEffect(() => {
+    const ids = wallets.map((w) => w.id);
+    if (ids.length === 0) return;
+    if (!ids.includes(fromVault)) {
+      setFromVault(ids[0]);
+    }
+    if (!ids.includes(toVault) || toVault === fromVault) {
+      setToVault(ids.find((id) => id !== fromVault) ?? ids[0]);
+    }
+  }, [wallets]);
 
   const validate = () => {
     setError('');

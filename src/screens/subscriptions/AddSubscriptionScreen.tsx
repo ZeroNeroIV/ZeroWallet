@@ -40,7 +40,7 @@ import { colors } from '../../theme/colors';
 import { spacing, borderRadius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { ALL_WALLETS, WALLET_META } from '../../utils/wallets';
+import { useWallets } from '../../hooks/useWallets';
 import type { Category, VaultType } from '../../types/models';
 
 type AddSubscriptionNavigationProp = StackNavigationProp<
@@ -50,11 +50,12 @@ type AddSubscriptionNavigationProp = StackNavigationProp<
 
 type AddSubscriptionRouteProp = RouteProp<MainStackParamList, 'AddSubscription'>;
 
-const VAULT_OPTIONS: { value: VaultType; label: string; icon: string }[] = ALL_WALLETS.map((wallet) => ({
-  value: wallet,
-  label: WALLET_META[wallet].name,
-  icon: WALLET_META[wallet].icon,
-}));
+const buildVaultOptions = (wallets: { id: string; name: string; icon: string }[]): { value: VaultType; label: string; icon: string }[] =>
+  wallets.map((wallet) => ({
+    value: wallet.id as VaultType,
+    label: wallet.name,
+    icon: wallet.icon,
+  }));
 
 export default function AddSubscriptionScreen() {
   const navigation = useNavigation<AddSubscriptionNavigationProp>();
@@ -77,6 +78,15 @@ export default function AddSubscriptionScreen() {
   const [showBillingDayPicker, setShowBillingDayPicker] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ name?: string; amount?: string }>({});
+  const { wallets } = useWallets();
+  const VAULT_OPTIONS = buildVaultOptions(wallets);
+
+  // Keep the selected wallet valid when wallets load or change
+  useEffect(() => {
+    if (wallets.length > 0 && !wallets.some((w) => w.id === selectedVault)) {
+      setSelectedVault(wallets[0].id);
+    }
+  }, [wallets]);
 
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
 

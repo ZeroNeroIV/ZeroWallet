@@ -9,8 +9,9 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { ALL_WALLETS, WALLET_META, getWalletBalance } from '../../utils/wallets';
+import { getWalletBalance } from '../../utils/wallets';
 import type { VaultBalances } from '../../utils/balanceCalculator';
+import type { Wallet } from '../../types/models';
 
 const WALLET_CARD_COLORS = [
   '#6366F1',
@@ -24,6 +25,7 @@ const WALLET_CARD_COLORS = [
 
 interface VaultCardProps {
   balances: VaultBalances;
+  wallets: Wallet[];
   totalBalance: number;
   availableBalance: number;
   onPress?: () => void;
@@ -32,6 +34,7 @@ interface VaultCardProps {
 
 export const VaultCard: React.FC<VaultCardProps> = ({
   balances,
+  wallets,
   totalBalance,
   availableBalance,
   onPress,
@@ -52,13 +55,13 @@ export const VaultCard: React.FC<VaultCardProps> = ({
     return ((amount / totalBalance) * 100).toFixed(0);
   };
 
-  const vaults = ALL_WALLETS.map((wallet, index) => {
-    const balance = getWalletBalance(balances, wallet);
+  const vaults = wallets.map((wallet, index) => {
+    const balance = getWalletBalance(balances, wallet.id);
     return {
-      name: WALLET_META[wallet].name,
-      icon: WALLET_META[wallet].icon,
+      name: wallet.name,
+      icon: wallet.icon,
       balance,
-      color: WALLET_CARD_COLORS[index % WALLET_CARD_COLORS.length],
+      color: wallet.color || WALLET_CARD_COLORS[index % WALLET_CARD_COLORS.length],
       percentage: calculatePercentage(balance),
     };
   });

@@ -13,8 +13,8 @@
  */
 
 import * as v from '../../utils/validation/primitives';
-import { VAULT_TYPE_VALUES } from '../../domain/vault/VaultType';
 import { CategoryRepository } from '../../database/repositories/CategoryRepository';
+import { WalletRepository } from '../../database/repositories/WalletRepository';
 import { TransactionRepository } from '../../database/repositories/TransactionRepository';
 import { GoalRepository } from '../../database/repositories/GoalRepository';
 import { DebtRepository } from '../../database/repositories/DebtRepository';
@@ -51,6 +51,7 @@ export class ValidationService {
   private debtRepo: DebtRepository;
   private subscriptionRepo: SubscriptionRepository;
   private recurringRepo: RecurringExpenseRepository;
+  private walletRepo: WalletRepository;
 
   constructor(accountId: string, userId: string) {
     this.accountId = accountId;
@@ -61,6 +62,41 @@ export class ValidationService {
     this.debtRepo = new DebtRepository();
     this.subscriptionRepo = new SubscriptionRepository();
     this.recurringRepo = new RecurringExpenseRepository();
+    this.walletRepo = new WalletRepository();
+  }
+
+  /**
+   * Purpose: Resolve a wallet id or name to a usable wallet id.
+   * Accepts built-in keys, custom wallet ids, and wallet names
+   * (case-insensitive), so AI calls work with any wallet.
+   */
+  async resolveWalletId(value: string): Promise<string> {
+    const trimmed = (value ?? '').trim();
+    if (!trimmed) {
+      throw new AIOperationError(
+        AIOperationErrorType.VALIDATION_ERROR, 'Wallet is empty',
+        'Please specify a wallet.'
+      );
+    }
+    try {
+      const wallets = await this.walletRepo.ensureDefaultWallets(this.accountId);
+      const byId = wallets.find((w) => w.id === trimmed);
+      if (byId) return byId.id;
+      const byName = wallets.find((w) => w.name.toLowerCase() === trimmed.toLowerCase());
+      if (byName) return byName.id;
+    } catch (error) {
+      if (error instanceof AIOperationError) throw error;
+      throw new AIOperationError(
+        AIOperationErrorType.DATABASE_ERROR,
+        'Failed to resolve wallet',
+        'Failed to find the wallet. Please try again.'
+      );
+    }
+    throw new AIOperationError(
+      AIOperationErrorType.VALIDATION_ERROR,
+      `Unknown wallet "${trimmed}"`,
+      `I couldn't find a wallet called "${trimmed}".`
+    );
   }
 
   // ============================================================================
@@ -265,13 +301,9 @@ export class ValidationService {
       ? this.validateDateString(params.date, 'Date')
       : Date.now();
 
-    // Validate vault type
+    // Validate vault type (any existing wallet, including custom ones)
     const vaultType = params.vaultType
-      ? this.validateEnum(
-          params.vaultType,
-          VAULT_TYPE_VALUES,
-          'Vault type'
-        )
+      ? await this.resolveWalletId(params.vaultType)
       : DEFAULT_VAULT_TYPE;
 
     return {
@@ -382,13 +414,9 @@ export class ValidationService {
     // Resolve category (subscriptions are always expenses)
     const category = await this.resolveCategoryName(params.categoryName, 'expense');
 
-    // Validate vault type
+    // Validate vault type (any existing wallet, including custom ones)
     const vaultType = params.vaultType
-      ? this.validateEnum(
-          params.vaultType,
-          VAULT_TYPE_VALUES,
-          'Vault type'
-        )
+      ? await this.resolveWalletId(params.vaultType)
       : DEFAULT_VAULT_TYPE;
 
     return {
@@ -438,13 +466,9 @@ export class ValidationService {
     // Resolve category (recurring expenses are always expenses)
     const category = await this.resolveCategoryName(params.categoryName, 'expense');
 
-    // Validate vault type
+    // Validate vault type (any existing wallet, including custom ones)
     const vaultType = params.vaultType
-      ? this.validateEnum(
-          params.vaultType,
-          VAULT_TYPE_VALUES,
-          'Vault type'
-        )
+      ? await this.resolveWalletId(params.vaultType)
       : DEFAULT_VAULT_TYPE;
 
     return {
