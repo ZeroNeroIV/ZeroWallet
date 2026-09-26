@@ -11,7 +11,7 @@
  *   - Navigates back on success
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -20,7 +20,7 @@ import {
   Alert,
   TouchableOpacity,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { MainStackParamList } from '../../types/navigation';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -30,7 +30,7 @@ import { AmountInput } from '../../components/forms/AmountInput';
 import { useAuthStore } from '../../store/authStore';
 import { useAccountStore } from '../../store/accountStore';
 import { AccountRepository } from '../../database/repositories/AccountRepository';
-import { transferBetweenWallets } from '../../services/walletTransferService';
+import { syncBalancesFromDatabase, transferBetweenWallets } from '../../services/walletTransferService';
 import { ALL_WALLETS, WALLET_META, getWalletBalance, walletShortName } from '../../utils/wallets';
 import type { VaultType } from '../../types/models';
 import { colors } from '../../theme/colors';
@@ -69,6 +69,18 @@ export default function TransferScreen() {
     };
     loadCurrency();
   }, [currentAccountId]);
+
+  // Refresh from DB truth on every visit so MAX and validation never run
+  // on stale cached balances
+  useFocusEffect(
+    useCallback(() => {
+      if (currentAccountId) {
+        syncBalancesFromDatabase(currentAccountId).catch((error) =>
+          console.error('[Transfer] Balance refresh failed:', error)
+        );
+      }
+    }, [currentAccountId])
+  );
 
   const accountBalances = currentAccountId ? balances[currentAccountId] : undefined;
   const fromBalance = getWalletBalance(accountBalances, fromWallet);

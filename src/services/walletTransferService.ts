@@ -21,10 +21,21 @@
 
 import { TransactionRepository } from '../database/repositories/TransactionRepository';
 import { CategoryRepository } from '../database/repositories/CategoryRepository';
-import { calculateVaultBalances } from '../utils/balanceCalculator';
+import { calculateVaultBalances, roundMoney } from '../utils/balanceCalculator';
 import { useAccountStore } from '../store/accountStore';
 import { walletShortName } from '../utils/wallets';
 import type { VaultType } from '../types/models';
+
+/**
+ * Purpose: Recalculate wallet balances from the database and persist them.
+ * Call when entering money screens so MAX-style exact-amount operations
+ * never run against stale cached balances.
+ */
+export async function syncBalancesFromDatabase(accountId: string): Promise<void> {
+  const txRepo = new TransactionRepository();
+  const recalculated = calculateVaultBalances(await txRepo.findByAccount(accountId));
+  useAccountStore.getState().updateBalance(accountId, recalculated);
+}
 
 export async function transferBetweenWallets(
   accountId: string,
@@ -45,10 +56,12 @@ export async function transferBetweenWallets(
   const txRepo = new TransactionRepository();
   const categoryRepo = new CategoryRepository();
 
-  // Balance check against freshly calculated (DB-truth) balances
+  // Balance check against freshly calculated (DB-truth) balances.
+  // Both sides are normalized to 3 decimals so an exact MAX amount
+  // always passes instead of tripping on float dust (499.9999999 < 500).
   const current = calculateVaultBalances(await txRepo.findByAccount(accountId));
   const fromKey = `${from}Balance` as keyof typeof current;
-  if ((current[fromKey] ?? 0) < amount) {
+  if (roundMoney(current[fromKey] ?? 0) < roundMoney(amount)) {
     throw new Error(`Insufficient balance in ${walletShortName(from)} wallet`);
   }
 

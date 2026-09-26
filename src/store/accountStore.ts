@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { mmkvStorage } from './middleware/mmkvStorage';
+import { roundMoney } from '../utils/balanceCalculator';
 
 import type { AccountState } from '../types/store';
 
@@ -40,17 +41,28 @@ export const useAccountStore = create<AccountState>()(
           };
 
           // Recalculate computed fields (missing wallet keys default to 0
-          // for balances persisted before the wallet existed)
-          const m = newBalance.mainBalance ?? 0;
-          const s = newBalance.savingsBalance ?? 0;
-          const h = newBalance.heldBalance ?? 0;
-          const sal = (newBalance as Record<string, number>).salaryBalance ?? 0;
-          const em = (newBalance as Record<string, number>).emergencyBalance ?? 0;
-          const ca = (newBalance as Record<string, number>).cardBalance ?? 0;
-          const ph = (newBalance as Record<string, number>).physicalBalance ?? 0;
+          // for balances persisted before the wallet existed). Every wallet
+          // value is rounded to 3 decimals so float dust can never break
+          // exact-amount comparisons (e.g. transfer MAX).
+          const nb = newBalance as Record<string, number>;
+          newBalance.mainBalance = roundMoney(nb.mainBalance ?? 0);
+          newBalance.savingsBalance = roundMoney(nb.savingsBalance ?? 0);
+          newBalance.heldBalance = roundMoney(nb.heldBalance ?? 0);
+          nb.salaryBalance = roundMoney(nb.salaryBalance ?? 0);
+          nb.emergencyBalance = roundMoney(nb.emergencyBalance ?? 0);
+          nb.cardBalance = roundMoney(nb.cardBalance ?? 0);
+          nb.physicalBalance = roundMoney(nb.physicalBalance ?? 0);
 
-          newBalance.totalBalance = m + s + h + sal + em + ca + ph;
-          newBalance.availableBalance = newBalance.totalBalance - h;
+          newBalance.totalBalance = roundMoney(
+            newBalance.mainBalance +
+            newBalance.savingsBalance +
+            newBalance.heldBalance +
+            nb.salaryBalance +
+            nb.emergencyBalance +
+            nb.cardBalance +
+            nb.physicalBalance
+          );
+          newBalance.availableBalance = roundMoney(newBalance.totalBalance - newBalance.heldBalance);
 
           return {
             balances: {

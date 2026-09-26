@@ -13,6 +13,18 @@ export interface VaultBalances {
   availableBalance: number;
 }
 
+/**
+ * Purpose: Round money to 3 decimals (the app's display precision).
+ * Floating-point accumulation (e.g. 499.99999999994 instead of 500) makes
+ * exact-amount operations like "transfer MAX" fail comparisons, so every
+ * balance choke point normalizes through here.
+ */
+export function roundMoney(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  const rounded = Math.round(value * 1000) / 1000;
+  return rounded === 0 ? 0 : rounded;
+}
+
 export function calculateVaultBalances(transactions: Transaction[]): VaultBalances {
   const balances = {
     mainBalance: 0,
@@ -36,6 +48,14 @@ export function calculateVaultBalances(transactions: Transaction[]): VaultBalanc
       balances.mainBalance += value;
     }
   }
+
+  balances.mainBalance = roundMoney(balances.mainBalance);
+  balances.savingsBalance = roundMoney(balances.savingsBalance);
+  balances.heldBalance = roundMoney(balances.heldBalance);
+  balances.salaryBalance = roundMoney(balances.salaryBalance);
+  balances.emergencyBalance = roundMoney(balances.emergencyBalance);
+  balances.cardBalance = roundMoney(balances.cardBalance);
+  balances.physicalBalance = roundMoney(balances.physicalBalance);
 
   const totalBalance =
     balances.mainBalance +

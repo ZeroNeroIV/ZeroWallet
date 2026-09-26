@@ -19,7 +19,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useAccountStore } from '../../store/accountStore';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { ALL_WALLETS, WALLET_META, getWalletBalance } from '../../utils/wallets';
-import { transferBetweenWallets } from '../../services/walletTransferService';
+import { syncBalancesFromDatabase, transferBetweenWallets } from '../../services/walletTransferService';
 import { AccountRepository } from '../../database/repositories/AccountRepository';
 
 const WALLET_FEATURES: Record<VaultType, string[]> = {
@@ -96,20 +96,29 @@ export const VaultManagementScreen: React.FC = () => {
     }, [currentAccountId, balances])
   );
 
-  const loadBalance = () => {
+  const loadBalance = async () => {
     if (!currentAccountId) return;
 
-    const balance = balances[currentAccountId] || {
-      mainBalance: 0,
-      savingsBalance: 0,
-      heldBalance: 0,
-      salaryBalance: 0,
-      emergencyBalance: 0,
-      cardBalance: 0,
-      physicalBalance: 0,
-      totalBalance: 0,
-      availableBalance: 0,
-    };
+    // Recalculate from DB truth first so the screen never shows stale
+    // cached balances (and MAX-style operations built on them stay exact)
+    try {
+      await syncBalancesFromDatabase(currentAccountId);
+    } catch (error) {
+      console.error('[VaultManagement] Balance refresh failed:', error);
+    }
+
+    const balance =
+      useAccountStore.getState().balances[currentAccountId] || {
+        mainBalance: 0,
+        savingsBalance: 0,
+        heldBalance: 0,
+        salaryBalance: 0,
+        emergencyBalance: 0,
+        cardBalance: 0,
+        physicalBalance: 0,
+        totalBalance: 0,
+        availableBalance: 0,
+      };
 
     setCurrentBalance(balance);
   };
@@ -130,7 +139,7 @@ export const VaultManagementScreen: React.FC = () => {
         // keep default
       }
       await transferBetweenWallets(currentAccountId, currentUser.id, from, to, amount, undefined, currency);
-      loadBalance();
+      await loadBalance();
     } catch (error: any) {
       throw error;
     }
