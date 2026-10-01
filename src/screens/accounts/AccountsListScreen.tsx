@@ -4,12 +4,11 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
   Alert,
   RefreshControl,
-  Animated,
-} from 'react-native';
+  } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { MainStackParamList } from '../../types/navigation';
@@ -40,8 +39,7 @@ export default function AccountsListScreen() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [animateOut, setAnimateOut] = useState(0);
-
+  
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
 
   const loadAccounts = async () => {
@@ -96,8 +94,8 @@ export default function AccountsListScreen() {
     const balance = getAccountBalance(item.id);
 
     return (
-      <Animated.View
-        style={[styles.accountCard, isCurrent && styles.accountCardActive, { opacity: animateOut % 2 === 0 ? 1 : 0.9 }]}
+      <View
+        style={[styles.accountCard, isCurrent && styles.accountCardActive]}
       >
         <TouchableOpacity
           style={styles.accountTouchable}
@@ -144,7 +142,7 @@ export default function AccountsListScreen() {
         >
           <Icon name="cog-outline" size={22} color={themeColors.textSecondary} />
         </TouchableOpacity>
-      </Animated.View>
+      </View>
     );
   };
 
@@ -158,7 +156,7 @@ export default function AccountsListScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <FlashList estimatedItemSize={84}
         data={accounts}
         renderItem={renderAccount}
         keyExtractor={(item) => item.id}

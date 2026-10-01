@@ -31,6 +31,11 @@ export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
 
     console.log('[DB] Database opened successfully');
 
+    // Enable WAL mode, foreign keys, and optimized synchronous writing
+    await db.executeSql('PRAGMA foreign_keys = ON;');
+    await db.executeSql('PRAGMA journal_mode = WAL;');
+    await db.executeSql('PRAGMA synchronous = NORMAL;');
+
     // Create all tables
     await createTables(db);
 
@@ -154,9 +159,52 @@ async function runMigrations(
 }
 
 // ============================================
-// Transaction Wrapper
+// Transaction Runner
 // ============================================
 
+export interface TransactionExecutor {
+  executeSql: <T = any>(sql: string, params?: any[]) => Promise<T[]>;
+}
+
+/**
+ * Execute a series of database operations atomically with explicit BEGIN / COMMIT / ROLLBACK.
+ * Guarantees all-or-nothing execution without promise tick loss.
+ */
+export async function withTransaction<T>(
+  callback: (tx: TransactionExecutor) => Promise<T>
+): Promise<T> {
+  const database = getDatabase();
+
+  await database.executeSql('BEGIN IMMEDIATE TRANSACTION;');
+  try {
+    const txExecutor: TransactionExecutor = {
+      executeSql: async <R = any>(sql: string, params: any[] = []): Promise<R[]> => {
+        const [result] = await database.executeSql(sql, params);
+        const rows: R[] = [];
+        for (let i = 0; i < result.rows.length; i++) {
+          rows.push(result.rows.item(i));
+        }
+        return rows;
+      },
+    };
+
+    const result = await callback(txExecutor);
+    await database.executeSql('COMMIT;');
+    return result;
+  } catch (error) {
+    try {
+      await database.executeSql('ROLLBACK;');
+    } catch (rollbackError) {
+      console.error('[DB] Rollback failed:', rollbackError);
+    }
+    console.error('[DB] Transaction failed and rolled back:', error);
+    throw error;
+  }
+}
+
+/**
+ * Legacy transaction wrapper maintained for backward compatibility.
+ */
 export async function executeTransaction<T>(
   callback: (tx: SQLite.Transaction) => Promise<T>
 ): Promise<T> {
@@ -257,15 +305,21 @@ export async function deleteAllUserData(): Promise<void> {
       throw new Error('Database not initialized');
     }
 
-    console.log('[DB] Deleting all user data...');
+    console.log('[DB] Deleting all user data across all 10 tables...');
 
-    // Delete data from all tables in reverse order of dependencies
-    await executeSql('DELETE FROM recurring_expenses', []);
-    await executeSql('DELETE FROM subscriptions', []);
-    await executeSql('DELETE FROM transactions', []);
-    await executeSql('DELETE FROM categories', []);
-    await executeSql('DELETE FROM accounts', []);
-    await executeSql('DELETE FROM users', []);
+    // Delete data in strict reverse dependency order inside an atomic transaction
+    await withTransaction(async (tx) => {
+      await tx.executeSql('DELETE FROM transaction_images;');
+      await tx.executeSql('DELETE FROM transactions;');
+      await tx.executeSql('DELETE FROM recurring_expenses;');
+      await tx.executeSql('DELETE FROM subscriptions;');
+      await tx.executeSql('DELETE FROM debts;');
+      await tx.executeSql('DELETE FROM goals;');
+      await tx.executeSql('DELETE FROM wallets;');
+      await tx.executeSql('DELETE FROM categories;');
+      await tx.executeSql('DELETE FROM accounts;');
+      await tx.executeSql('DELETE FROM users;');
+    });
 
     console.log('[DB] All user data deleted successfully');
   } catch (error) {
@@ -281,5 +335,7 @@ export const database = {
   delete: deleteDatabase,
   deleteAllUserData,
   executeSql,
+  withTransaction,
+  executeTransaction,
   getDatabase: () => db,
 };

@@ -11,7 +11,8 @@
  */
 
 import React, { useMemo, useCallback } from 'react';
-import { View, Text, TouchableOpacity, FlatList, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -115,7 +116,7 @@ export const AllSectionsScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <FlashList estimatedItemSize={88}
         data={sections}
         renderItem={renderSectionItem}
         keyExtractor={(item) => item.id}

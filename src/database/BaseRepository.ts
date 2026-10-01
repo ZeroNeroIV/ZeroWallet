@@ -5,6 +5,7 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { executeSql } from './index';
+import { createQueryBuilder, QueryBuilder } from './QueryBuilder';
 import type { IRepository, FieldMapping } from './types';
 
 export abstract class BaseRepository<TEntity, TInput = Partial<TEntity>>
@@ -13,6 +14,13 @@ export abstract class BaseRepository<TEntity, TInput = Partial<TEntity>>
   protected abstract tableName: string;
   protected abstract fieldMappings: FieldMapping[];
   protected abstract mapRow(row: Record<string, unknown>): TEntity;
+
+  /**
+   * Creates a fluent QueryBuilder targeted at this repository's table
+   */
+  createQuery(): QueryBuilder<Record<string, unknown>> {
+    return createQueryBuilder(this.tableName);
+  }
 
   // ============================================
   // Create (generic INSERT via field mappings)
@@ -24,27 +32,43 @@ export abstract class BaseRepository<TEntity, TInput = Partial<TEntity>>
     const now = Date.now();
     const flat = data as Record<string, unknown>;
 
-    const columns: string[] = ['id'];
-    const values: unknown[] = [id];
-
+    const row: Record<string, unknown> = { id };
     for (const mapping of this.fieldMappings) {
       const val = flat[mapping.field];
       if (val !== undefined) {
-        columns.push(mapping.column);
-        values.push(val);
+        row[mapping.column] = val;
       }
     }
+    row.created_at = now;
+    row.updated_at = now;
 
-    columns.push('created_at', 'updated_at');
-    values.push(now, now);
-
-    const placeholders = columns.map(() => '?').join(', ');
-
-    await executeSql(
-      `INSERT INTO ${this.tableName} (${columns.join(', ')}) VALUES (${placeholders})`,
-      values,
-    );
+    await this.createQuery().insert(row).execute();
     return (await this.findById(id)) as TEntity;
+  }
+
+  // ============================================
+  // Batch Insert
+  // ============================================
+
+  async insertBatch(items: TInput[]): Promise<void> {
+    if (items.length === 0) return;
+    const now = Date.now();
+    const rows = items.map((data) => {
+      const id = uuidv4();
+      const flat = data as Record<string, unknown>;
+      const row: Record<string, unknown> = { id };
+      for (const mapping of this.fieldMappings) {
+        const val = flat[mapping.field];
+        if (val !== undefined) {
+          row[mapping.column] = val;
+        }
+      }
+      row.created_at = now;
+      row.updated_at = now;
+      return row;
+    });
+
+    await this.createQuery().insert(rows).execute();
   }
 
   // ============================================
@@ -59,33 +83,24 @@ export abstract class BaseRepository<TEntity, TInput = Partial<TEntity>>
     const id = uuidv4();
     const now = Date.now();
 
-    const columns: string[] = ['id'];
-    const values: unknown[] = [id];
-
+    const row: Record<string, unknown> = { id };
     for (const mapping of this.fieldMappings) {
       const val = data[mapping.field];
       if (val !== undefined) {
-        columns.push(mapping.column);
-        values.push(val);
+        row[mapping.column] = val;
       }
     }
 
     if (extraColumns) {
       for (const [col, val] of Object.entries(extraColumns)) {
-        columns.push(col);
-        values.push(val);
+        row[col] = val;
       }
     }
 
-    columns.push('created_at', 'updated_at');
-    values.push(now, now);
+    row.created_at = now;
+    row.updated_at = now;
 
-    const placeholders = columns.map(() => '?').join(', ');
-
-    await executeSql(
-      `INSERT INTO ${this.tableName} (${columns.join(', ')}) VALUES (${placeholders})`,
-      values,
-    );
+    await this.createQuery().insert(row).execute();
     return id;
   }
 
@@ -94,10 +109,28 @@ export abstract class BaseRepository<TEntity, TInput = Partial<TEntity>>
   // ============================================
 
   async findById(id: string): Promise<TEntity | null> {
-    const rows = await executeSql<Record<string, unknown>>(
-      `SELECT * FROM ${this.tableName} WHERE id = ?`, [id],
-    );
-    return rows.length > 0 ? this.mapRow(rows[0]) : null;
+    const row = await this.createQuery().where('id', id).first();
+    return row ? this.mapRow(row) : null;
+  }
+
+  // ============================================
+  // Find All (with pagination)
+  // ============================================
+
+  async findAll(limit?: number, offset?: number): Promise<TEntity[]> {
+    const qb = this.createQuery().orderBy('created_at', 'DESC');
+    if (limit !== undefined) qb.limit(limit);
+    if (offset !== undefined) qb.offset(offset);
+    const rows = await qb.execute();
+    return rows.map((r) => this.mapRow(r));
+  }
+
+  // ============================================
+  // Count
+  // ============================================
+
+  async count(): Promise<number> {
+    return this.createQuery().count();
   }
 
   // ============================================
@@ -107,25 +140,19 @@ export abstract class BaseRepository<TEntity, TInput = Partial<TEntity>>
 
   async update(id: string, updates: Partial<TEntity>): Promise<void> {
     const flat = updates as Record<string, unknown>;
-    const setClauses: string[] = [];
-    const values: unknown[] = [];
+    const updateValues: Record<string, unknown> = {};
 
     for (const mapping of this.fieldMappings) {
       if (flat[mapping.field] !== undefined) {
-        setClauses.push(`${mapping.column} = ?`);
-        values.push(flat[mapping.field]);
+        updateValues[mapping.column] = flat[mapping.field];
       }
     }
 
-    if (setClauses.length === 0) return;
+    if (Object.keys(updateValues).length === 0) return;
 
-    setClauses.push('updated_at = ?');
-    values.push(Date.now(), id);
+    updateValues.updated_at = Date.now();
 
-    await executeSql(
-      `UPDATE ${this.tableName} SET ${setClauses.join(', ')} WHERE id = ?`,
-      values,
-    );
+    await this.createQuery().update(updateValues).where('id', id).execute();
   }
 
   // ============================================
@@ -133,7 +160,7 @@ export abstract class BaseRepository<TEntity, TInput = Partial<TEntity>>
   // ============================================
 
   async delete(id: string): Promise<void> {
-    await executeSql(`DELETE FROM ${this.tableName} WHERE id = ?`, [id]);
+    await this.createQuery().delete().where('id', id).execute();
   }
 
   // ============================================

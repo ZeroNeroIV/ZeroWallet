@@ -21,9 +21,9 @@ import {
   TouchableOpacity,
   Switch,
   Modal,
-  FlatList,
   Alert,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useAuthStore } from '../../store/authStore';
@@ -411,7 +411,7 @@ const SalarySettingsScreen = ({ navigation }: any) => {
                 />
               </TouchableOpacity>
             </View>
-            <FlatList
+            <FlashList estimatedItemSize={64}
               data={categories}
               renderItem={renderCategoryItem}
               keyExtractor={(item) => item.id}

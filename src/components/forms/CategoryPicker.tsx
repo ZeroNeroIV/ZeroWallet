@@ -4,9 +4,9 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  FlatList,
   Modal,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
@@ -136,7 +136,7 @@ export const CategoryPicker: React.FC<CategoryPickerProps> = ({
                 </Text>
               </View>
             ) : (
-              <FlatList
+              <FlashList estimatedItemSize={56}
                 data={filteredCategories}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (

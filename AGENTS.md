@@ -7,8 +7,8 @@
 - **Storage:** MMKV (fast KV) + SQLite (relational data via react-native-sqlite-storage)
 - **Navigation:** React Navigation v7 (stack navigator)
 - **AI:** Google Gemini (1.5 Flash / 2.5 Flash / 1.5 Pro) with function calling
-- **Charts:** Victory Native + react-native-gifted-charts
-- **Animations:** react-native-reanimated 4, Moti, Skia
+- **Charts:** react-native-gifted-charts
+- **Animations:** react-native-reanimated 4, Moti
 - **Notifications:** Notifee + Firebase Cloud Messaging
 - **Security:** Biometric + PIN with auto-lock
 

@@ -18,7 +18,8 @@
  */
 
 import React, { useMemo, useCallback, useState, useRef } from 'react';
-import { View, FlatList, StyleSheet, Text, TouchableOpacity, Animated } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -61,8 +62,7 @@ export const DashboardCardsGrid: React.FC<DashboardCardsGridProps> = React.memo(
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
 
   const [activeIndex, setActiveIndex] = useState(0);
-  const scrollX = useRef(new Animated.Value(0)).current;
-
+  
   const handleGoalsPress = useCallback(() => {
     navigation.navigate('GoalsScreen');
   }, [navigation]);
@@ -179,7 +179,7 @@ export const DashboardCardsGrid: React.FC<DashboardCardsGridProps> = React.memo(
       </View>
 
       {/* Cards List */}
-      <FlatList
+      <FlashList estimatedItemSize={280}
         horizontal
         data={cards}
         renderItem={renderCard}

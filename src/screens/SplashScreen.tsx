@@ -1,40 +1,33 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import Animated, {
+    useSharedValue,
+    useAnimatedStyle,
+    withTiming,
+    withSpring,
+} from 'react-native-reanimated';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { typography } from '../theme/typography';
+
 export default function SplashScreen() {
     const themeColors = useThemeColors();
-    const fadeAnim = useRef(new Animated.Value(0)).current;
-    const scaleAnim = useRef(new Animated.Value(0.8)).current;
+    const opacity = useSharedValue(0);
+    const scale = useSharedValue(0.8);
 
     useEffect(() => {
-        Animated.parallel([
-            Animated.timing(fadeAnim, {
-                toValue: 1,
-                duration: 800,
-                useNativeDriver: true,
-            }),
-            Animated.spring(scaleAnim, {
-                toValue: 1,
-                friction: 4,
-                tension: 40,
-                useNativeDriver: true,
-            }),
-        ]).start();
-    }, []);
+        opacity.value = withTiming(1, { duration: 800 });
+        scale.value = withSpring(1, { damping: 12, stiffness: 100 });
+    }, [opacity, scale]);
+
+    const animatedStyle = useAnimatedStyle(() => ({
+        opacity: opacity.value,
+        transform: [{ scale: scale.value }],
+    }));
 
     return (
         <View style={[styles.container, { backgroundColor: themeColors.background }]}>
-            <Animated.View
-                style={[
-                    styles.content,
-                    {
-                        opacity: fadeAnim,
-                        transform: [{ scale: scaleAnim }],
-                    },
-                ]}
-            >
+            <Animated.View style={[styles.content, animatedStyle]}>
                 <View style={[styles.iconContainer, { backgroundColor: themeColors.primary }]}>
                     <MaterialCommunityIcons name="wallet" size={64} color="#FFFFFF" />
                 </View>
@@ -60,7 +53,7 @@ const styles = StyleSheet.create({
     iconContainer: {
         width: 120,
         height: 120,
-        borderRadius: 30, // Squircle-ish
+        borderRadius: 30,
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 24,
@@ -78,7 +71,7 @@ const styles = StyleSheet.create({
         fontWeight: '800',
         letterSpacing: 4,
         marginBottom: 8,
-        fontFamily: typography.fontFamily.bold, // Assuming this exists
+        fontFamily: typography.fontFamily.bold,
     },
     subtitle: {
         fontSize: 16,

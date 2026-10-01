@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import CryptoJS from 'crypto-js';
 import { mmkvStorage } from './middleware/mmkvStorage';
+import { useAccountStore } from './accountStore';
 import type { AuthState } from '../types/store';
 
 // ============================================
@@ -49,9 +50,12 @@ export const useAuthStore = create<AuthState>()(
           const accountRepo = new AccountRepository();
           const defaultAccount = await accountRepo.findDefaultByUser(user.id);
 
+          const accountId = defaultAccount?.id || null;
+          useAccountStore.getState().setCurrentAccountId(accountId);
+
           set({
             currentUser: user,
-            currentAccountId: defaultAccount?.id || null,
+            currentAccountId: accountId,
             isAuthenticated: true,
             isLoading: false,
             error: null,
@@ -115,8 +119,8 @@ export const useAuthStore = create<AuthState>()(
           await createDefaultCategories(newUser.id);
 
           // Initialize account balance
-          const { useAccountStore } = await import('./accountStore');
           useAccountStore.getState().initializeBalance(defaultAccount.id);
+          useAccountStore.getState().setCurrentAccountId(defaultAccount.id);
 
           set({
             currentUser: newUser,
@@ -144,10 +148,10 @@ export const useAuthStore = create<AuthState>()(
 
       logout: () => {
         // Clear all stores
-        const { useAccountStore } = require('./accountStore');
         const { useSettingsStore } = require('./settingsStore');
 
         useAccountStore.getState().resetBalances();
+        useAccountStore.getState().setCurrentAccountId(null);
         useSettingsStore.getState().resetSettings();
 
         set({
@@ -161,6 +165,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       switchAccount: (accountId: string) => {
+        useAccountStore.getState().setCurrentAccountId(accountId);
         set({ currentAccountId: accountId });
         console.log('[Auth] Switched to account:', accountId);
       },
@@ -176,6 +181,11 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'auth-storage',
       storage: mmkvStorage,
+      onRehydrateStorage: () => (state) => {
+        if (state?.currentAccountId) {
+          useAccountStore.getState().setCurrentAccountId(state.currentAccountId);
+        }
+      },
     }
   )
 );

@@ -37,18 +37,26 @@ export interface AuthState {
 
 export interface AccountState {
   balances: Record<string, AccountBalance>; // Key: accountId
+  currentAccountId: string | null;
   isLoading: boolean;
 
   // Actions
+  setCurrentAccountId: (accountId: string | null) => void;
   updateBalance: (
     accountId: string,
     updates: Partial<AccountBalance>
   ) => void;
-  getCurrentBalance: () => AccountBalance | null;
+  getCurrentBalance: (accountId?: string) => AccountBalance | null;
   getAccountBalance: (accountId: string) => AccountBalance | null;
   initializeBalance: (accountId: string) => void;
   resetBalances: () => void;
   clearAccounts: () => void;
+
+  // Vault operations integrated directly
+  addToVault: (vault: VaultType | string, amount: number, accountId?: string) => void;
+  subtractFromVault: (vault: VaultType | string, amount: number, accountId?: string) => void;
+  getVaultBalance: (vault: VaultType | string, accountId?: string) => number;
+  getAvailableToSpend: (accountId?: string) => number;
 }
 
 // ============================================

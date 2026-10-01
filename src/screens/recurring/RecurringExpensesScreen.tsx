@@ -21,12 +21,12 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
   Alert,
   RefreshControl,
   Switch,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { MainStackParamList } from '../../types/navigation';
@@ -333,11 +333,12 @@ export default function RecurringExpensesScreen() {
       )}
 
       {/* Expenses List */}
-      <FlatList
+      <FlashList
         data={expenses}
         keyExtractor={(item) => item.id}
         renderItem={renderExpenseItem}
         contentContainerStyle={styles.listContent}
+        estimatedItemSize={92}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }

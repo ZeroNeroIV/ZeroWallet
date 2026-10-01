@@ -16,7 +16,8 @@
  */
 
 import React, { useMemo, useCallback } from 'react';
-import { View, Text, TouchableOpacity, FlatList, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -152,7 +153,7 @@ export const GoalsDebtsSection: React.FC<GoalsDebtsSectionProps> = React.memo(({
       </View>
 
       {/* Horizontal List */}
-      <FlatList
+      <FlashList estimatedItemSize={220}
         horizontal
         data={combinedItems}
         renderItem={renderCard}

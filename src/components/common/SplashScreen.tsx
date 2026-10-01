@@ -1,12 +1,12 @@
 /**
  * Purpose: Custom splash screen component for app initialization
- * 
+ *
  * Inputs:
  *   - onFinish (function): Callback when initialization is complete
- * 
+ *
  * Outputs:
  *   - Returns (JSX.Element): Animated splash screen with logo and loading indicator
- * 
+ *
  * Side effects:
  *   - Displays during app initialization
  *   - Fades out after minimum display time
@@ -14,7 +14,15 @@
  */
 
 import React, { useEffect } from 'react';
-import { View, StyleSheet, Image, Animated, ImageStyle } from 'react-native';
+import { View, StyleSheet, Image, ImageStyle } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withDelay,
+  withSequence,
+  runOnJS,
+} from 'react-native-reanimated';
 import { colors } from '../../theme/colors';
 
 interface SplashScreenProps {
@@ -22,48 +30,32 @@ interface SplashScreenProps {
 }
 
 export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
-  const fadeAnim = new Animated.Value(1);
-  const scaleAnim = new Animated.Value(0.8);
+  const opacity = useSharedValue(0);
+  const scale = useSharedValue(0.8);
 
   useEffect(() => {
-    // Animate logo appearance
-    Animated.sequence([
-      Animated.parallel([
-        Animated.timing(scaleAnim, {
-          toValue: 1,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-      ]),
-      // Hold splash for minimum time
-      Animated.delay(1000),
-      // Fade out
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      onFinish?.();
-    });
-  }, []);
+    scale.value = withTiming(1, { duration: 600 });
+    opacity.value = withSequence(
+      withTiming(1, { duration: 400 }),
+      withDelay(
+        1000,
+        withTiming(0, { duration: 300 }, (finished) => {
+          if (finished && onFinish) {
+            runOnJS(onFinish)();
+          }
+        })
+      )
+    );
+  }, [onFinish, opacity, scale]);
+
+  const animatedLogoStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }],
+  }));
 
   return (
     <View style={styles.container}>
-      <Animated.View
-        style={[
-          styles.logoContainer,
-          {
-            opacity: fadeAnim,
-            transform: [{ scale: scaleAnim }],
-          },
-        ]}
-      >
+      <Animated.View style={[styles.logoContainer, animatedLogoStyle]}>
         <Image
           source={require('../../../wallet.png')}
           style={styles.logo as ImageStyle}

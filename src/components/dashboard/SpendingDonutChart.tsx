@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 
 import { PieChart } from 'react-native-gifted-charts';
 import { spacing } from '../../theme/spacing';
@@ -53,12 +53,12 @@ export const SpendingDonutChart: React.FC<SpendingDonutChartProps> = ({ data, to
           radius={48}
           innerRadius={30}
           centerLabelComponent={() => (
-            <Animated.Text style={[
+            <Text style={[
               styles.centerLabel,
               pressedIndex !== null && { transform: [{ scale: pressedIndex === 0 ? 1.2 : 1 }] },
             ]}>
               {totalSpend > 0 ? `${((top4[0]?.amount ?? 0) / totalSpend * 100).toFixed(0)}%` : ''}
-            </Animated.Text>
+            </Text>
           )}
           isAnimated
           animationDuration={700}

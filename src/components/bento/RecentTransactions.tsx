@@ -4,8 +4,8 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  FlatList,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -131,11 +131,12 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
 
       <View style={styles.listContainer}>
         {transactions.length > 0 ? (
-          <FlatList
+          <FlashList
             data={transactions.slice(0, 5)}
             renderItem={renderTransaction}
             keyExtractor={(item) => item.id}
             scrollEnabled={false}
+            estimatedItemSize={72}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
           />
         ) : (

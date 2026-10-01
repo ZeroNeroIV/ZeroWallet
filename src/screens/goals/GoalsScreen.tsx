@@ -3,11 +3,11 @@ import {
     View,
     Text,
     StyleSheet,
-    FlatList,
     TouchableOpacity,
     RefreshControl,
     Alert,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { MainStackParamList } from '../../types/navigation';
@@ -232,11 +232,12 @@ export default function GoalsScreen() {
             </View>
 
             {/* Goals List */}
-            <FlatList
+            <FlashList
                 data={filteredGoals}
                 keyExtractor={(item) => item.id}
                 renderItem={renderGoalItem}
                 contentContainerStyle={styles.listContent}
+                estimatedItemSize={140}
                 refreshControl={
                     <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
                 }

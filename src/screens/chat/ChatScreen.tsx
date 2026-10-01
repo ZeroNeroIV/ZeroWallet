@@ -20,13 +20,13 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   Alert,
   RefreshControl,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAIChatStore } from '../../store/aiChatStore';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -69,7 +69,7 @@ const ChatScreen = ({ navigation }: any) => {
   const updateAISettings = settingsStore.updateAISettings;
   const { currentAccountId, currentUser } = useAuthStore();
 
-  const flatListRef = useRef<FlatList>(null);
+  const flatListRef = useRef<FlashList<any>>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   // Scroll to bottom when new message arrives
@@ -335,7 +335,7 @@ const ChatScreen = ({ navigation }: any) => {
     >
       <View style={styles.container}>
         {/* Messages List */}
-        <FlatList
+        <FlashList estimatedItemSize={76}
           ref={flatListRef}
           data={messagesWithDates}
           renderItem={renderItem}

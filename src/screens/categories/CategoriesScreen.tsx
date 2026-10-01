@@ -19,11 +19,11 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
   Alert,
   RefreshControl,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { MainStackParamList } from '../../types/navigation';
@@ -223,7 +223,7 @@ export default function CategoriesScreen() {
       </View>
 
       {/* Category List */}
-      <FlatList
+      <FlashList estimatedItemSize={72}
         data={filteredCategories}
         keyExtractor={(item) => item.id}
         renderItem={renderCategoryItem}

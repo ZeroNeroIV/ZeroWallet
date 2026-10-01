@@ -16,13 +16,13 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
   Modal,
   TextInput,
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAuthStore } from '../../store/authStore';
 import { useAccountStore } from '../../store/accountStore';
@@ -196,7 +196,7 @@ export default function WalletsScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <FlashList estimatedItemSize={80}
         data={wallets}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}

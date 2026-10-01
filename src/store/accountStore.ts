@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { mmkvStorage } from './middleware/mmkvStorage';
 import { roundMoney } from '../utils/balanceCalculator';
+import { VaultType } from '../domain/vault/VaultType';
 
 import type { AccountState } from '../types/store';
 
@@ -15,9 +16,13 @@ export const useAccountStore = create<AccountState>()(
     (set, get) => ({
       // State
       balances: {},
+      currentAccountId: null,
       isLoading: false,
 
       // Actions
+      setCurrentAccountId: (accountId) => {
+        set({ currentAccountId: accountId });
+      },
       updateBalance: (accountId, updates) => {
         set((state) => {
           const currentBalance = state.balances[accountId] || {
@@ -86,21 +91,78 @@ export const useAccountStore = create<AccountState>()(
         console.log('[AccountStore] Balance updated for account:', accountId);
       },
 
-      getCurrentBalance: () => {
+      getCurrentBalance: (accountId) => {
         const state = get();
-        const { useAuthStore } = require('./authStore');
-        const currentAccountId = useAuthStore.getState().currentAccountId;
+        const targetId = accountId ?? state.currentAccountId;
 
-        if (!currentAccountId) {
+        if (!targetId) {
           return null;
         }
 
-        return state.balances[currentAccountId] || null;
+        return state.balances[targetId] || null;
       },
 
       getAccountBalance: (accountId) => {
         const state = get();
         return state.balances[accountId] || null;
+      },
+
+      addToVault: (vault, amount, accountId) => {
+        const state = get();
+        const targetId = accountId ?? state.currentAccountId;
+        if (!targetId) {
+          console.error('[AccountStore] No current account selected');
+          return;
+        }
+
+        const currentBalance = state.balances[targetId];
+        if (!currentBalance) {
+          console.error('[AccountStore] Current balance not found');
+          return;
+        }
+
+        const vt = VaultType.parse(vault as string);
+        state.updateBalance(targetId, vt.adjustBalance(currentBalance, amount));
+      },
+
+      subtractFromVault: (vault, amount, accountId) => {
+        const state = get();
+        const targetId = accountId ?? state.currentAccountId;
+        if (!targetId) {
+          console.error('[AccountStore] No current account selected');
+          return;
+        }
+
+        const currentBalance = state.balances[targetId];
+        if (!currentBalance) {
+          console.error('[AccountStore] Current balance not found');
+          return;
+        }
+
+        const vt = VaultType.parse(vault as string);
+        state.updateBalance(targetId, vt.adjustBalance(currentBalance, -amount));
+      },
+
+      getVaultBalance: (vault, accountId) => {
+        const state = get();
+        const targetId = accountId ?? state.currentAccountId;
+        if (!targetId) return 0;
+
+        const currentBalance = state.balances[targetId];
+        if (!currentBalance) return 0;
+
+        return VaultType.parse(vault as string).getBalance(currentBalance);
+      },
+
+      getAvailableToSpend: (accountId) => {
+        const state = get();
+        const targetId = accountId ?? state.currentAccountId;
+        if (!targetId) return 0;
+
+        const currentBalance = state.balances[targetId];
+        if (!currentBalance) return 0;
+
+        return currentBalance.availableBalance;
       },
 
       initializeBalance: (accountId) => {

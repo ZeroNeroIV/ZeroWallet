@@ -4,11 +4,11 @@ import {
     View,
     Text,
     StyleSheet,
-    FlatList,
     TouchableOpacity,
     RefreshControl,
     Alert,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { MainStackParamList } from '../../types/navigation';
@@ -210,11 +210,12 @@ export default function DebtsScreen() {
             )}
 
             {/* Debts List */}
-            <FlatList
+            <FlashList
                 data={filteredDebts}
                 keyExtractor={(item) => item.id}
                 renderItem={renderDebtItem}
                 contentContainerStyle={styles.listContent}
+                estimatedItemSize={120}
                 refreshControl={
                     <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
                 }

@@ -1,6 +1,7 @@
 // DebtCard - Beautiful card component for displaying debt information
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { format, isBefore } from 'date-fns';
 import type { Debt } from '../../types/models';
@@ -14,7 +15,10 @@ interface DebtCardProps {
 
 export const DebtCard: React.FC<DebtCardProps> = ({ debt, onPress }) => {
     const themeColors = useThemeColors();
-    const scaleAnim = React.useRef(new Animated.Value(1)).current;
+    const scale = useSharedValue(1);
+    const animatedCardStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: scale.value }],
+    }));
 
     const isOverdue = isBefore(debt.dueDate, Date.now()) && debt.status !== 'paid';
     const remainingAmount = debt.amount - debt.amountPaid;
@@ -39,18 +43,11 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, onPress }) => {
     };
 
     const handlePressIn = () => {
-        Animated.spring(scaleAnim, {
-            toValue: 0.96,
-            useNativeDriver: true,
-        }).start();
+        scale.value = withSpring(0.96, { damping: 15, stiffness: 300 });
     };
 
     const handlePressOut = () => {
-        Animated.spring(scaleAnim, {
-            toValue: 1,
-            friction: 3,
-            useNativeDriver: true,
-        }).start();
+        scale.value = withSpring(1, { damping: 15, stiffness: 300 });
     };
 
     const avatarColor = getAvatarColor(debt.personName);

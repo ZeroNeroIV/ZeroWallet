@@ -5,9 +5,9 @@ import {
     StyleSheet,
     TouchableOpacity,
     Modal,
-    FlatList,
     TextInput,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -158,7 +158,7 @@ export const CurrencyPicker: React.FC<CurrencyPickerProps> = ({
                         </View>
 
                         {/* Currency List */}
-                        <FlatList
+                        <FlashList estimatedItemSize={56}
                             data={filteredCurrencies}
                             keyExtractor={(item) => item.code}
                             renderItem={renderCurrencyItem}

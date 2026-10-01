@@ -8,12 +8,20 @@
  *   - Returns (JSX.Element | null): Animated dots or null if not visible
  *
  * Side effects:
- *   - Animates three dots in a wave pattern
- *   - Fades in/out smoothly when visibility changes
+ *   - Animates three dots in a wave pattern using Reanimated 4 worklets
+ *   - Fades in/out smoothly on the UI thread when visibility changes
  */
 
-import React, { useEffect, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import React, { useEffect, useMemo } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+  withDelay,
+} from 'react-native-reanimated';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { spacing, borderRadius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -27,114 +35,82 @@ export const TypingIndicator: React.FC<TypingIndicatorProps> = ({ isVisible }) =
   const themeColors = useThemeColors();
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
 
-  // Animated values for each dot
-  const dot1Anim = useRef(new Animated.Value(0)).current;
-  const dot2Anim = useRef(new Animated.Value(0)).current;
-  const dot3Anim = useRef(new Animated.Value(0)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const dot1 = useSharedValue(0);
+  const dot2 = useSharedValue(0);
+  const dot3 = useSharedValue(0);
+  const containerOpacity = useSharedValue(0);
 
-  // Animate dots in a wave pattern
   useEffect(() => {
     if (isVisible) {
-      // Fade in
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
+      containerOpacity.value = withTiming(1, { duration: 200 });
 
-      // Create staggered animation for each dot
-      const createDotAnimation = (animValue: Animated.Value, delay: number) => {
-        return Animated.loop(
-          Animated.sequence([
-            Animated.delay(delay),
-            Animated.timing(animValue, {
-              toValue: 1,
-              duration: 400,
-              useNativeDriver: true,
-            }),
-            Animated.timing(animValue, {
-              toValue: 0,
-              duration: 400,
-              useNativeDriver: true,
-            }),
-          ])
-        );
-      };
+      dot1.value = withRepeat(
+        withSequence(
+          withTiming(1, { duration: 400 }),
+          withTiming(0, { duration: 400 })
+        ),
+        -1,
+        false
+      );
 
-      // Start animations with stagger
-      const animations = [
-        createDotAnimation(dot1Anim, 0),
-        createDotAnimation(dot2Anim, 150),
-        createDotAnimation(dot3Anim, 300),
-      ];
+      dot2.value = withDelay(
+        150,
+        withRepeat(
+          withSequence(
+            withTiming(1, { duration: 400 }),
+            withTiming(0, { duration: 400 })
+          ),
+          -1,
+          false
+        )
+      );
 
-      animations.forEach((anim) => anim.start());
-
-      return () => {
-        animations.forEach((anim) => anim.stop());
-        dot1Anim.setValue(0);
-        dot2Anim.setValue(0);
-        dot3Anim.setValue(0);
-      };
+      dot3.value = withDelay(
+        300,
+        withRepeat(
+          withSequence(
+            withTiming(1, { duration: 400 }),
+            withTiming(0, { duration: 400 })
+          ),
+          -1,
+          false
+        )
+      );
     } else {
-      // Fade out
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
+      containerOpacity.value = withTiming(0, { duration: 200 });
+      dot1.value = 0;
+      dot2.value = 0;
+      dot3.value = 0;
     }
-  }, [isVisible, dot1Anim, dot2Anim, dot3Anim, fadeAnim]);
+  }, [isVisible, containerOpacity, dot1, dot2, dot3]);
+
+  const containerStyle = useAnimatedStyle(() => ({
+    opacity: containerOpacity.value,
+    transform: [{ scale: containerOpacity.value }],
+  }));
+
+  const dot1Style = useAnimatedStyle(() => ({
+    opacity: 0.3 + dot1.value * 0.7,
+    transform: [{ scale: 1 + dot1.value * 0.2 }],
+  }));
+
+  const dot2Style = useAnimatedStyle(() => ({
+    opacity: 0.3 + dot2.value * 0.7,
+    transform: [{ scale: 1 + dot2.value * 0.2 }],
+  }));
+
+  const dot3Style = useAnimatedStyle(() => ({
+    opacity: 0.3 + dot3.value * 0.7,
+    transform: [{ scale: 1 + dot3.value * 0.2 }],
+  }));
 
   if (!isVisible) {
     return null;
   }
 
-  // Interpolate opacity for each dot
-  const dot1Opacity = dot1Anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.3, 1],
-  });
-
-  const dot2Opacity = dot2Anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.3, 1],
-  });
-
-  const dot3Opacity = dot3Anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.3, 1],
-  });
-
-  // Interpolate scale for each dot
-  const dot1Scale = dot1Anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 1.2],
-  });
-
-  const dot2Scale = dot2Anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 1.2],
-  });
-
-  const dot3Scale = dot3Anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 1.2],
-  });
-
   return (
-    <Animated.View
-      style={[
-        styles.container,
-        {
-          opacity: fadeAnim,
-          transform: [{ scale: fadeAnim }],
-        },
-      ]}
-    >
+    <Animated.View style={[styles.container, containerStyle]}>
       <View style={styles.bubble}>
-        {/* AI Icon */}
         <View style={styles.aiIconContainer}>
           <MaterialCommunityIcons
             name="robot-outline"
@@ -143,37 +119,17 @@ export const TypingIndicator: React.FC<TypingIndicatorProps> = ({ isVisible }) =
           />
         </View>
 
-        {/* Typing text */}
         <Text style={styles.typingText}>AI is thinking</Text>
 
-        {/* Animated dots */}
         <View style={styles.dotsContainer}>
           <Animated.View
-            style={[
-              styles.dot,
-              {
-                opacity: dot1Opacity,
-                transform: [{ scale: dot1Scale }],
-              },
-            ]}
+            style={[styles.dot, { backgroundColor: themeColors.primary }, dot1Style]}
           />
           <Animated.View
-            style={[
-              styles.dot,
-              {
-                opacity: dot2Opacity,
-                transform: [{ scale: dot2Scale }],
-              },
-            ]}
+            style={[styles.dot, { backgroundColor: themeColors.primary }, dot2Style]}
           />
           <Animated.View
-            style={[
-              styles.dot,
-              {
-                opacity: dot3Opacity,
-                transform: [{ scale: dot3Scale }],
-              },
-            ]}
+            style={[styles.dot, { backgroundColor: themeColors.primary }, dot3Style]}
           />
         </View>
       </View>
@@ -184,51 +140,43 @@ export const TypingIndicator: React.FC<TypingIndicatorProps> = ({ isVisible }) =
 const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
   StyleSheet.create({
     container: {
-      width: '100%',
-      marginBottom: spacing.md,
       paddingHorizontal: spacing.md,
+      paddingVertical: spacing.xs,
       alignItems: 'flex-start',
     },
-
     bubble: {
-      maxWidth: '80%',
-      borderRadius: borderRadius.lg,
-      borderBottomLeftRadius: spacing.xs,
-      padding: spacing.md,
-      backgroundColor: themeColors.surface,
-      borderWidth: 1,
-      borderColor: themeColors.border,
       flexDirection: 'row',
       alignItems: 'center',
-      gap: spacing.sm,
+      backgroundColor: themeColors.surface,
+      borderRadius: borderRadius.lg,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderWidth: 1,
+      borderColor: themeColors.border,
+      maxWidth: '80%',
     },
-
     aiIconContainer: {
       width: 24,
       height: 24,
-      borderRadius: 12,
-      backgroundColor: `${themeColors.primary}15`,
-      justifyContent: 'center',
+      borderRadius: borderRadius.full,
+      backgroundColor: themeColors.primary + '15',
       alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: spacing.xs,
     },
-
     typingText: {
       ...typography.bodySmall,
       color: themeColors.textSecondary,
-      fontStyle: 'italic',
+      marginRight: spacing.sm,
     },
-
     dotsContainer: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.xs / 2,
-      marginLeft: spacing.xs,
     },
-
     dot: {
       width: 6,
       height: 6,
       borderRadius: 3,
-      backgroundColor: themeColors.primary,
     },
   });
