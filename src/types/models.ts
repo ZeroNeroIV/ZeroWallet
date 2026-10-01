@@ -354,3 +354,33 @@ export interface DebtStats {
   pendingLentCount: number; // Number of active debts owed to me
   pendingBorrowedCount: number; // Number of active debts I owe
 }
+
+// ============================================
+// Budgets
+// ============================================
+
+export type BudgetPeriod = 'monthly' | 'weekly' | 'yearly';
+
+export interface Budget {
+  id: string; // UUID
+  accountId: string; // FK to Account
+  categoryId: string; // FK to Category
+  amount: number; // Spending limit
+  period: BudgetPeriod;
+  rollover: boolean; // Roll over unspent/deficit
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type BudgetInput = Omit<Budget, 'id' | 'createdAt' | 'updatedAt'>;
+
+export interface BudgetStatus {
+  budget: Budget;
+  category?: Category;
+  spent: number;
+  remaining: number;
+  percentage: number;
+  isWarning: boolean; // >= 80%
+  isExceeded: boolean; // >= 100%
+}
+

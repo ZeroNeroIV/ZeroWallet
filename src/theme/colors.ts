@@ -1,24 +1,36 @@
+// Brand Palette: Chestnut Hollow, Arctic Whisper, and Gilded Nectar
+export const brand = {
+  chestnut: '#432F2E',
+  arctic: '#C3DAE8',
+  gilded: '#FEEFB6',
+  espresso: '#150F0E',
+  espressoSurface: '#241918',
+  espressoBorder: '#432F2E',
+  creamAlabaster: '#FBF8F4',
+  pureWhite: '#FFFFFF',
+};
+
 // Color Palette with nested structure
 export const colors = {
   // Primary Colors
   primary: {
-    main: '#13ecec',
-    dark: '#0FC5C5',
-    light: '#4DF0F0',
+    main: '#432F2E',
+    dark: '#2D1E1D',
+    light: '#5E4341',
   },
 
   // Secondary Colors
   secondary: {
-    main: '#FFE66D',
-    dark: '#F5C644',
-    light: '#FFF095',
+    main: '#FEEFB6',
+    dark: '#E5D69F',
+    light: '#FFF9DE',
   },
 
   // Accent Colors
   accent: {
-    main: '#FF6B6B',
-    dark: '#E55555',
-    light: '#FF9494',
+    main: '#C3DAE8',
+    dark: '#9EBECF',
+    light: '#E0EFF7',
   },
 
   // Semantic Colors
@@ -57,30 +69,30 @@ export const colors = {
 
   // Vault Colors
   vault: {
-    main: '#13ecec',
-    savings: '#FFD166',
+    main: '#432F2E',
+    savings: '#FEEFB6',
     held: '#FF6B6B',
   },
 
   // Glass Morphism Colors
   glass: {
-    background: 'rgba(255, 255, 255, 0.03)',
-    border: 'rgba(255, 255, 255, 0.05)',
-    borderLight: 'rgba(255, 255, 255, 0.1)',
+    background: 'rgba(255, 255, 255, 0.05)',
+    border: 'rgba(195, 218, 232, 0.2)',
+    borderLight: 'rgba(195, 218, 232, 0.35)',
   },
 
   // Background
-  background: '#fdf5e6',
-  backgroundDark: '#1f201f',
+  background: '#FBF8F4',
+  backgroundDark: '#150F0E',
   surface: '#FFFFFF',
-  surfaceDark: '#2a2b2a',
+  surfaceDark: '#241918',
 
   // Text
-  text: '#212121',
-  textSecondary: '#757575',
+  text: '#432F2E',
+  textSecondary: '#6B5857',
   textDisabled: '#BDBDBD',
-  textDark: '#FFFFFF',
-  textSecondaryDark: '#BDBDBD',
+  textDark: '#FDFBFA',
+  textSecondaryDark: '#C3DAE8',
 
   // Category Default Colors
   category: {
@@ -100,8 +112,8 @@ export const colors = {
   },
 
   // Borders
-  border: '#E0E0E0',
-  borderDark: '#3a3b3a',
+  border: 'rgba(195, 218, 232, 0.6)',
+  borderDark: '#432F2E',
 
   // Shadows
   shadow: 'rgba(0, 0, 0, 0.2)',
@@ -112,12 +124,12 @@ export const colors = {
 
 // Light Theme
 export const lightTheme = {
-  primary: colors.primary.main,
-  background: colors.background,
-  surface: colors.surface,
-  text: colors.text,
-  textSecondary: colors.textSecondary,
-  border: colors.border,
+  primary: brand.chestnut,
+  background: brand.creamAlabaster,
+  surface: brand.pureWhite,
+  text: brand.chestnut,
+  textSecondary: '#6B5857',
+  border: 'rgba(195, 218, 232, 0.6)',
   success: colors.semantic.success,
   error: colors.semantic.error,
   warning: colors.semantic.warning,
@@ -126,12 +138,12 @@ export const lightTheme = {
 
 // Dark Theme
 export const darkTheme = {
-  primary: colors.primary.main,
-  background: colors.backgroundDark,
-  surface: colors.surfaceDark,
-  text: colors.textDark,
-  textSecondary: colors.textSecondaryDark,
-  border: colors.borderDark,
+  primary: brand.gilded,
+  background: brand.espresso,
+  surface: brand.espressoSurface,
+  text: '#FDFBFA',
+  textSecondary: brand.arctic,
+  border: brand.espressoBorder,
   success: colors.semantic.success,
   error: colors.semantic.error,
   warning: colors.semantic.warning,

@@ -22,6 +22,7 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -158,31 +159,86 @@ export default function WalletsScreen() {
     }
   };
 
-  const handleDelete = (wallet: Wallet) => {
-    if (wallet.isDefault) {
-      Alert.alert('Cannot Delete', 'Built-in wallets cannot be deleted, but you can rename them.');
+  const [reassignVisible, setReassignVisible] = useState(false);
+  const [walletToDelete, setWalletToDelete] = useState<Wallet | null>(null);
+  const [targetWalletId, setTargetWalletId] = useState<string>('');
+  const [usageDetails, setUsageDetails] = useState<{
+    transactions: number;
+    subscriptions: number;
+    recurring: number;
+  }>({ transactions: 0, subscriptions: 0, recurring: 0 });
+  const [deleting, setDeleting] = useState(false);
+
+  const otherWallets = useMemo(() => {
+    if (!walletToDelete) return [];
+    return wallets.filter((w) => w.id !== walletToDelete.id);
+  }, [wallets, walletToDelete]);
+
+  const handleDelete = async (wallet: Wallet) => {
+    if (wallets.length <= 1) {
+      Alert.alert('Cannot Delete', 'An account must have at least one wallet.');
       return;
     }
-    Alert.alert(
-      'Delete Wallet',
-      `Delete “${wallet.name}”? Only wallets with no transactions can be deleted.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await new WalletRepository().delete(wallet.id, wallet.accountId || currentAccountId || undefined);
-              mediumHaptic();
-              await refresh();
-            } catch (error: any) {
-              Alert.alert('Cannot Delete', error?.message || 'Could not delete the wallet.');
-            }
-          },
-        },
-      ]
-    );
+
+    try {
+      const repo = new WalletRepository();
+      const usage = await repo.getWalletUsage(wallet.id, wallet.accountId || currentAccountId || undefined);
+      const totalUsage = usage.transactions + usage.subscriptions + usage.recurring;
+
+      if (totalUsage === 0) {
+        Alert.alert(
+          'Delete Wallet',
+          `Are you sure you want to delete “${wallet.name}”?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Delete',
+              style: 'destructive',
+              onPress: async () => {
+                try {
+                  await repo.delete(wallet.id, wallet.accountId || currentAccountId || undefined);
+                  mediumHaptic();
+                  if (currentAccountId) await syncBalancesFromDatabase(currentAccountId);
+                  await refresh();
+                } catch (error: any) {
+                  Alert.alert('Cannot Delete', error?.message || 'Could not delete the wallet.');
+                }
+              },
+            },
+          ]
+        );
+      } else {
+        const remaining = wallets.filter((w) => w.id !== wallet.id);
+        setWalletToDelete(wallet);
+        setUsageDetails(usage);
+        setTargetWalletId(remaining[0]?.id || '');
+        setReassignVisible(true);
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Could not check wallet usage.');
+    }
+  };
+
+  const handleConfirmReassignAndDelete = async () => {
+    if (!walletToDelete || !targetWalletId) return;
+    setDeleting(true);
+    try {
+      const repo = new WalletRepository();
+      await repo.delete(
+        walletToDelete.id,
+        walletToDelete.accountId || currentAccountId || undefined,
+        targetWalletId
+      );
+      mediumHaptic();
+      setReassignVisible(false);
+      setWalletToDelete(null);
+      if (currentAccountId) await syncBalancesFromDatabase(currentAccountId);
+      await refresh();
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to reassign and delete wallet.');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const renderItem = ({ item }: { item: Wallet }) => {
@@ -197,12 +253,12 @@ export default function WalletsScreen() {
         <View style={styles.info}>
           <Text style={styles.name}>{item.name}</Text>
           <Text style={styles.balance}>{balance.toFixed(3)} {currency}</Text>
-          {item.isDefault && <Text style={styles.badge}>BUILT-IN</Text>}
+          {item.isDefault && <Text style={styles.badge}>STARTER</Text>}
         </View>
         <TouchableOpacity style={styles.action} onPress={() => openEdit(item)} hitSlop={8}>
           <MaterialCommunityIcons name="pencil" size={20} color={themeColors.primary} />
         </TouchableOpacity>
-        {!item.isDefault && (
+        {wallets.length > 1 && (
           <TouchableOpacity style={styles.action} onPress={() => handleDelete(item)} hitSlop={8}>
             <MaterialCommunityIcons name="delete" size={20} color={themeColors.error} />
           </TouchableOpacity>
@@ -299,6 +355,73 @@ export default function WalletsScreen() {
                 <ActivityIndicator size="small" color="#FFF" />
               ) : (
                 <Text style={styles.saveText}>{editing ? 'Save Changes' : 'Add Wallet'}</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Reassign & Delete Modal */}
+      <Modal
+        visible={reassignVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !deleting && setReassignVisible(false)}
+      >
+        <View style={styles.overlay}>
+          <View style={styles.sheet}>
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>Reassign & Delete</Text>
+              {!deleting && (
+                <TouchableOpacity onPress={() => setReassignVisible(false)} hitSlop={8}>
+                  <MaterialCommunityIcons name="close" size={24} color={themeColors.textSecondary} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={styles.warningBox}>
+              <MaterialCommunityIcons name="alert-circle-outline" size={24} color={themeColors.warning} />
+              <Text style={styles.warningText}>
+                “{walletToDelete?.name}” has {usageDetails.transactions} transaction(s)
+                {usageDetails.subscriptions > 0 ? `, ${usageDetails.subscriptions} subscription(s)` : ''}
+                {usageDetails.recurring > 0 ? `, ${usageDetails.recurring} recurring item(s)` : ''}.
+              </Text>
+            </View>
+
+            <Text style={styles.fieldLabel}>Reassign records to:</Text>
+            <ScrollView style={styles.walletPickerList}>
+              {otherWallets.map((w) => (
+                <TouchableOpacity
+                  key={w.id}
+                  style={[
+                    styles.walletPickerItem,
+                    targetWalletId === w.id && styles.walletPickerItemActive,
+                  ]}
+                  onPress={() => {
+                    lightHaptic();
+                    setTargetWalletId(w.id);
+                  }}
+                >
+                  <View style={[styles.iconCircleSmall, { backgroundColor: w.color }]}>
+                    <MaterialCommunityIcons name={w.icon as any} size={18} color="#FFF" />
+                  </View>
+                  <Text style={styles.walletPickerText}>{w.name}</Text>
+                  {targetWalletId === w.id && (
+                    <MaterialCommunityIcons name="check-circle" size={20} color={themeColors.primary} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.deleteConfirmButton, deleting && styles.buttonDisabled]}
+              onPress={handleConfirmReassignAndDelete}
+              disabled={deleting}
+            >
+              {deleting ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <Text style={styles.deleteConfirmText}>Reassign & Delete</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -472,6 +595,68 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
       opacity: 0.6,
     },
     saveText: {
+      ...typography.body,
+      fontWeight: '700',
+      color: '#FFF',
+    },
+    warningBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      backgroundColor: themeColors.warning + '20',
+      borderRadius: borderRadius.md,
+      padding: spacing.md,
+      marginTop: spacing.xs,
+      marginBottom: spacing.md,
+      borderWidth: 1,
+      borderColor: themeColors.warning + '40',
+    },
+    warningText: {
+      ...typography.caption,
+      color: themeColors.text,
+      flex: 1,
+      lineHeight: 18,
+    },
+    walletPickerList: {
+      maxHeight: 180,
+      marginVertical: spacing.xs,
+    },
+    walletPickerItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: spacing.sm,
+      borderRadius: borderRadius.md,
+      borderWidth: 1,
+      borderColor: themeColors.border,
+      marginBottom: spacing.xs,
+      gap: spacing.sm,
+      backgroundColor: themeColors.background,
+    },
+    walletPickerItemActive: {
+      borderColor: themeColors.primary,
+      backgroundColor: themeColors.primary + '15',
+    },
+    iconCircleSmall: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    walletPickerText: {
+      ...typography.body,
+      flex: 1,
+      fontWeight: '600',
+      color: themeColors.text,
+    },
+    deleteConfirmButton: {
+      backgroundColor: themeColors.error,
+      borderRadius: borderRadius.md,
+      paddingVertical: spacing.md,
+      alignItems: 'center',
+      marginTop: spacing.md,
+    },
+    deleteConfirmText: {
       ...typography.body,
       fontWeight: '700',
       color: '#FFF',

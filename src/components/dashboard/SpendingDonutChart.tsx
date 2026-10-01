@@ -62,7 +62,7 @@ export const SpendingDonutChart: React.FC<SpendingDonutChartProps> = ({ data, to
           )}
           isAnimated
           animationDuration={700}
-          onPress={(params) => {
+          onPress={(params: any) => {
             const index = pieData.findIndex(p => p.value === params.value);
             if (index >= 0) handlePress(index);
           }}

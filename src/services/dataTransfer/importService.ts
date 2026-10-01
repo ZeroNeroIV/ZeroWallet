@@ -19,6 +19,7 @@ import { WalletRepository } from '../../database/repositories/WalletRepository';
 import { TransactionRepository } from '../../database/repositories/TransactionRepository';
 import { WALLET_META } from '../../utils/wallets';
 import { formatWalletName } from '../../database/dataHealer';
+import { useSettingsStore } from '../../store/settingsStore';
 
 const IMAGES_DEST = `${RNFS.DocumentDirectoryPath}/transaction-images/originals`;
 
@@ -34,6 +35,11 @@ interface ExportPayload {
     goals?: Goal[];
     debts?: Debt[];
     wallets?: any[];
+    budgets?: any[];
+    salarySettings?: any;
+    notificationSettings?: any;
+    appSettings?: any;
+    securitySettings?: any;
   };
 }
 
@@ -65,6 +71,15 @@ function normalizeBackupPayload(raw: any): ExportPayload {
       goals: Array.isArray(data.goals) ? data.goals : [],
       debts: Array.isArray(data.debts) ? data.debts : [],
       wallets: Array.isArray(data.wallets) ? data.wallets : [],
+      budgets: Array.isArray(data.budgets) ? data.budgets : [],
+      salarySettings: data.salarySettings && typeof data.salarySettings === 'object' ? data.salarySettings : null,
+      notificationSettings:
+        data.notificationSettings && typeof data.notificationSettings === 'object'
+          ? data.notificationSettings
+          : null,
+      appSettings: data.appSettings && typeof data.appSettings === 'object' ? data.appSettings : null,
+      securitySettings:
+        data.securitySettings && typeof data.securitySettings === 'object' ? data.securitySettings : null,
     },
   };
 }
@@ -161,7 +176,21 @@ export async function importPayload(
 ): Promise<Record<string, number>> {
   const payload = normalizeBackupPayload(rawInput);
 
-  const { account, categories, transactions, subscriptions, recurringExpenses, goals, debts, wallets } = payload.data;
+  const {
+    account,
+    categories,
+    transactions,
+    subscriptions,
+    recurringExpenses,
+    goals,
+    debts,
+    wallets,
+    budgets,
+    salarySettings,
+    notificationSettings,
+    appSettings,
+    securitySettings,
+  } = payload.data;
   const counts: Record<string, number> = {
     account: 0,
     categories: 0,
@@ -171,6 +200,7 @@ export async function importPayload(
     recurringExpenses: 0,
     goals: 0,
     debts: 0,
+    budgets: 0,
   };
 
   const walletRepo = new WalletRepository();
@@ -647,6 +677,56 @@ export async function importPayload(
     counts.debts += 1;
   }
 
+  // 7. Import budgets if present in payload
+  for (const b of budgets ?? []) {
+    const raw = b as Record<string, any>;
+    const bId = raw.id || uuidv4();
+    const rawCatId = raw.categoryId ?? raw.category_id;
+    let categoryId = rawCatId ? (categoryIdMap.get(rawCatId) ?? rawCatId) : null;
+    if (!categoryId) continue;
+
+    const catCheck = await executeSql<{ id: string }>(
+      'SELECT id FROM categories WHERE id = ?',
+      [categoryId]
+    );
+    if (catCheck.length === 0) continue;
+
+    const amount = Number(raw.amount) || 0;
+    const period = raw.period || 'monthly';
+    const rollover = raw.rollover ? 1 : 0;
+    const createdAt = Number(raw.createdAt ?? raw.created_at) || now;
+    const updatedAt = Number(raw.updatedAt ?? raw.updated_at) || createdAt;
+
+    await executeSql(
+      `INSERT INTO budgets (id, account_id, category_id, amount, period, rollover, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         account_id = excluded.account_id,
+         category_id = excluded.category_id,
+         amount = excluded.amount,
+         period = excluded.period,
+         rollover = excluded.rollover,
+         updated_at = excluded.updated_at`,
+      [bId, currentAccountId, categoryId, amount, period, rollover, createdAt, updatedAt]
+    );
+    counts.budgets += 1;
+  }
+
+  // 8. Restore application and notification settings if present
+  const settingsStore = useSettingsStore.getState();
+  if (salarySettings && typeof salarySettings === 'object') {
+    settingsStore.updateSalarySettings(salarySettings);
+  }
+  if (notificationSettings && typeof notificationSettings === 'object') {
+    settingsStore.updateNotificationSettings(notificationSettings);
+  }
+  if (appSettings && typeof appSettings === 'object') {
+    settingsStore.updateAppSettings(appSettings);
+  }
+  if (securitySettings && typeof securitySettings === 'object') {
+    settingsStore.updateSecuritySettings(securitySettings);
+  }
+
   // Resynchronize account balances after import
   const allTx = await new TransactionRepository().findByAccount(currentAccountId);
   const updatedBalances = calculateVaultBalances(allTx);
@@ -681,6 +761,11 @@ async function remapCategoryReferences(
     [newCategoryId, accountId, oldCategoryId]
   );
   await executeSql('UPDATE debts SET category_id = ? WHERE account_id = ? AND category_id = ?', [
+    newCategoryId,
+    accountId,
+    oldCategoryId,
+  ]);
+  await executeSql('UPDATE budgets SET category_id = ? WHERE account_id = ? AND category_id = ?', [
     newCategoryId,
     accountId,
     oldCategoryId,

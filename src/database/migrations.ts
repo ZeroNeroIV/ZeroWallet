@@ -71,6 +71,10 @@ async function applyMigration(
       await migration_v9(database);
       break;
 
+    case 10:
+      await migration_v10(database);
+      break;
+
     default:
       console.warn(`[Migrations] No migration defined for version ${version}`);
   }
@@ -482,3 +486,158 @@ async function migration_v9(database: any): Promise<void> {
 
   console.log('[Migration v9] Wallets table successfully rebuilt with (id, account_id) PK');
 }
+
+/**
+ * Migration v10:
+ * 1. Create budgets table with foreign keys & indexes.
+ * 2. Widen vault_type in transactions, subscriptions, and recurring_expenses
+ *    to TEXT NOT NULL without restrictive CHECK constraint so dynamic
+ *    and custom wallets can be freely created, assigned, and reassigned.
+ */
+async function migration_v10(database: any): Promise<void> {
+  console.log('[Migration v10] Creating budgets table and removing restrictive vault_type check constraints');
+
+  // 1. Create budgets table and indexes
+  await database.executeSql(`
+    CREATE TABLE IF NOT EXISTS budgets (
+      id TEXT PRIMARY KEY,
+      account_id TEXT NOT NULL,
+      category_id TEXT NOT NULL,
+      amount REAL NOT NULL,
+      period TEXT NOT NULL DEFAULT 'monthly' CHECK(period IN ('monthly', 'weekly', 'yearly')),
+      rollover INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+      FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+    );
+  `);
+  await database.executeSql('CREATE INDEX IF NOT EXISTS idx_budgets_account ON budgets(account_id);');
+  await database.executeSql('CREATE INDEX IF NOT EXISTS idx_budgets_category ON budgets(category_id);');
+
+  // 2. Rebuild transactions, subscriptions, recurring_expenses without vault_type CHECK constraint
+  const rebuilds = [
+    {
+      table: 'transactions',
+      columns:
+        'id, account_id, type, amount, category_id, description, date, vault_type, is_recurring, recurring_expense_id, subscription_id, image_path, currency, original_amount, exchange_rate, converted_amount, created_at, updated_at',
+      create: `CREATE TABLE transactions_new (
+        id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('income', 'expense')),
+        amount REAL NOT NULL,
+        category_id TEXT NOT NULL,
+        description TEXT,
+        date INTEGER NOT NULL,
+        vault_type TEXT NOT NULL,
+        is_recurring INTEGER NOT NULL DEFAULT 0,
+        recurring_expense_id TEXT,
+        subscription_id TEXT,
+        image_path TEXT,
+        currency TEXT NOT NULL DEFAULT 'USD',
+        original_amount REAL,
+        exchange_rate REAL,
+        converted_amount REAL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+        FOREIGN KEY (category_id) REFERENCES categories(id)
+      );`,
+      indexes: [
+        'CREATE INDEX idx_transactions_account ON transactions(account_id);',
+        'CREATE INDEX idx_transactions_date ON transactions(date);',
+        'CREATE INDEX idx_transactions_category ON transactions(category_id);',
+        'CREATE INDEX idx_transactions_type ON transactions(type);',
+        'CREATE INDEX idx_transactions_vault ON transactions(vault_type);',
+      ],
+    },
+    {
+      table: 'subscriptions',
+      columns:
+        'id, account_id, name, amount, category_id, billing_day, is_active, vault_type, last_processed, next_processing, created_at, updated_at',
+      create: `CREATE TABLE subscriptions_new (
+        id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        amount REAL NOT NULL,
+        category_id TEXT NOT NULL,
+        billing_day INTEGER NOT NULL CHECK(billing_day >= 1 AND billing_day <= 31),
+        is_active INTEGER NOT NULL DEFAULT 1,
+        vault_type TEXT NOT NULL,
+        last_processed INTEGER,
+        next_processing INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+        FOREIGN KEY (category_id) REFERENCES categories(id)
+      );`,
+      indexes: [
+        'CREATE INDEX idx_subscriptions_account ON subscriptions(account_id);',
+        'CREATE INDEX idx_subscriptions_active ON subscriptions(is_active);',
+      ],
+    },
+    {
+      table: 'recurring_expenses',
+      columns:
+        'id, account_id, name, amount, category_id, frequency, interval, next_occurrence, vault_type, is_active, auto_deduct, last_processed, created_at, updated_at',
+      create: `CREATE TABLE recurring_expenses_new (
+        id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        amount REAL NOT NULL,
+        category_id TEXT NOT NULL,
+        frequency TEXT NOT NULL CHECK(frequency IN ('daily', 'weekly', 'monthly', 'yearly')),
+        interval INTEGER NOT NULL DEFAULT 1,
+        next_occurrence INTEGER NOT NULL,
+        vault_type TEXT NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        auto_deduct INTEGER NOT NULL DEFAULT 1,
+        last_processed INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+        FOREIGN KEY (category_id) REFERENCES categories(id)
+      );`,
+      indexes: [
+        'CREATE INDEX idx_recurring_account ON recurring_expenses(account_id);',
+        'CREATE INDEX idx_recurring_active ON recurring_expenses(is_active);',
+      ],
+    },
+  ];
+
+  for (const { table, create, columns, indexes } of rebuilds) {
+    try {
+      const [backupCheck] = await database.executeSql(
+        `SELECT name FROM sqlite_master WHERE type='table' AND name=?;`,
+        [`${table}_backup`]
+      );
+      const [liveCheck] = await database.executeSql(
+        `SELECT name FROM sqlite_master WHERE type='table' AND name=?;`,
+        [table]
+      );
+      if (backupCheck.rows.length > 0 && liveCheck.rows.length === 0) {
+        await database.executeSql(`ALTER TABLE ${table}_backup RENAME TO ${table};`);
+      } else if (backupCheck.rows.length > 0) {
+        await database.executeSql(`DROP TABLE ${table}_backup;`);
+      }
+    } catch (recoverErr) {
+      console.warn(`[Migration v10] Recovery check failed for ${table}:`, recoverErr);
+    }
+
+    await database.executeSql(`DROP TABLE IF EXISTS ${table}_new;`);
+    await database.executeSql(create);
+    await database.executeSql(
+      `INSERT INTO ${table}_new (${columns}) SELECT ${columns} FROM ${table};`
+    );
+    await database.executeSql(`DROP TABLE IF EXISTS ${table}_backup;`);
+    await database.executeSql(`ALTER TABLE ${table} RENAME TO ${table}_backup;`);
+    await database.executeSql(`ALTER TABLE ${table}_new RENAME TO ${table};`);
+    for (const indexSql of indexes) {
+      await database.executeSql(indexSql.replace('CREATE INDEX', 'CREATE INDEX IF NOT EXISTS'));
+    }
+    await database.executeSql(`DROP TABLE ${table}_backup;`);
+  }
+
+  console.log('[Migration v10] Successfully applied migration v10');
+}
+

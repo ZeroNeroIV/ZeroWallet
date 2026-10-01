@@ -1,6 +1,6 @@
 // SQLite Database Schema Definitions
 
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 
 // All wallet keys allowed in vault_type columns (v6+)
 export const VAULT_TYPE_CHECK = `('main', 'savings', 'held', 'salary', 'emergency', 'card', 'physical')`;
@@ -59,7 +59,7 @@ export const CREATE_TRANSACTIONS_TABLE = `
     category_id TEXT NOT NULL,
     description TEXT,
     date INTEGER NOT NULL,
-    vault_type TEXT NOT NULL CHECK(vault_type IN ('main', 'savings', 'held', 'salary', 'emergency', 'card', 'physical')),
+    vault_type TEXT NOT NULL,
     is_recurring INTEGER NOT NULL DEFAULT 0,
     recurring_expense_id TEXT,
     subscription_id TEXT,
@@ -84,7 +84,7 @@ export const CREATE_SUBSCRIPTIONS_TABLE = `
     category_id TEXT NOT NULL,
     billing_day INTEGER NOT NULL CHECK(billing_day >= 1 AND billing_day <= 31),
     is_active INTEGER NOT NULL DEFAULT 1,
-    vault_type TEXT NOT NULL CHECK(vault_type IN ('main', 'savings', 'held', 'salary', 'emergency', 'card', 'physical')),
+    vault_type TEXT NOT NULL,
     last_processed INTEGER,
     next_processing INTEGER NOT NULL,
     created_at INTEGER NOT NULL,
@@ -104,7 +104,7 @@ export const CREATE_RECURRING_EXPENSES_TABLE = `
     frequency TEXT NOT NULL CHECK(frequency IN ('daily', 'weekly', 'monthly', 'yearly')),
     interval INTEGER NOT NULL DEFAULT 1,
     next_occurrence INTEGER NOT NULL,
-    vault_type TEXT NOT NULL CHECK(vault_type IN ('main', 'savings', 'held', 'salary', 'emergency', 'card', 'physical')),
+    vault_type TEXT NOT NULL,
     is_active INTEGER NOT NULL DEFAULT 1,
     auto_deduct INTEGER NOT NULL DEFAULT 1,
     last_processed INTEGER,
@@ -178,6 +178,21 @@ export const CREATE_DEBTS_TABLE = `
   );
 `;
 
+export const CREATE_BUDGETS_TABLE = `
+  CREATE TABLE IF NOT EXISTS budgets (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    category_id TEXT NOT NULL,
+    amount REAL NOT NULL,
+    period TEXT NOT NULL DEFAULT 'monthly' CHECK(period IN ('monthly', 'weekly', 'yearly')),
+    rollover INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+  );
+`;
+
 // ============================================
 // Indexes for Performance
 // ============================================
@@ -220,6 +235,10 @@ export const CREATE_INDEXES = [
 
   // Wallets indexes
   'CREATE INDEX IF NOT EXISTS idx_wallets_account ON wallets(account_id);',
+
+  // Budgets indexes
+  'CREATE INDEX IF NOT EXISTS idx_budgets_account ON budgets(account_id);',
+  'CREATE INDEX IF NOT EXISTS idx_budgets_category ON budgets(category_id);',
 ];
 
 // ============================================
@@ -237,4 +256,5 @@ export const ALL_TABLES = [
   CREATE_GOALS_TABLE,
   CREATE_DEBTS_TABLE,
   CREATE_WALLETS_TABLE,
+  CREATE_BUDGETS_TABLE,
 ];

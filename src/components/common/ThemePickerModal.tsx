@@ -44,19 +44,19 @@ const themeOptions: ThemeOption[] = [
     value: 'light',
     label: 'Light',
     icon: 'white-balance-sunny',
-    description: 'Always use light mode',
+    description: 'Chestnut Hollow & Arctic Whisper',
   },
   {
     value: 'dark',
     label: 'Dark',
     icon: 'moon-waning-crescent',
-    description: 'Always use dark mode',
+    description: 'Deep Espresso & Gilded Nectar',
   },
   {
     value: 'system',
     label: 'System',
     icon: 'cellphone',
-    description: 'Follow system settings',
+    description: 'Follow system appearance',
   },
 ];
 

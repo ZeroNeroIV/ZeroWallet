@@ -104,29 +104,43 @@ export class WalletRepository extends BaseRepository<Wallet> {
     await qb.execute();
   }
 
-  override async delete(id: string, accountId?: string): Promise<void> {
-    const wallet = accountId ? await this.findByAccountAndId(accountId, id) : await this.findById(id);
-    if (wallet?.isDefault) {
-      throw new Error('Cannot delete default wallet');
+  override async delete(id: string, accountId?: string, reassignToWalletId?: string): Promise<void> {
+    if (accountId) {
+      const allWallets = await this.findByAccount(accountId);
+      if (allWallets.length <= 1) {
+        throw new Error('Cannot delete your only remaining wallet. An account must have at least one wallet.');
+      }
     }
-    // Refuse while money history or scheduled items reference the wallet
-    const used = await this.countTransactions(id, accountId);
-    if (used > 0) {
-      throw new Error('Cannot delete a wallet that has transactions. Move them first.');
-    }
-    const subSql = accountId
-      ? 'SELECT COUNT(*) as count FROM subscriptions WHERE vault_type = ? AND account_id = ?'
-      : 'SELECT COUNT(*) as count FROM subscriptions WHERE vault_type = ?';
-    const subParams = accountId ? [id, accountId] : [id];
-    const subRefs = await executeSql<{ count: number }>(subSql, subParams);
 
-    const recSql = accountId
-      ? 'SELECT COUNT(*) as count FROM recurring_expenses WHERE vault_type = ? AND account_id = ?'
-      : 'SELECT COUNT(*) as count FROM recurring_expenses WHERE vault_type = ?';
-    const recRefs = await executeSql<{ count: number }>(recSql, subParams);
-
-    if ((subRefs[0]?.count ?? 0) + (recRefs[0]?.count ?? 0) > 0) {
-      throw new Error('Cannot delete a wallet used by subscriptions or recurring expenses. Reassign them first.');
+    if (reassignToWalletId) {
+      if (reassignToWalletId === id) {
+        throw new Error('Destination wallet must be different from the wallet being deleted.');
+      }
+      // Atomically reassign all historical references to destination wallet
+      if (accountId) {
+        await executeSql(
+          'UPDATE transactions SET vault_type = ? WHERE vault_type = ? AND account_id = ?',
+          [reassignToWalletId, id, accountId]
+        );
+        await executeSql(
+          'UPDATE subscriptions SET vault_type = ? WHERE vault_type = ? AND account_id = ?',
+          [reassignToWalletId, id, accountId]
+        );
+        await executeSql(
+          'UPDATE recurring_expenses SET vault_type = ? WHERE vault_type = ? AND account_id = ?',
+          [reassignToWalletId, id, accountId]
+        );
+      } else {
+        await executeSql('UPDATE transactions SET vault_type = ? WHERE vault_type = ?', [reassignToWalletId, id]);
+        await executeSql('UPDATE subscriptions SET vault_type = ? WHERE vault_type = ?', [reassignToWalletId, id]);
+        await executeSql('UPDATE recurring_expenses SET vault_type = ? WHERE vault_type = ?', [reassignToWalletId, id]);
+      }
+    } else {
+      const usage = await this.getWalletUsage(id, accountId);
+      const totalUsage = usage.transactions + usage.subscriptions + usage.recurring;
+      if (totalUsage > 0) {
+        throw new Error('Cannot delete a wallet that has transactions or subscriptions without reassigning them.');
+      }
     }
 
     if (accountId) {
@@ -145,17 +159,45 @@ export class WalletRepository extends BaseRepository<Wallet> {
     return rows[0]?.count ?? 0;
   }
 
+  async countSubscriptions(walletId: string, accountId?: string): Promise<number> {
+    const sql = accountId
+      ? 'SELECT COUNT(*) as count FROM subscriptions WHERE vault_type = ? AND account_id = ?'
+      : 'SELECT COUNT(*) as count FROM subscriptions WHERE vault_type = ?';
+    const params = accountId ? [walletId, accountId] : [walletId];
+    const rows = await executeSql<{ count: number }>(sql, params);
+    return rows[0]?.count ?? 0;
+  }
+
+  async countRecurring(walletId: string, accountId?: string): Promise<number> {
+    const sql = accountId
+      ? 'SELECT COUNT(*) as count FROM recurring_expenses WHERE vault_type = ? AND account_id = ?'
+      : 'SELECT COUNT(*) as count FROM recurring_expenses WHERE vault_type = ?';
+    const params = accountId ? [walletId, accountId] : [walletId];
+    const rows = await executeSql<{ count: number }>(sql, params);
+    return rows[0]?.count ?? 0;
+  }
+
+  async getWalletUsage(walletId: string, accountId?: string): Promise<{ transactions: number; subscriptions: number; recurring: number }> {
+    const [transactions, subscriptions, recurring] = await Promise.all([
+      this.countTransactions(walletId, accountId),
+      this.countSubscriptions(walletId, accountId),
+      this.countRecurring(walletId, accountId),
+    ]);
+    return { transactions, subscriptions, recurring };
+  }
+
   /**
-   * Purpose: Seed the 7 built-in wallets for an account (idempotent).
-   * Built-ins keep stable ids equal to their vault keys so every existing
-   * transaction keeps working untouched.
+   * Purpose: Seed initial starter wallets for an account on initial creation.
+   * If the account already has wallets (even if the user deleted some starter wallets),
+   * do not resurrect deleted wallets.
    */
   async ensureDefaultWallets(accountId: string): Promise<Wallet[]> {
     const existing = await this.findByAccount(accountId);
-    const existingIds = new Set(existing.map((w) => w.id));
+    if (existing.length > 0) {
+      return existing;
+    }
     const now = Date.now();
     for (const key of VAULT_TYPE_VALUES) {
-      if (existingIds.has(key)) continue;
       const meta = WALLET_META[key as keyof typeof WALLET_META];
       if (!meta) continue;
       await executeSql(

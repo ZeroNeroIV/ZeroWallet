@@ -1,4 +1,4 @@
-import type { Transaction } from '../types/models';
+import type { Transaction, AccountBalance } from '../types/models';
 import { VaultType } from '../domain/vault/VaultType';
 
 export interface VaultBalances {

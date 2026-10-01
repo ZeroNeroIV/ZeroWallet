@@ -29,6 +29,8 @@ import { useWallets } from '../../hooks/useWallets';
 import { IncomeExpenseChart } from '../../components/dashboard/IncomeExpenseChart';
 import { SpendingDonutChart } from '../../components/dashboard/SpendingDonutChart';
 import { GoalsProgressCard } from '../../components/dashboard/GoalsProgressCard';
+import { CategoryBudgetsCard } from '../../components/dashboard/CategoryBudgetsCard';
+import { FloatingFastLog } from '../../components/dashboard/FloatingFastLog';
 
 type NavProp = StackNavigationProp<MainStackParamList, 'Dashboard'>;
 
@@ -142,6 +144,13 @@ export const DashboardScreen: React.FC = () => {
                 <SpendingDonutChart data={data.categorySpend} totalSpend={data.totalMonthSpend} />
               </View>
               <View style={styles.section}>
+                <CategoryBudgetsCard
+                  accountId={currentAccountId || ''}
+                  currency={data.currency}
+                  onBudgetChange={loadData}
+                />
+              </View>
+              <View style={styles.section}>
                 <GoalsProgressCard goals={data.activeGoals} />
               </View>
               <DashboardCardsGrid
@@ -162,6 +171,15 @@ export const DashboardScreen: React.FC = () => {
           )}
         </ScrollView>
       </Animated.View>
+
+      {data && currentAccountId && (
+        <FloatingFastLog
+          accountId={currentAccountId}
+          currency={data.currency}
+          wallets={wallets}
+          onLogged={loadData}
+        />
+      )}
 
       <BottomNavigation />
     </View>
