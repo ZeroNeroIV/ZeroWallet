@@ -4,6 +4,7 @@ import {
   normalizeAccountBalance,
   roundMoney,
 } from '../src/utils/balanceCalculator';
+import { formatWalletName } from '../src/database/dataHealer';
 import type { Transaction } from '../src/types/models';
 
 describe('Backward Compatibility & Data Format Conversion', () => {
@@ -203,6 +204,32 @@ describe('Backward Compatibility & Data Format Conversion', () => {
       expect(balances.mainBalance).toBe(50);
       expect(balances.savingsBalance).toBe(150);
       expect(balances.totalBalance).toBe(200);
+    });
+  });
+
+  describe('formatWalletName', () => {
+    it('returns official display names for built-in wallet keys', () => {
+      expect(formatWalletName('main')).toBe('Investment Wallet');
+      expect(formatWalletName('savings')).toBe('Savings Wallet');
+      expect(formatWalletName('held')).toBe('Recurring Wallet');
+      expect(formatWalletName('salary')).toBe('Salary Wallet');
+      expect(formatWalletName('emergency')).toBe('Emergency Funds Wallet');
+      expect(formatWalletName('card')).toBe('Card Wallet');
+      expect(formatWalletName('physical')).toBe('Physical Wallet');
+    });
+
+    it('formats custom slug wallet identifiers cleanly', () => {
+      expect(formatWalletName('crypto')).toBe('Crypto');
+      expect(formatWalletName('w_crypto-9a2f')).toBe('Crypto');
+      expect(formatWalletName('w_business-travel-9a2f')).toBe('Business Travel');
+      expect(formatWalletName('side_hustle')).toBe('Side Hustle');
+      expect(formatWalletName('vacation_savings')).toBe('Vacation Savings');
+    });
+
+    it('handles empty or null vault keys safely', () => {
+      expect(formatWalletName('')).toBe('Wallet');
+      expect(formatWalletName(null as any)).toBe('Wallet');
+      expect(formatWalletName(undefined as any)).toBe('Wallet');
     });
   });
 });

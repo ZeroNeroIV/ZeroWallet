@@ -126,7 +126,7 @@ export async function checkAndProcessAutoSalary(): Promise<{ processed: boolean;
   // fall back to the main wallet so salary is never lost
   try {
     const { WalletRepository } = await import('../../database/repositories/WalletRepository');
-    const target = await new WalletRepository().findById(salarySettings.targetVault);
+    const target = await new WalletRepository().findById(salarySettings.targetVault, currentAccountId);
     if (!target) {
       console.warn('[AutoSalaryTask] Target wallet missing, falling back to main');
       settingsStore.updateSalarySettings({ targetVault: 'main' });

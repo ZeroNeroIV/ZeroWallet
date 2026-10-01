@@ -82,7 +82,7 @@ export const TransactionDetailsScreen: React.FC = () => {
 
       const cat = txn.categoryId ? await categoryRepo.findById(txn.categoryId) : null;
       const { WalletRepository } = await import('../../database/repositories/WalletRepository');
-      const walletRow = await new WalletRepository().findById(txn.vaultType).catch(() => null);
+      const walletRow = await new WalletRepository().findById(txn.vaultType, txn.accountId).catch(() => null);
       setWalletName(walletRow?.name ?? null);
 
       try {

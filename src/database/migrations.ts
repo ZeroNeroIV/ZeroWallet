@@ -1,5 +1,7 @@
 // Database Migrations
 import type SQLite from 'react-native-sqlite-storage';
+import { VAULT_TYPE_VALUES } from '../domain/vault/VaultType';
+import { WALLET_META } from '../utils/wallets';
 
 // ============================================
 // Migration Runner
@@ -63,6 +65,10 @@ async function applyMigration(
 
     case 8:
       await migration_v8(database);
+      break;
+
+    case 9:
+      await migration_v9(database);
       break;
 
     default:
@@ -309,10 +315,12 @@ async function migration_v6(database: any): Promise<void> {
       `SELECT sql FROM sqlite_master WHERE type='table' AND name=?;`,
       [table]
     );
-    const tableSql: string = defRows.rows.item(0)?.sql ?? '';
-    const missing = walletKeys.filter((key) => !tableSql.includes(`'${key}'`));
-    if (missing.length > 0) {
-      throw new Error(`[Migration v6] Verification failed for ${table}: missing wallets ${missing.join(',')}`);
+    if (defRows && defRows.rows.length > 0) {
+      const tableSql: string = defRows.rows.item(0)?.sql ?? '';
+      const missing = walletKeys.filter((key) => !tableSql.includes(`'${key}'`));
+      if (missing.length > 0) {
+        throw new Error(`[Migration v6] Verification failed for ${table}: missing wallets ${missing.join(',')}`);
+      }
     }
     const [countRows] = await database.executeSql(`SELECT COUNT(*) as count FROM ${table};`);
     console.log(`[Migration v6] Rebuilt ${table} with widened vault_type (${countRows.rows.item(0)?.count ?? 0} rows preserved)`);
@@ -380,4 +388,97 @@ async function migration_v5(database: any): Promise<void> {
   } catch (error) {
     console.warn('[Migration v5] Error:', error);
   }
+}
+
+/**
+ * Migration v9: Rebuild wallets table with PRIMARY KEY (id, account_id).
+ * This allows multiple accounts to each have their own default wallets
+ * ('main', 'savings', 'held', etc.) without primary key collisions.
+ * Preserves existing wallet customizations and seeds 7 default wallets
+ * for all existing accounts.
+ */
+async function migration_v9(database: any): Promise<void> {
+  console.log('[Migration v9] Rebuilding wallets table with compound primary key (id, account_id)');
+
+  // 1. Recover from interrupted rebuild if needed
+  try {
+    const [backupCheck] = await database.executeSql(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='wallets_backup';"
+    );
+    const [liveCheck] = await database.executeSql(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='wallets';"
+    );
+    if (backupCheck.rows.length > 0 && liveCheck.rows.length === 0) {
+      console.log('[Migration v9] Restoring interrupted rebuild of wallets from backup');
+      await database.executeSql('ALTER TABLE wallets_backup RENAME TO wallets;');
+    } else if (backupCheck.rows.length > 0) {
+      await database.executeSql('DROP TABLE wallets_backup;');
+    }
+  } catch (recoverError) {
+    console.warn('[Migration v9] Recovery check failed for wallets:', recoverError);
+  }
+
+  // 2. Create wallets_new with compound primary key
+  await database.executeSql('DROP TABLE IF EXISTS wallets_new;');
+  await database.executeSql(`
+    CREATE TABLE wallets_new (
+      id TEXT NOT NULL,
+      account_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      icon TEXT NOT NULL,
+      color TEXT NOT NULL,
+      is_default INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (id, account_id),
+      FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+    );
+  `);
+
+  // 3. Copy existing wallets if table exists
+  try {
+    await database.executeSql(`
+      INSERT OR IGNORE INTO wallets_new (id, account_id, name, icon, color, is_default, created_at, updated_at)
+      SELECT id, account_id, name, icon, color, is_default, created_at, updated_at FROM wallets;
+    `);
+  } catch (copyErr) {
+    console.warn('[Migration v9] Notice copying existing wallets (table might be new):', copyErr);
+  }
+
+  // 4. Atomic-like table replacement
+  await database.executeSql('DROP TABLE IF EXISTS wallets_backup;');
+  await database.executeSql('ALTER TABLE wallets RENAME TO wallets_backup;');
+  await database.executeSql('ALTER TABLE wallets_new RENAME TO wallets;');
+  await database.executeSql('CREATE INDEX IF NOT EXISTS idx_wallets_account ON wallets(account_id);');
+
+  // 5. Verification
+  const [defRows] = await database.executeSql(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='wallets';"
+  );
+  if (defRows && defRows.rows.length > 0) {
+    const tableSql: string = defRows.rows.item(0)?.sql ?? '';
+    if (!tableSql.includes('account_id') || !tableSql.toLowerCase().includes('primary key')) {
+      throw new Error('[Migration v9] Verification failed for wallets: compound primary key not found');
+    }
+  }
+
+  await database.executeSql('DROP TABLE wallets_backup;');
+
+  // 6. Ensure the 7 built-in wallets exist for all existing accounts
+  const [accRows] = await database.executeSql('SELECT id FROM accounts;');
+  const now = Date.now();
+  for (let i = 0; i < accRows.rows.length; i++) {
+    const accountId = accRows.rows.item(i).id;
+    for (const key of VAULT_TYPE_VALUES) {
+      const meta = WALLET_META[key as keyof typeof WALLET_META];
+      if (!meta) continue;
+      await database.executeSql(
+        `INSERT OR IGNORE INTO wallets (id, account_id, name, icon, color, is_default, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 1, ?, ?);`,
+        [key, accountId, meta.name, meta.icon, meta.color, now, now]
+      );
+    }
+  }
+
+  console.log('[Migration v9] Wallets table successfully rebuilt with (id, account_id) PK');
 }

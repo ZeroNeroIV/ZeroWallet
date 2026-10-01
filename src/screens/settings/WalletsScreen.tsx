@@ -120,7 +120,7 @@ export default function WalletsScreen() {
     try {
       const repo = new WalletRepository();
       if (editing) {
-        await repo.update(editing.id, { name: trimmed, icon, color });
+        await repo.update(editing.id, { name: trimmed, icon, color, accountId: editing.accountId || currentAccountId }, editing.accountId || currentAccountId);
         mediumHaptic();
       } else {
         await repo.create({
@@ -156,7 +156,7 @@ export default function WalletsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await new WalletRepository().delete(wallet.id);
+              await new WalletRepository().delete(wallet.id, wallet.accountId || currentAccountId);
               mediumHaptic();
               await refresh();
             } catch (error: any) {

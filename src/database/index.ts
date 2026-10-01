@@ -2,6 +2,7 @@
 import SQLite from 'react-native-sqlite-storage';
 import { ALL_TABLES, CREATE_INDEXES, SCHEMA_VERSION } from './schema';
 import { healDatabase } from './dataHealer';
+import { runMigrations as executeMigrations } from './migrations';
 
 // Enable promises for SQLite
 SQLite.enablePromise(true);
@@ -153,8 +154,7 @@ async function runMigrations(
   fromVersion: number,
   toVersion: number
 ): Promise<void> {
-  // Import migrations and run them
-  const { runMigrations: executeMigrations } = await import('./migrations');
+  // Execute migrations
   await executeMigrations(database, fromVersion, toVersion);
 
   // Update schema version

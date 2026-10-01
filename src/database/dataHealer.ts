@@ -200,6 +200,23 @@ async function healCategoriesAndReferences(database: SQLite.SQLiteDatabase): Pro
   }
 }
 
+export function formatWalletName(vaultKey: string): string {
+  if (!vaultKey) return 'Wallet';
+  const meta = WALLET_META[vaultKey as keyof typeof WALLET_META];
+  if (meta?.name) return meta.name;
+
+  let clean = vaultKey.startsWith('w_') ? vaultKey.slice(2) : vaultKey;
+  clean = clean.replace(/-[a-z0-9]{4}$/i, '');
+  clean = clean.replace(/[-_]+/g, ' ').trim();
+  return (
+    clean
+      .split(' ')
+      .filter(Boolean)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ') || 'Wallet'
+  );
+}
+
 /**
  * Normalizes legacy vault types in all relevant tables and ensures built-in wallets exist.
  */
@@ -217,7 +234,7 @@ async function healWalletsAndVaultTypes(database: SQLite.SQLiteDatabase): Promis
         await database.executeSql(
           `INSERT OR IGNORE INTO wallets (id, account_id, name, icon, color, is_default, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
-          [key, accountId, meta.name, meta.icon, '#007AFF', now, now]
+          [key, accountId, meta.name, meta.icon, meta.color, now, now]
         );
       }
     }
@@ -260,22 +277,39 @@ async function healWalletsAndVaultTypes(database: SQLite.SQLiteDatabase): Promis
       "UPDATE recurring_expenses SET vault_type = 'main' WHERE vault_type IS NULL OR vault_type = ''"
     );
 
-    // 3. Register any custom wallet IDs used by transactions into the wallets table
-    const [customTxRows] = await database.executeSql(`
+    // 3. Register any custom or missing wallet IDs used by transactions, subscriptions, or recurring expenses
+    const [missingRows] = await database.executeSql(`
       SELECT DISTINCT t.vault_type, t.account_id
       FROM transactions t
-      WHERE t.vault_type NOT IN (SELECT id FROM wallets)
+      WHERE t.vault_type IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM wallets w WHERE w.id = t.vault_type AND w.account_id = t.account_id
+      )
+      UNION
+      SELECT DISTINCT s.vault_type, s.account_id
+      FROM subscriptions s
+      WHERE s.vault_type IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM wallets w WHERE w.id = s.vault_type AND w.account_id = s.account_id
+      )
+      UNION
+      SELECT DISTINCT r.vault_type, r.account_id
+      FROM recurring_expenses r
+      WHERE r.vault_type IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM wallets w WHERE w.id = r.vault_type AND w.account_id = r.account_id
+      )
     `);
 
-    for (let i = 0; i < customTxRows.rows.length; i++) {
-      const { vault_type, account_id } = customTxRows.rows.item(i);
+    for (let i = 0; i < missingRows.rows.length; i++) {
+      const { vault_type, account_id } = missingRows.rows.item(i);
       if (vault_type && account_id) {
-        const prettyName =
-          vault_type.charAt(0).toUpperCase() + vault_type.slice(1) + ' Wallet';
+        const meta = WALLET_META[vault_type as keyof typeof WALLET_META];
+        const isBuiltIn = !!meta;
+        const name = isBuiltIn ? meta.name : formatWalletName(vault_type);
+        const icon = isBuiltIn ? meta.icon : 'wallet';
+        const color = isBuiltIn ? meta.color : '#007AFF';
         await database.executeSql(
           `INSERT OR IGNORE INTO wallets (id, account_id, name, icon, color, is_default, created_at, updated_at)
-           VALUES (?, ?, ?, 'wallet', '#607D8B', 0, ?, ?)`,
-          [vault_type, account_id, prettyName, now, now]
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [vault_type, account_id, name, icon, color, isBuiltIn ? 1 : 0, now, now]
         );
       }
     }
