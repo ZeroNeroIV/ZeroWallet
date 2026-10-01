@@ -1,5 +1,5 @@
 // Create Account Screen
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   ScrollView,
   Alert,
   TouchableOpacity,
+  Switch,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -17,6 +18,7 @@ import { Button } from '../../components/forms/Button';
 import { CurrencyPicker } from '../../components/forms/CurrencyPicker';
 import { useAuthStore } from '../../store/authStore';
 import { useAccountStore } from '../../store/accountStore';
+import { useSettingsStore } from '../../store/settingsStore';
 import { AccountRepository } from '../../database/repositories/AccountRepository';
 import { validateRequired } from '../../utils/validators';
 import { colors } from '../../theme/colors';
@@ -61,10 +63,24 @@ export default function CreateAccountScreen() {
   const [selectedIcon, setSelectedIcon] = useState('wallet');
   const [selectedColor, setSelectedColor] = useState('#4ECDC4');
   const [selectedCurrency, setSelectedCurrency] = useState('USD');
+  const [isDefault, setIsDefault] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ name?: string }>({});
 
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
+
+  useEffect(() => {
+    if (currentUser?.id) {
+      new AccountRepository()
+        .findByUser(currentUser.id)
+        .then((accounts) => {
+          if (accounts.length === 0) {
+            setIsDefault(true);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [currentUser?.id]);
 
   const handleCreateAccount = async () => {
     if (!currentUser) {
@@ -84,6 +100,8 @@ export default function CreateAccountScreen() {
 
     try {
       const accountRepo = new AccountRepository();
+      const existingAccounts = await accountRepo.findByUser(currentUser.id);
+      const shouldBeDefault = isDefault || existingAccounts.length === 0;
 
       // Create account
       const newAccount = await accountRepo.create({
@@ -92,11 +110,16 @@ export default function CreateAccountScreen() {
         currency: selectedCurrency,
         icon: selectedIcon,
         color: selectedColor,
-        isDefault: false,
+        isDefault: shouldBeDefault,
       });
 
       // Initialize balance in MMKV
       initializeBalance(newAccount.id);
+
+      if (shouldBeDefault) {
+        useAuthStore.getState().switchAccount(newAccount.id);
+        useSettingsStore.getState().updateAppSettings({ currency: selectedCurrency });
+      }
 
       Alert.alert('Success', 'Account created successfully', [
         {
@@ -196,6 +219,27 @@ export default function CreateAccountScreen() {
           onSelectCurrency={setSelectedCurrency}
           label="Account Currency"
         />
+      </View>
+
+      {/* Set as Default Toggle */}
+      <View style={styles.section}>
+        <View style={styles.switchRow}>
+          <View style={styles.switchTextContainer}>
+            <Text style={styles.switchLabel}>Set as Default Account</Text>
+            <Text style={styles.switchDescription}>
+              Make this your primary active account and use its currency as default
+            </Text>
+          </View>
+          <Switch
+            value={isDefault}
+            onValueChange={setIsDefault}
+            trackColor={{
+              false: themeColors.border,
+              true: themeColors.primary,
+            }}
+            thumbColor={themeColors.surface}
+          />
+        </View>
       </View>
 
       <View style={styles.footer}>
@@ -306,5 +350,30 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) => StyleSh
   footer: {
     marginTop: spacing.xl,
     marginBottom: spacing.lg,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: themeColors.surface,
+    padding: spacing.md,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: themeColors.border,
+  },
+  switchTextContainer: {
+    flex: 1,
+    marginRight: spacing.md,
+  },
+  switchLabel: {
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.medium,
+    color: themeColors.text,
+    marginBottom: 2,
+  },
+  switchDescription: {
+    fontSize: typography.fontSize.sm,
+    color: themeColors.textSecondary,
+    lineHeight: 18,
   },
 });

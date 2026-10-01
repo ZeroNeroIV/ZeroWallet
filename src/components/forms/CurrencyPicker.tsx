@@ -6,13 +6,19 @@ import {
     TouchableOpacity,
     Modal,
     TextInput,
+    KeyboardAvoidingView,
+    Platform,
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { CURRENCIES, Currency, getCurrencyByCode } from '../../constants/currencies';
+import {
+    Currency,
+    getCurrencyByCode,
+    searchCurrencies,
+} from '../../constants/currencies';
 
 interface CurrencyPickerProps {
     selectedCurrency: string; // Currency code
@@ -37,16 +43,9 @@ export const CurrencyPicker: React.FC<CurrencyPickerProps> = ({
 
     const styles = useMemo(() => createStyles(themeColors), [themeColors]);
 
-    // Filter currencies based on search
+    // Filter currencies based on search (matches code, name, symbol, and aliases like JD)
     const filteredCurrencies = useMemo(() => {
-        if (!searchQuery) return CURRENCIES;
-
-        const query = searchQuery.toLowerCase();
-        return CURRENCIES.filter(
-            (c) =>
-                c.code.toLowerCase().includes(query) ||
-                c.name.toLowerCase().includes(query)
-        );
+        return searchCurrencies(searchQuery);
     }, [searchQuery]);
 
     const handleSelect = (currency: Currency) => {
@@ -55,13 +54,19 @@ export const CurrencyPicker: React.FC<CurrencyPickerProps> = ({
         setSearchQuery('');
     };
 
+    const handleClose = () => {
+        setModalVisible(false);
+        setSearchQuery('');
+    };
+
     const renderCurrencyItem = ({ item }: { item: Currency }) => {
-        const isSelected = item.code === selectedCurrency;
+        const isSelected = item.code.toUpperCase() === (selectedCurrency || '').trim().toUpperCase();
 
         return (
             <TouchableOpacity
                 style={[styles.currencyItem, isSelected && styles.currencyItemSelected]}
                 onPress={() => handleSelect(item)}
+                activeOpacity={0.7}
             >
                 <Text style={styles.currencyFlag}>{item.flag}</Text>
                 <View style={styles.currencyInfo}>
@@ -90,6 +95,7 @@ export const CurrencyPicker: React.FC<CurrencyPickerProps> = ({
                 ]}
                 onPress={() => !disabled && setModalVisible(true)}
                 disabled={disabled}
+                activeOpacity={0.7}
             >
                 <View style={styles.selectedContent}>
                     {selectedCurrencyObj ? (
@@ -100,7 +106,9 @@ export const CurrencyPicker: React.FC<CurrencyPickerProps> = ({
                             </Text>
                         </>
                     ) : (
-                        <Text style={styles.placeholder}>Select currency</Text>
+                        <Text style={styles.placeholder}>
+                            {selectedCurrency ? `${selectedCurrency} (Select currency)` : 'Select currency'}
+                        </Text>
                     )}
                 </View>
                 <Icon
@@ -118,14 +126,25 @@ export const CurrencyPicker: React.FC<CurrencyPickerProps> = ({
                 visible={modalVisible}
                 transparent
                 animationType="slide"
-                onRequestClose={() => setModalVisible(false)}
+                onRequestClose={handleClose}
             >
-                <View style={styles.modalOverlay}>
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                    style={styles.modalOverlay}
+                >
+                    <TouchableOpacity
+                        style={styles.modalBackdrop}
+                        activeOpacity={1}
+                        onPress={handleClose}
+                    />
                     <View style={styles.modalContent}>
                         {/* Header */}
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Select Currency</Text>
-                            <TouchableOpacity onPress={() => setModalVisible(false)}>
+                            <TouchableOpacity
+                                onPress={handleClose}
+                                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                            >
                                 <Icon name="close" size={24} color={themeColors.text} />
                             </TouchableOpacity>
                         </View>
@@ -140,14 +159,18 @@ export const CurrencyPicker: React.FC<CurrencyPickerProps> = ({
                             />
                             <TextInput
                                 style={styles.searchInput}
-                                placeholder="Search currencies..."
+                                placeholder="Search currencies (e.g., USD, JOD, JD)..."
                                 placeholderTextColor={themeColors.textSecondary}
                                 value={searchQuery}
                                 onChangeText={setSearchQuery}
-                                autoFocus
+                                autoFocus={false}
+                                returnKeyType="done"
                             />
                             {searchQuery.length > 0 && (
-                                <TouchableOpacity onPress={() => setSearchQuery('')}>
+                                <TouchableOpacity
+                                    onPress={() => setSearchQuery('')}
+                                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                >
                                     <Icon
                                         name="close-circle"
                                         size={20}
@@ -157,18 +180,30 @@ export const CurrencyPicker: React.FC<CurrencyPickerProps> = ({
                             )}
                         </View>
 
-                        {/* Currency List */}
-                        <FlashList estimatedItemSize={56}
-                            data={filteredCurrencies}
-                            keyExtractor={(item) => item.code}
-                            renderItem={renderCurrencyItem}
-                            showsVerticalScrollIndicator={false}
-                            ListEmptyComponent={
-                                <Text style={styles.emptyText}>No currencies found</Text>
-                            }
-                        />
+                        {/* Currency List Container with bounded height */}
+                        <View style={styles.listContainer}>
+                            <FlashList
+                                data={filteredCurrencies}
+                                estimatedItemSize={60}
+                                keyExtractor={(item) => item.code}
+                                renderItem={renderCurrencyItem}
+                                showsVerticalScrollIndicator={true}
+                                keyboardShouldPersistTaps="handled"
+                                contentContainerStyle={styles.listContent}
+                                ListEmptyComponent={
+                                    <View style={styles.emptyContainer}>
+                                        <Icon
+                                            name="currency-usd-off"
+                                            size={48}
+                                            color={themeColors.textSecondary}
+                                        />
+                                        <Text style={styles.emptyText}>No currencies found</Text>
+                                    </View>
+                                }
+                            />
+                        </View>
                     </View>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
         </View>
     );
@@ -229,12 +264,16 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
             backgroundColor: 'rgba(0, 0, 0, 0.5)',
             justifyContent: 'flex-end',
         },
+        modalBackdrop: {
+            ...StyleSheet.absoluteFillObject,
+        },
         modalContent: {
             backgroundColor: themeColors.background,
             borderTopLeftRadius: 24,
             borderTopRightRadius: 24,
-            maxHeight: '80%',
-            paddingBottom: spacing.xl,
+            height: '75%',
+            maxHeight: '85%',
+            paddingBottom: spacing.md,
         },
         modalHeader: {
             flexDirection: 'row',
@@ -265,6 +304,12 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
             ...typography.body,
             color: themeColors.text,
             paddingVertical: spacing.md,
+        },
+        listContainer: {
+            flex: 1,
+        },
+        listContent: {
+            paddingBottom: spacing.lg,
         },
         currencyItem: {
             flexDirection: 'row',
@@ -298,10 +343,15 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
             color: themeColors.textSecondary,
             marginRight: spacing.sm,
         },
+        emptyContainer: {
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingVertical: spacing.xxl,
+        },
         emptyText: {
             ...typography.body,
             color: themeColors.textSecondary,
             textAlign: 'center',
-            marginTop: spacing.xl,
+            marginTop: spacing.sm,
         },
     });

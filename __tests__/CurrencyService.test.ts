@@ -8,6 +8,7 @@ import {
   formatCurrency,
   getCurrencyByCode,
   getCurrencySymbol,
+  searchCurrencies,
 } from '../src/constants/currencies';
 
 describe('CurrencyService & Currency Utilities', () => {
@@ -70,6 +71,42 @@ describe('CurrencyService & Currency Utilities', () => {
 
       const nonExistent = getCurrencyByCode('non-existent');
       expect(nonExistent).toBeUndefined();
+    });
+  });
+
+  describe('searchCurrencies', () => {
+    it('returns all currencies when query is empty or whitespace', () => {
+      expect(searchCurrencies('').length).toBeGreaterThan(30);
+      expect(searchCurrencies('   ').length).toBeGreaterThan(30);
+    });
+
+    it('matches JOD by code, name, and aliases (JD, dinar, jordan)', () => {
+      const byCode = searchCurrencies('JOD');
+      expect(byCode.some((c) => c.code === 'JOD')).toBe(true);
+
+      const byCodeLower = searchCurrencies('jod');
+      expect(byCodeLower.some((c) => c.code === 'JOD')).toBe(true);
+
+      const byAliasJD = searchCurrencies('jd');
+      expect(byAliasJD.some((c) => c.code === 'JOD')).toBe(true);
+
+      const byCountry = searchCurrencies('jordan');
+      expect(byCountry.some((c) => c.code === 'JOD')).toBe(true);
+
+      const bySymbol = searchCurrencies('د.ا');
+      expect(bySymbol.some((c) => c.code === 'JOD')).toBe(true);
+    });
+
+    it('matches other common currencies by code or alias', () => {
+      expect(searchCurrencies('dollar').some((c) => c.code === 'USD')).toBe(true);
+      expect(searchCurrencies('euro').some((c) => c.code === 'EUR')).toBe(true);
+      expect(searchCurrencies('pound').some((c) => c.code === 'GBP')).toBe(true);
+      expect(searchCurrencies('dirham').some((c) => c.code === 'AED')).toBe(true);
+      expect(searchCurrencies('riyal').some((c) => c.code === 'SAR')).toBe(true);
+    });
+
+    it('returns empty array if no match is found', () => {
+      expect(searchCurrencies('XYZNONEXISTENT')).toEqual([]);
     });
   });
 

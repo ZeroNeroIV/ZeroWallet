@@ -136,42 +136,44 @@ export const CategoryPicker: React.FC<CategoryPickerProps> = ({
                 </Text>
               </View>
             ) : (
-              <FlashList estimatedItemSize={56}
-                data={filteredCategories}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={[
-                      styles.categoryItem,
-                      selectedCategory?.id === item.id && styles.categoryItemSelected,
-                    ]}
-                    onPress={() => handleSelectCategory(item)}
-                  >
-                    <View
+              <View style={styles.listContainer}>
+                <FlashList estimatedItemSize={56}
+                  data={filteredCategories}
+                  keyExtractor={(item) => item.id}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
                       style={[
-                        styles.categoryIcon,
-                        { backgroundColor: item.color },
+                        styles.categoryItem,
+                        selectedCategory?.id === item.id && styles.categoryItemSelected,
                       ]}
+                      onPress={() => handleSelectCategory(item)}
                     >
-                      <MaterialCommunityIcons
-                        name={item.icon as any}
-                        size={24}
-                        color={colors.neutral.white}
-                      />
-                    </View>
-                    <Text style={styles.categoryItemName}>{item.name}</Text>
-                    {selectedCategory?.id === item.id && (
-                      <MaterialCommunityIcons
-                        name="check"
-                        size={24}
-                        color={colors.primary.main}
-                      />
-                    )}
-                  </TouchableOpacity>
-                )}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.listContent}
-              />
+                      <View
+                        style={[
+                          styles.categoryIcon,
+                          { backgroundColor: item.color },
+                        ]}
+                      >
+                        <MaterialCommunityIcons
+                          name={item.icon as any}
+                          size={24}
+                          color={colors.neutral.white}
+                        />
+                      </View>
+                      <Text style={styles.categoryItemName}>{item.name}</Text>
+                      {selectedCategory?.id === item.id && (
+                        <MaterialCommunityIcons
+                          name="check"
+                          size={24}
+                          color={colors.primary.main}
+                        />
+                      )}
+                    </TouchableOpacity>
+                  )}
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.listContent}
+                />
+              </View>
             )}
           </View>
         </View>
@@ -242,8 +244,11 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
     paddingBottom: spacing.xl,
     paddingHorizontal: spacing.lg,
-    minHeight: 300,
-    maxHeight: '80%',
+    height: '70%',
+    maxHeight: '85%',
+  },
+  listContainer: {
+    flex: 1,
   },
   modalHeader: {
     flexDirection: 'row',

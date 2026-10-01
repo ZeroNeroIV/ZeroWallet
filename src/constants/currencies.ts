@@ -85,12 +85,24 @@ export const formatCurrency = (
     return `${sign}${symbol}${absFormatted}`;
 };
 
-// Search currencies by name or code
+// Search currencies by name, code, symbol, or aliases
 export const searchCurrencies = (query: string): Currency[] => {
-    const lowerQuery = query.toLowerCase();
+    if (!query || !query.trim()) return CURRENCIES;
+    const lower = query.trim().toLowerCase();
     return CURRENCIES.filter(
         (c) =>
-            c.code.toLowerCase().includes(lowerQuery) ||
-            c.name.toLowerCase().includes(lowerQuery)
+            c.code.toLowerCase().includes(lower) ||
+            c.name.toLowerCase().includes(lower) ||
+            c.symbol.toLowerCase().includes(lower) ||
+            (c.code === 'JOD' && (lower === 'jd' || lower === 'jordan' || lower === 'dinar')) ||
+            (c.code === 'ILS' && (lower === 'nis' || lower === 'shekel')) ||
+            (c.code === 'AED' && (lower === 'dhs' || lower === 'dirham')) ||
+            (c.code === 'SAR' && (lower === 'sr' || lower === 'riyal')) ||
+            (c.code === 'KWD' && (lower === 'kd' || lower === 'kuwait')) ||
+            (c.code === 'EGP' && (lower === 'le' || lower === 'egypt')) ||
+            (c.code === 'GBP' && (lower === 'pound' || lower === 'quid')) ||
+            (c.code === 'JPY' && lower === 'yen') ||
+            (c.code === 'EUR' && lower === 'euro') ||
+            (c.code === 'USD' && (lower === 'dollar' || lower === 'buck'))
     );
 };
