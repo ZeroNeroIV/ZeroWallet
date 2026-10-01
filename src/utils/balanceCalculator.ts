@@ -79,10 +79,10 @@ export function calculateVaultBalances(transactions: Transaction[]): VaultBalanc
  * Normalizes any legacy or partially formed balance record into a
  * valid, fully populated 7-wallet AccountBalance.
  */
-export function normalizeAccountBalance<T extends Record<string, any>>(
-  raw: T | null | undefined,
+export function normalizeAccountBalance(
+  raw: Record<string, any> | null | undefined,
   fallbackAccountId: string = ''
-): T & VaultBalances & { accountId: string; lastUpdated: number } {
+): AccountBalance & Record<string, any> {
   if (!raw || typeof raw !== 'object') {
     return {
       accountId: fallbackAccountId,

@@ -82,4 +82,6 @@ export type MainStackParamList = {
   ChatScreen: undefined;
   AllSectionsScreen: undefined;
   Transfer: undefined;
+  AccountsList: undefined;
+  CreateAccount: undefined;
 };

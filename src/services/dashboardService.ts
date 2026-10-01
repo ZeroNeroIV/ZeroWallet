@@ -152,7 +152,7 @@ export class DashboardService {
         notifications.push(`🎯 Goals Completed: ${goalNames}`);
       }
     } catch (error) {
-      logger.error('[DashboardService] Background tasks error:', error);
+      logger.error('[DashboardService]', 'Background tasks error', error);
     }
 
     return notifications;
@@ -197,7 +197,7 @@ export class DashboardService {
         },
       }));
     } catch (error) {
-      logger.error('[DashboardService] loadRecentTransactions error:', error);
+      logger.error('[DashboardService]', 'loadRecentTransactions error', error);
       return [];
     }
   }
@@ -229,7 +229,7 @@ export class DashboardService {
         day, income: v.income, expense: v.expense,
       }));
     } catch (error) {
-      logger.error('[DashboardService] loadChartData error:', error);
+      logger.error('[DashboardService]', 'loadChartData error', error);
       return [];
     }
   }
@@ -252,7 +252,7 @@ export class DashboardService {
       }
       return result;
     } catch (error) {
-      logger.error('[DashboardService] loadMonthlyData error:', error);
+      logger.error('[DashboardService]', 'loadMonthlyData error', error);
       return [];
     }
   }
@@ -281,7 +281,7 @@ export class DashboardService {
 
       return Array.from(spendMap.values()).sort((a, b) => b.amount - a.amount);
     } catch (error) {
-      logger.error('[DashboardService] loadCategorySpend error:', error);
+      logger.error('[DashboardService]', 'loadCategorySpend error', error);
       return [];
     }
   }
@@ -304,7 +304,7 @@ export class DashboardService {
       }
       return goals;
     } catch (error) {
-      logger.error('[DashboardService] loadGoalsAndDebts error:', error);
+      logger.error('[DashboardService]', 'loadGoalsAndDebts error', error);
       return [];
     }
   }

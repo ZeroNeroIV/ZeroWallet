@@ -211,7 +211,7 @@ export const useAccountStore = create<AccountState>()(
         const balances = persistedState.balances || {};
         const migratedBalances: Record<string, any> = {};
         for (const [id, bal] of Object.entries(balances)) {
-          migratedBalances[id] = normalizeAccountBalance(bal, id);
+          migratedBalances[id] = normalizeAccountBalance(bal as any, id);
         }
         return {
           ...persistedState,
@@ -226,7 +226,7 @@ export const useAccountStore = create<AccountState>()(
 
         for (const k of keys) {
           const orig = state.balances[k];
-          const norm = normalizeAccountBalance(orig, k);
+          const norm = normalizeAccountBalance(orig as any, k);
           cleaned[k] = norm;
           if (
             norm.salaryBalance !== orig?.salaryBalance ||

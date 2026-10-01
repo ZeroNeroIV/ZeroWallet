@@ -32,6 +32,7 @@ import { useAccountStore } from '../../store/accountStore';
 import { AccountRepository } from '../../database/repositories/AccountRepository';
 import { syncBalancesFromDatabase, transferBetweenWallets } from '../../services/walletTransferService';
 import { getWalletBalance } from '../../utils/wallets';
+import { useWallets } from '../../hooks/useWallets';
 import type { Wallet } from '../../types/models';
 import type { VaultType } from '../../types/models';
 import { colors } from '../../theme/colors';
@@ -97,7 +98,7 @@ export default function TransferScreen() {
   );
 
   const accountBalances = currentAccountId ? balances[currentAccountId] : undefined;
-  const fromBalance = getWalletBalance(accountBalances, fromWallet);
+  const fromBalance = getWalletBalance(accountBalances as any, fromWallet);
   const maxAmount = Math.max(0, fromBalance);
 
   const handleTransfer = async () => {
@@ -154,7 +155,7 @@ export default function TransferScreen() {
 
   const renderWalletOption = (wallet: Wallet, selected: string, onSelect: (id: string) => void) => {
     const isSelected = selected === wallet.id;
-    const balance = getWalletBalance(accountBalances, wallet.id);
+    const balance = getWalletBalance(accountBalances as any, wallet.id);
     return (
       <TouchableOpacity
         key={wallet.id}

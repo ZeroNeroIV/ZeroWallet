@@ -3,6 +3,8 @@ import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 import type { MainStackParamList } from '../types/navigation';
 import AccountSettingsScreen from '../screens/accounts/AccountSettingsScreen';
+import AccountsListScreen from '../screens/accounts/AccountsListScreen';
+import CreateAccountScreen from '../screens/accounts/CreateAccountScreen';
 import { AddTransactionScreen } from '../screens/transactions/AddTransactionScreen';
 import { TransactionHistoryScreen } from '../screens/transactions/TransactionHistoryScreen';
 import { TransactionDetailsScreen } from '../screens/transactions/TransactionDetailsScreen';
@@ -59,6 +61,16 @@ export function MainNavigator() {
         name="AccountSettings"
         component={AccountSettingsScreen}
         options={{ title: 'Currency' }}
+      />
+      <Stack.Screen
+        name="AccountsList"
+        component={AccountsListScreen}
+        options={{ title: 'Accounts' }}
+      />
+      <Stack.Screen
+        name="CreateAccount"
+        component={CreateAccountScreen}
+        options={{ title: 'Create Account', presentation: 'modal' }}
       />
       <Stack.Screen
         name="Settings"

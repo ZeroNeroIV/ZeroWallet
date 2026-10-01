@@ -11,7 +11,8 @@
  *     custom wallets with transactions are protected)
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -33,6 +34,7 @@ import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { lightHaptic, mediumHaptic } from '../../services/haptics/hapticFeedback';
 import { useWallets } from '../../hooks/useWallets';
+import { syncBalancesFromDatabase } from '../../services/walletTransferService';
 import type { Wallet } from '../../types/models';
 
 const ICON_PRESETS = [
@@ -72,6 +74,21 @@ export default function WalletsScreen() {
   const balances = useAccountStore((s) => s.balances);
   const { wallets, loading, refresh } = useWallets();
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
+  const [currency, setCurrency] = useState('USD');
+
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+      if (currentAccountId) {
+        syncBalancesFromDatabase(currentAccountId);
+        import('../../database/repositories/AccountRepository').then(({ AccountRepository }) => {
+          new AccountRepository().findById(currentAccountId).then((acc) => {
+            if (acc?.currency) setCurrency(acc.currency);
+          });
+        });
+      }
+    }, [refresh, currentAccountId])
+  );
 
   const [editorVisible, setEditorVisible] = useState(false);
   const [editing, setEditing] = useState<Wallet | null>(null);
@@ -156,7 +173,7 @@ export default function WalletsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await new WalletRepository().delete(wallet.id, wallet.accountId || currentAccountId);
+              await new WalletRepository().delete(wallet.id, wallet.accountId || currentAccountId || undefined);
               mediumHaptic();
               await refresh();
             } catch (error: any) {
@@ -170,7 +187,7 @@ export default function WalletsScreen() {
 
   const renderItem = ({ item }: { item: Wallet }) => {
     const balance = currentAccountId
-      ? getWalletBalance(balances[currentAccountId], item.id)
+      ? getWalletBalance(balances[currentAccountId] as any, item.id)
       : 0;
     return (
       <View style={styles.card}>
@@ -179,7 +196,7 @@ export default function WalletsScreen() {
         </View>
         <View style={styles.info}>
           <Text style={styles.name}>{item.name}</Text>
-          <Text style={styles.balance}>{balance.toFixed(3)}</Text>
+          <Text style={styles.balance}>{balance.toFixed(3)} {currency}</Text>
           {item.isDefault && <Text style={styles.badge}>BUILT-IN</Text>}
         </View>
         <TouchableOpacity style={styles.action} onPress={() => openEdit(item)} hitSlop={8}>

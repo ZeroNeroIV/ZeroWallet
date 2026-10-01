@@ -82,7 +82,7 @@ async function healUsersAndAccounts(database: SQLite.SQLiteDatabase): Promise<vo
          VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
         [defaultAccountId, fallbackUserId, 'Main Wallet', 'USD', 'wallet', '#007AFF', now, now]
       );
-      useAuthStore.getState().setCurrentAccountId(defaultAccountId);
+      useAuthStore.getState().switchAccount(defaultAccountId);
       useAccountStore.getState().setCurrentAccountId(defaultAccountId);
     }
   } catch (err) {
@@ -406,7 +406,7 @@ async function resyncBalancesFromTransactions(database: SQLite.SQLiteDatabase): 
       accountStore.setCurrentAccountId(defaultAccountId);
     }
     if (!authStore.currentAccountId && defaultAccountId) {
-      authStore.setCurrentAccountId(defaultAccountId);
+      authStore.switchAccount(defaultAccountId);
     }
   } catch (err) {
     console.warn('[DataHealer] resyncBalancesFromTransactions warning:', err);

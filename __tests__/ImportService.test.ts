@@ -11,13 +11,35 @@ jest.mock('../src/database/repositories/TransactionRepository', () => ({
 describe('ImportService & Wallet Backward Compatibility', () => {
   let executedSqlList: Array<{ sql: string; params: any[] }> = [];
   let inMemoryWallets: Array<any> = [];
+  let inMemoryAccounts: Array<any> = [];
 
   beforeEach(() => {
     executedSqlList = [];
     inMemoryWallets = [];
+    inMemoryAccounts = [];
 
     jest.spyOn(dbModule, 'executeSql').mockImplementation(async (sql: string, params: any[] = []) => {
       executedSqlList.push({ sql, params });
+
+      // Handle queries for accounts
+      if (sql.includes('SELECT id FROM accounts WHERE id = ?')) {
+        const id = params[0];
+        const acc = inMemoryAccounts.find((a) => a.id === id);
+        return acc ? [{ id }] : ([] as any);
+      }
+      if (sql.includes('UPDATE accounts SET')) {
+        const [name, currency, icon, color, updated_at, id] = params;
+        const idx = inMemoryAccounts.findIndex((a) => a.id === id);
+        if (idx >= 0) {
+          inMemoryAccounts[idx] = { ...inMemoryAccounts[idx], name, currency, icon, color, updated_at };
+        }
+        return [] as any;
+      }
+      if (sql.includes('INSERT INTO accounts')) {
+        const [id, user_id, name, currency, icon, color, is_default, created_at, updated_at] = params;
+        inMemoryAccounts.push({ id, user_id, name, currency, icon, color, is_default, created_at, updated_at });
+        return [] as any;
+      }
 
       // Handle queries for wallets
       if (sql.includes('SELECT * FROM wallets WHERE account_id = ?')) {
@@ -252,6 +274,92 @@ describe('ImportService & Wallet Backward Compatibility', () => {
         (e) => e.sql.includes('INSERT INTO transactions') && e.params[0] === 'tx-simple'
       );
       expect(txInsert?.params[7]).toBe('physical');
+    });
+
+    it('correctly imports v1.1 backup with data.account (JOD, My Wallet) and is resilient with ON CONFLICT', async () => {
+      const v11Backup = {
+        version: '1.1',
+        exportedAt: '2026-10-01T12:28:14.837Z',
+        data: {
+          account: {
+            id: 'b43becda-f4ba-48af-9843-f56c61250443',
+            userId: 'user-old',
+            name: 'My Wallet',
+            currency: 'JOD',
+            icon: 'wallet',
+            color: '#4ECDC4',
+            isDefault: true,
+            createdAt: 1790438995751,
+            updatedAt: 1790438995751,
+          },
+          categories: [
+            {
+              id: 'cat-bills',
+              name: 'Bills & Utilities',
+              type: 'expense',
+              icon: 'receipt',
+              color: '#FF8B94',
+            },
+            {
+              id: 'cat-food',
+              name: 'Food & Dining',
+              type: 'expense',
+              icon: 'food',
+              color: '#FF6B6B',
+            },
+          ],
+          transactions: [
+            {
+              id: 'tx-sub',
+              accountId: 'b43becda-f4ba-48af-9843-f56c61250443',
+              type: 'expense',
+              amount: 3.55,
+              categoryId: 'cat-bills',
+              description: 'Google AI Pro Subscription',
+              date: 1790851467163,
+              vaultType: 'card',
+              currency: 'JOD',
+              convertedAmount: null,
+            },
+            {
+              id: 'tx-snacks',
+              accountId: 'b43becda-f4ba-48af-9843-f56c61250443',
+              type: 'expense',
+              amount: 2.0,
+              categoryId: 'cat-food',
+              description: 'Snacks',
+              date: 1790748420000,
+              vaultType: 'physical',
+              currency: 'JOD',
+              convertedAmount: null,
+            },
+          ],
+          // Notice: no wallets array in v1.1
+        },
+      };
+
+      const counts = await importPayload(v11Backup, 'acc-current', 'user-current');
+
+      expect(counts.account).toBe(1);
+      expect(counts.wallets).toBeGreaterThanOrEqual(7);
+      expect(counts.transactions).toBe(2);
+      expect(counts.categories).toBe(2);
+
+      // Verify the account in DB was updated with name 'My Wallet' and currency 'JOD'
+      const acc = inMemoryAccounts.find((a) => a.id === 'acc-current');
+      expect(acc).toBeDefined();
+      expect(acc?.name).toBe('My Wallet');
+      expect(acc?.currency).toBe('JOD');
+
+      // Verify transactions inserted have ON CONFLICT clause
+      const txInserts = executedSqlList.filter((e) => e.sql.includes('INSERT INTO transactions'));
+      expect(txInserts.length).toBeGreaterThanOrEqual(2);
+      expect(txInserts[0].sql).toContain('ON CONFLICT(id) DO UPDATE SET');
+
+      // Re-running the import must be completely idempotent and not throw
+      const reCounts = await importPayload(v11Backup, 'acc-current', 'user-current');
+      expect(reCounts.account).toBe(1);
+      expect(reCounts.transactions).toBe(2);
     });
   });
 });

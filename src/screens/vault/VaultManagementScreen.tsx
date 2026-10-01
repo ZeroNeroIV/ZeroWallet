@@ -65,6 +65,7 @@ const WALLET_FEATURES: Record<VaultType, string[]> = {
 export const VaultManagementScreen: React.FC = () => {
   const { currentAccountId, currentUser } = useAuthStore();
   const { balances } = useAccountStore();
+  const { wallets } = useWallets();
   const themeColors = useThemeColors();
 
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
@@ -147,7 +148,6 @@ export const VaultManagementScreen: React.FC = () => {
     }
   };
 
-  const { wallets } = useWallets();
   const vaultDetails = wallets.map((wallet) => {
     const meta = (WALLET_META as Record<string, { name: string; category: string; description: string; icon: string }>)[wallet.id];
     const features = (WALLET_FEATURES as Record<string, string[]>)[wallet.id] ?? [
@@ -256,6 +256,7 @@ export const VaultManagementScreen: React.FC = () => {
         visible={transferModalVisible}
         onClose={() => setTransferModalVisible(false)}
         onTransfer={handleTransfer}
+        wallets={wallets}
         balances={currentBalance}
       />
     </View>

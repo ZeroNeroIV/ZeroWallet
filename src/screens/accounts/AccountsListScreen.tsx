@@ -60,7 +60,6 @@ export default function AccountsListScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      setAnimateOut(prev => prev + 1);
       loadAccounts();
     }, [currentUser?.id])
   );

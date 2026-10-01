@@ -225,9 +225,34 @@ const SettingsScreen = ({ navigation }: any) => {
               const { useAccountStore } = await import('../../store/accountStore');
               const txs = await new TransactionRepository().findByAccount(currentAccountId);
               useAccountStore.getState().updateBalance(currentAccountId, calculateVaultBalances(txs));
-              const summary = Object.entries(result.imported)
-                .map(([k, v]) => `${v} ${k}`)
-                .join(', ');
+              await loadCurrentAccount();
+
+              const parts: string[] = [];
+              if (result.imported.account) {
+                parts.push('1 account');
+              }
+              if (result.imported.wallets) {
+                parts.push(`${result.imported.wallets} wallets`);
+              }
+              if (result.imported.transactions) {
+                parts.push(`${result.imported.transactions} transactions`);
+              }
+              if (result.imported.categories) {
+                parts.push(`${result.imported.categories} categories`);
+              }
+              if (result.imported.subscriptions) {
+                parts.push(`${result.imported.subscriptions} subscriptions`);
+              }
+              if (result.imported.recurringExpenses) {
+                parts.push(`${result.imported.recurringExpenses} recurring expenses`);
+              }
+              if (result.imported.goals) {
+                parts.push(`${result.imported.goals} goals`);
+              }
+              if (result.imported.debts) {
+                parts.push(`${result.imported.debts} debts`);
+              }
+              const summary = parts.length > 0 ? parts.join(', ') : 'All records up to date';
               Alert.alert('Import Complete', `Imported: ${summary}`);
             } catch (error: any) {
               if (!error?.message?.includes('cancelled') && !error?.message?.includes('dismissed')) {
@@ -517,6 +542,35 @@ const SettingsScreen = ({ navigation }: any) => {
       {/* Account Actions Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Account</Text>
+
+        <TouchableOpacity
+          style={styles.settingRow}
+          onPress={() => {
+            lightHaptic();
+            navigation.navigate('AccountsList');
+          }}
+        >
+          <View style={styles.settingLeft}>
+            <View style={[styles.iconContainer, { backgroundColor: colors.primary.light }]}>
+              <MaterialCommunityIcons
+                name="wallet-outline"
+                size={20}
+                color={colors.primary.main}
+              />
+            </View>
+            <View style={styles.settingInfo}>
+              <Text style={styles.settingLabel}>Manage Accounts</Text>
+              <Text style={styles.settingDescription}>
+                Switch, create and view accounts
+              </Text>
+            </View>
+          </View>
+          <MaterialCommunityIcons
+            name="chevron-right"
+            size={24}
+            color={themeColors.textSecondary}
+          />
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.settingRow}

@@ -18,6 +18,7 @@ export interface WalletMeta {
   shortName: string;
   category: string;
   icon: string;
+  color: string;
   description: string;
 }
 
@@ -27,6 +28,7 @@ export const WALLET_META: Record<VaultType, WalletMeta> = {
     shortName: 'Investment',
     category: 'Investment',
     icon: 'trending-up',
+    color: '#13ecec',
     description: 'Active money — spend, use and grow it',
   },
   savings: {
@@ -34,6 +36,7 @@ export const WALLET_META: Record<VaultType, WalletMeta> = {
     shortName: 'Savings',
     category: 'Savings',
     icon: 'piggy-bank-outline',
+    color: '#FFD166',
     description: 'Money set aside for future goals',
   },
   held: {
@@ -41,6 +44,7 @@ export const WALLET_META: Record<VaultType, WalletMeta> = {
     shortName: 'Recurring',
     category: 'Recurring',
     icon: 'repeat',
+    color: '#FF6B6B',
     description: 'Reserved for bills and recurring commitments',
   },
   salary: {
@@ -48,6 +52,7 @@ export const WALLET_META: Record<VaultType, WalletMeta> = {
     shortName: 'Salary',
     category: 'Salary',
     icon: 'cash-multiple',
+    color: '#06D6A0',
     description: 'Where your salary lands each payday',
   },
   emergency: {
@@ -55,6 +60,7 @@ export const WALLET_META: Record<VaultType, WalletMeta> = {
     shortName: 'Emergency',
     category: 'Emergency Funds',
     icon: 'lifebuoy',
+    color: '#EF476F',
     description: 'Emergency fund — touch only when it matters',
   },
   card: {
@@ -62,6 +68,7 @@ export const WALLET_META: Record<VaultType, WalletMeta> = {
     shortName: 'Card',
     category: 'Card',
     icon: 'credit-card-outline',
+    color: '#118AB2',
     description: 'Money available on your card',
   },
   physical: {
@@ -69,6 +76,7 @@ export const WALLET_META: Record<VaultType, WalletMeta> = {
     shortName: 'Physical',
     category: 'Physical Cash',
     icon: 'wallet-outline',
+    color: '#4ECDC4',
     description: 'Physical cash on hand',
   },
 };

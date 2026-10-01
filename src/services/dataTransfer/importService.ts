@@ -26,6 +26,7 @@ interface ExportPayload {
   version?: string;
   exportedAt?: string;
   data: {
+    account?: any;
     categories?: Category[];
     transactions?: (Transaction & { images?: string[] })[];
     subscriptions?: Subscription[];
@@ -54,6 +55,7 @@ function normalizeBackupPayload(raw: any): ExportPayload {
     version,
     exportedAt,
     data: {
+      account: data.account ?? null,
       categories: Array.isArray(data.categories) ? data.categories : [],
       transactions: Array.isArray(data.transactions) ? data.transactions : [],
       subscriptions: Array.isArray(data.subscriptions) ? data.subscriptions : [],
@@ -159,8 +161,9 @@ export async function importPayload(
 ): Promise<Record<string, number>> {
   const payload = normalizeBackupPayload(rawInput);
 
-  const { categories, transactions, subscriptions, recurringExpenses, goals, debts, wallets } = payload.data;
+  const { account, categories, transactions, subscriptions, recurringExpenses, goals, debts, wallets } = payload.data;
   const counts: Record<string, number> = {
+    account: 0,
     categories: 0,
     wallets: 0,
     transactions: 0,
@@ -172,6 +175,40 @@ export async function importPayload(
 
   const walletRepo = new WalletRepository();
   const now = Date.now();
+
+  // 0. Import or update account details if present in payload
+  const rawAccount = account as Record<string, any> | null;
+  if (rawAccount && typeof rawAccount === 'object') {
+    const accName = rawAccount.name || 'My Wallet';
+    const accCurrency = rawAccount.currency || 'USD';
+    const accIcon = rawAccount.icon || 'wallet';
+    const accColor = rawAccount.color || '#4ECDC4';
+
+    const existingAcc = await executeSql<{ id: string }>(
+      'SELECT id FROM accounts WHERE id = ?',
+      [currentAccountId]
+    );
+
+    if (existingAcc.length > 0) {
+      await executeSql(
+        `UPDATE accounts SET name = ?, currency = ?, icon = ?, color = ?, updated_at = ? WHERE id = ?`,
+        [accName, accCurrency, accIcon, accColor, now, currentAccountId]
+      );
+    } else {
+      await executeSql(
+        `INSERT INTO accounts (id, user_id, name, currency, icon, color, is_default, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           name = excluded.name,
+           currency = excluded.currency,
+           icon = excluded.icon,
+           color = excluded.color,
+           updated_at = excluded.updated_at`,
+        [currentAccountId, currentUserId, accName, accCurrency, accIcon, accColor, now, now]
+      );
+    }
+    counts.account = 1;
+  }
 
   // 1. Ensure built-in default wallets exist for the account
   await walletRepo.ensureDefaultWallets(currentAccountId);
@@ -307,9 +344,7 @@ export async function importPayload(
     );
   }
 
-  // Import transactions + their images (skip ids already present, but heal
-  // their category reference so re-importing fixes orphaned rows)
-  const knownTxIds = await existingIds('transactions', 'account_id', currentAccountId);
+  // Import transactions + their images (ON CONFLICT resilient to heal existing rows)
   for (const t of transactions ?? []) {
     const raw = t as Record<string, any>;
     const tId = raw.id;
@@ -325,11 +360,6 @@ export async function importPayload(
     );
     if (catCheck.length === 0) {
       categoryId = defaultCategoryId;
-    }
-
-    if (knownTxIds.has(tId)) {
-      await executeSql('UPDATE transactions SET category_id = ? WHERE id = ?', [categoryId, tId]);
-      continue;
     }
 
     const newImagePaths: string[] = [];
@@ -379,7 +409,24 @@ export async function importPayload(
        (id, account_id, type, amount, category_id, description, date, vault_type,
         is_recurring, recurring_expense_id, subscription_id, image_path, currency,
         original_amount, exchange_rate, converted_amount, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         account_id = excluded.account_id,
+         type = excluded.type,
+         amount = excluded.amount,
+         category_id = excluded.category_id,
+         description = excluded.description,
+         date = excluded.date,
+         vault_type = excluded.vault_type,
+         is_recurring = excluded.is_recurring,
+         recurring_expense_id = excluded.recurring_expense_id,
+         subscription_id = excluded.subscription_id,
+         image_path = COALESCE(excluded.image_path, transactions.image_path),
+         currency = excluded.currency,
+         original_amount = excluded.original_amount,
+         exchange_rate = excluded.exchange_rate,
+         converted_amount = excluded.converted_amount,
+         updated_at = excluded.updated_at`,
       [
         tId, currentAccountId, txType, amount, categoryId, raw.description ?? null,
         txDate, normalizedVaultType, isRecurring,
@@ -402,8 +449,7 @@ export async function importPayload(
     }
   }
 
-  // Import subscriptions
-  const knownSubIds = await existingIds('subscriptions', 'account_id', currentAccountId);
+  // Import subscriptions (ON CONFLICT resilient)
   for (const s of subscriptions ?? []) {
     const raw = s as Record<string, any>;
     const sId = raw.id;
@@ -416,11 +462,6 @@ export async function importPayload(
       [categoryId]
     );
     if (catCheck.length === 0) categoryId = defaultCategoryId;
-
-    if (knownSubIds.has(sId)) {
-      await executeSql('UPDATE subscriptions SET category_id = ? WHERE id = ?', [categoryId, sId]);
-      continue;
-    }
 
     const rawVault = raw.vaultType ?? raw.vault_type;
     const normalizedVaultType = VaultType.parse(rawVault).type;
@@ -437,7 +478,18 @@ export async function importPayload(
       `INSERT INTO subscriptions
        (id, account_id, name, amount, category_id, billing_day, is_active,
         vault_type, last_processed, next_processing, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         account_id = excluded.account_id,
+         name = excluded.name,
+         amount = excluded.amount,
+         category_id = excluded.category_id,
+         billing_day = excluded.billing_day,
+         is_active = excluded.is_active,
+         vault_type = excluded.vault_type,
+         last_processed = excluded.last_processed,
+         next_processing = excluded.next_processing,
+         updated_at = excluded.updated_at`,
       [
         sId, currentAccountId, name, amount, categoryId, billingDay,
         isActive, normalizedVaultType, lastProcessed,
@@ -447,8 +499,7 @@ export async function importPayload(
     counts.subscriptions += 1;
   }
 
-  // Import recurring expenses
-  const knownRecIds = await existingIds('recurring_expenses', 'account_id', currentAccountId);
+  // Import recurring expenses (ON CONFLICT resilient)
   for (const r of recurringExpenses ?? []) {
     const raw = r as Record<string, any>;
     const rId = raw.id;
@@ -461,11 +512,6 @@ export async function importPayload(
       [categoryId]
     );
     if (catCheck.length === 0) categoryId = defaultCategoryId;
-
-    if (knownRecIds.has(rId)) {
-      await executeSql('UPDATE recurring_expenses SET category_id = ? WHERE id = ?', [categoryId, rId]);
-      continue;
-    }
 
     const rawVault = raw.vaultType ?? raw.vault_type;
     const normalizedVaultType = VaultType.parse(rawVault).type;
@@ -484,7 +530,20 @@ export async function importPayload(
       `INSERT INTO recurring_expenses
        (id, account_id, name, amount, category_id, frequency, interval,
         next_occurrence, vault_type, is_active, auto_deduct, last_processed, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         account_id = excluded.account_id,
+         name = excluded.name,
+         amount = excluded.amount,
+         category_id = excluded.category_id,
+         frequency = excluded.frequency,
+         interval = excluded.interval,
+         next_occurrence = excluded.next_occurrence,
+         vault_type = excluded.vault_type,
+         is_active = excluded.is_active,
+         auto_deduct = excluded.auto_deduct,
+         last_processed = excluded.last_processed,
+         updated_at = excluded.updated_at`,
       [
         rId, currentAccountId, name, amount, categoryId, frequency,
         interval, nextOccurrence, normalizedVaultType, isActive,
@@ -494,13 +553,11 @@ export async function importPayload(
     counts.recurringExpenses += 1;
   }
 
-  // Import goals
-  const knownGoalIds = await existingIds('goals', 'account_id', currentAccountId);
+  // Import goals (ON CONFLICT resilient)
   for (const g of goals ?? []) {
     const raw = g as Record<string, any>;
     const gId = raw.id;
     if (!gId) continue;
-    if (knownGoalIds.has(gId)) continue;
 
     const rawTarget = raw.targetAmount ?? raw.target_amount;
     const targetAmount = rawTarget !== null && rawTarget !== undefined ? Number(rawTarget) : null;
@@ -516,7 +573,18 @@ export async function importPayload(
       `INSERT INTO goals
        (id, account_id, name, target_amount, current_amount, funding_source,
         icon, color, is_completed, completed_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         account_id = excluded.account_id,
+         name = excluded.name,
+         target_amount = excluded.target_amount,
+         current_amount = excluded.current_amount,
+         funding_source = excluded.funding_source,
+         icon = excluded.icon,
+         color = excluded.color,
+         is_completed = excluded.is_completed,
+         completed_at = excluded.completed_at,
+         updated_at = excluded.updated_at`,
       [
         gId, currentAccountId, raw.name || 'Goal', targetAmount,
         currentAmount, fundingSource, raw.icon || 'flag', raw.color || '#007AFF',
@@ -526,8 +594,7 @@ export async function importPayload(
     counts.goals += 1;
   }
 
-  // Import debts
-  const knownDebtIds = await existingIds('debts', 'account_id', currentAccountId);
+  // Import debts (ON CONFLICT resilient)
   for (const d of debts ?? []) {
     const raw = d as Record<string, any>;
     const dId = raw.id;
@@ -541,13 +608,6 @@ export async function importPayload(
         [categoryId]
       );
       if (catCheck.length === 0) categoryId = null;
-    }
-
-    if (knownDebtIds.has(dId)) {
-      if (categoryId) {
-        await executeSql('UPDATE debts SET category_id = ? WHERE id = ?', [categoryId, dId]);
-      }
-      continue;
     }
 
     const type = raw.type || 'lent';
@@ -565,7 +625,18 @@ export async function importPayload(
       `INSERT INTO debts
        (id, account_id, type, person_name, amount, amount_paid, due_date,
         status, description, category_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         account_id = excluded.account_id,
+         type = excluded.type,
+         person_name = excluded.person_name,
+         amount = excluded.amount,
+         amount_paid = excluded.amount_paid,
+         due_date = excluded.due_date,
+         status = excluded.status,
+         description = excluded.description,
+         category_id = excluded.category_id,
+         updated_at = excluded.updated_at`,
       [
         dId, currentAccountId, type, personName,
         amount, amountPaid,
