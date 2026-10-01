@@ -23,6 +23,7 @@ import { Button } from '../../components/forms/Button';
 import { spacing, borderRadius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { formatCurrency } from '../../constants/currencies';
 
 type DebtDetailsNavigationProp = StackNavigationProp<MainStackParamList, 'DebtDetails'>;
 type DebtDetailsRouteProp = RouteProp<MainStackParamList, 'DebtDetails'>;
@@ -37,6 +38,7 @@ export default function DebtDetailsScreen() {
     const [loading, setLoading] = useState(true);
     const [paymentAmount, setPaymentAmount] = useState('');
     const [showPaymentInput, setShowPaymentInput] = useState(false);
+    const [accountCurrency, setAccountCurrency] = useState<string>('USD');
 
     const debtRepo = new DebtRepository();
     const styles = useMemo(() => createStyles(themeColors), [themeColors]);
@@ -46,6 +48,15 @@ export default function DebtDetailsScreen() {
             const loadedDebt = await debtRepo.findById(debtId);
             if (loadedDebt) {
                 setDebt(loadedDebt);
+                try {
+                    const { AccountRepository } = await import('../../database/repositories/AccountRepository');
+                    const acc = await new AccountRepository().findById(loadedDebt.accountId);
+                    if (acc?.currency) {
+                        setAccountCurrency(acc.currency);
+                    }
+                } catch (err) {
+                    console.warn('[DebtDetails] Failed to load account currency:', err);
+                }
             } else {
                 Alert.alert('Error', 'Debt not found');
                 navigation.goBack();
@@ -78,7 +89,7 @@ export default function DebtDetailsScreen() {
         if (amount > remainingAmount) {
             Alert.alert(
                 'Amount Too Large',
-                `Payment amount ($${amount.toFixed(3)}) exceeds remaining debt ($${remainingAmount.toFixed(3)})`
+                `Payment amount (${formatCurrency(amount, accountCurrency)}) exceeds remaining debt (${formatCurrency(remainingAmount, accountCurrency)})`
             );
             return;
         }
@@ -101,7 +112,7 @@ export default function DebtDetailsScreen() {
         const remainingAmount = debt.amount - debt.amountPaid;
         Alert.alert(
             'Mark as Paid',
-            `Are you sure you want to mark this debt as fully paid?${remainingAmount > 0 ? `\n\nThis will record a final payment of $${remainingAmount.toFixed(3)}.` : ''}`,
+            `Are you sure you want to mark this debt as fully paid?${remainingAmount > 0 ? `\n\nThis will record a final payment of ${formatCurrency(remainingAmount, accountCurrency)}.` : ''}`,
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
@@ -178,7 +189,7 @@ export default function DebtDetailsScreen() {
                         <Text style={styles.headerLabel}>
                             {debt.type === 'lent' ? 'They owe you' : 'You owe them'}
                         </Text>
-                        <Text style={styles.headerAmount}>${remainingAmount.toFixed(3)}</Text>
+                        <Text style={styles.headerAmount}>{formatCurrency(remainingAmount, accountCurrency)}</Text>
                         <Text style={styles.headerPerson}>{debt.personName}</Text>
                     </View>
                     <DebtStatusBadge status={debt.status} isOverdue={isOverdue} size="large" />
@@ -190,7 +201,7 @@ export default function DebtDetailsScreen() {
                             <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
                         </View>
                         <Text style={styles.progressText}>
-                            {`${progressPercent.toFixed(0)}% paid • $${debt.amountPaid.toFixed(3)} of $${debt.amount.toFixed(3)}`}
+                            {`${progressPercent.toFixed(0)}% paid • ${formatCurrency(debt.amountPaid, accountCurrency)} of ${formatCurrency(debt.amount, accountCurrency)}`}
                         </Text>
                     </View>
                 )}

@@ -18,17 +18,20 @@ import {
     getProgressColor,
     getRemainingAmount,
 } from '../../utils/goalUtils';
+import { formatCurrency } from '../../constants/currencies';
 
 interface GoalCardProps {
     goal: Goal;
     onPress: () => void;
     onLongPress?: () => void;
+    accountCurrency?: string;
 }
 
 export const GoalCard: React.FC<GoalCardProps> = ({
     goal,
     onPress,
     onLongPress,
+    accountCurrency = 'USD',
 }) => {
     const themeColors = useThemeColors();
     const styles = useMemo(() => createStyles(themeColors), [themeColors]);
@@ -131,7 +134,7 @@ export const GoalCard: React.FC<GoalCardProps> = ({
                         <View style={styles.amountContainer}>
                             <View>
                                 <Text style={styles.currentAmount}>
-                                    ${goal.currentAmount.toFixed(0)}
+                                    {formatCurrency(goal.currentAmount, accountCurrency)}
                                 </Text>
                                 <Text style={styles.label}>Current</Text>
                             </View>
@@ -149,7 +152,7 @@ export const GoalCard: React.FC<GoalCardProps> = ({
                                 ) : (
                                     <>
                                         <Text style={styles.targetAmount}>
-                                            ${remaining.toFixed(0)}
+                                            {formatCurrency(remaining, accountCurrency)}
                                         </Text>
                                         <Text style={styles.label}>To Go</Text>
                                     </>

@@ -21,6 +21,7 @@ import { typography } from '../../theme/typography';
 import { Button } from '../../components/forms/Button';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { DebtCard } from '../../components/debts/DebtCard';
+import { formatCurrency } from '../../constants/currencies';
 
 type DebtsNavigationProp = StackNavigationProp<MainStackParamList, 'DebtsScreen'>;
 
@@ -31,6 +32,7 @@ export default function DebtsScreen() {
 
     const [activeTab, setActiveTab] = useState<'lent' | 'borrowed'>('lent');
     const [debts, setDebts] = useState<Debt[]>([]);
+    const [accountCurrency, setAccountCurrency] = useState<string>('USD');
     const [stats, setStats] = useState<DebtStats>({
         totalLent: 0,
         totalBorrowed: 0,
@@ -50,6 +52,16 @@ export default function DebtsScreen() {
         if (!currentAccountId) return;
 
         try {
+            try {
+                const { AccountRepository } = await import('../../database/repositories/AccountRepository');
+                const acc = await new AccountRepository().findById(currentAccountId);
+                if (acc?.currency) {
+                    setAccountCurrency(acc.currency);
+                }
+            } catch (err) {
+                console.warn('[DebtsScreen] Could not load account currency:', err);
+            }
+
             const allDebts = await debtRepo.findByAccount(currentAccountId);
             const debtStats = await debtRepo.getDebtStats(currentAccountId);
 
@@ -143,6 +155,7 @@ export default function DebtsScreen() {
         <DebtCard
             debt={item}
             onPress={() => handleDebtPress(item)}
+            accountCurrency={accountCurrency}
         />
     );
 
@@ -193,7 +206,7 @@ export default function DebtsScreen() {
                             Total {activeTab === 'lent' ? 'owed to you' : 'you owe'}
                         </Text>
                         <Text style={[styles.summaryAmount, { color: themeColors.text }]}>
-                            ${currentTabStats.toFixed(3)}
+                            {formatCurrency(currentTabStats, accountCurrency)}
                         </Text>
                     </View>
                     <View style={styles.summaryRow}>

@@ -45,6 +45,8 @@ export const CurrencyConversionModal: React.FC<CurrencyConversionModalProps> = (
     onConversionComplete,
 }) => {
     const themeColors = useThemeColors();
+    const [currentFrom, setCurrentFrom] = useState(fromCurrency);
+    const [currentTo, setCurrentTo] = useState(toCurrency);
     const [amount, setAmount] = useState(initialAmount.toString());
     const [convertedAmount, setConvertedAmount] = useState<number | null>(null);
     const [exchangeRate, setExchangeRate] = useState<number | null>(null);
@@ -53,30 +55,39 @@ export const CurrencyConversionModal: React.FC<CurrencyConversionModalProps> = (
 
     const styles = useMemo(() => createStyles(themeColors), [themeColors]);
 
-    const fromCurrencyObj = getCurrencyByCode(fromCurrency);
-    const toCurrencyObj = getCurrencyByCode(toCurrency);
+    const fromCurrencyObj = getCurrencyByCode(currentFrom);
+    const toCurrencyObj = getCurrencyByCode(currentTo);
 
-    // Fetch exchange rate and convert when modal opens or currencies change
+    // Sync currencies when props change or modal becomes visible
     useEffect(() => {
-        if (visible && fromCurrency && toCurrency) {
-            fetchAndConvert();
+        if (visible) {
+            setCurrentFrom(fromCurrency);
+            setCurrentTo(toCurrency);
+            setAmount(initialAmount ? initialAmount.toString() : '');
         }
-    }, [visible, fromCurrency, toCurrency]);
+    }, [visible, fromCurrency, toCurrency, initialAmount]);
+
+    // Fetch exchange rate and convert when currencies change
+    useEffect(() => {
+        if (visible && currentFrom && currentTo) {
+            fetchAndConvert(currentFrom, currentTo);
+        }
+    }, [visible, currentFrom, currentTo]);
 
     // Update conversion when amount changes
     useEffect(() => {
         if (amount && exchangeRate && !loading) {
             const numAmount = parseFloat(amount);
             if (!isNaN(numAmount)) {
-                setConvertedAmount(numAmount * exchangeRate);
+                setConvertedAmount(Math.round(numAmount * exchangeRate * 1000) / 1000);
             }
         }
-    }, [amount, exchangeRate]);
+    }, [amount, exchangeRate, loading]);
 
-    const fetchAndConvert = async () => {
+    const fetchAndConvert = async (from: string, to: string) => {
         setLoading(true);
         try {
-            const rate = await getExchangeRate(fromCurrency, toCurrency);
+            const rate = await getExchangeRate(from, to);
             setExchangeRate(rate);
             setLastUpdate(new Date());
 
@@ -84,7 +95,7 @@ export const CurrencyConversionModal: React.FC<CurrencyConversionModalProps> = (
             if (amount) {
                 const numAmount = parseFloat(amount);
                 if (!isNaN(numAmount)) {
-                    setConvertedAmount(numAmount * rate);
+                    setConvertedAmount(Math.round(numAmount * rate * 1000) / 1000);
                 }
             }
 
@@ -109,22 +120,30 @@ export const CurrencyConversionModal: React.FC<CurrencyConversionModalProps> = (
     };
 
     const handleSwapCurrencies = () => {
-        // Swap the currencies and amounts
-        if (convertedAmount) {
+        const nextFrom = currentTo;
+        const nextTo = currentFrom;
+        setCurrentFrom(nextFrom);
+        setCurrentTo(nextTo);
+
+        if (convertedAmount !== null) {
             setAmount(convertedAmount.toFixed(3));
         }
         if (exchangeRate) {
-            setExchangeRate(1 / exchangeRate);
+            const nextRate = 1 / exchangeRate;
+            setExchangeRate(nextRate);
+            if (convertedAmount !== null) {
+                setConvertedAmount(parseFloat(amount) || 0);
+            }
         }
     };
 
     const handleUseConversion = () => {
-        if (convertedAmount && exchangeRate) {
+        if (convertedAmount !== null && exchangeRate) {
             const numAmount = parseFloat(amount);
             if (!isNaN(numAmount)) {
                 onConversionComplete?.({
                     amount: numAmount,
-                    convertedAmount,
+                    convertedAmount: Math.round(convertedAmount * 1000) / 1000,
                     exchangeRate,
                 });
                 onClose();
@@ -170,7 +189,7 @@ export const CurrencyConversionModal: React.FC<CurrencyConversionModalProps> = (
                                         <Text style={styles.currencyFlag}>
                                             {fromCurrencyObj?.flag}
                                         </Text>
-                                        <Text style={styles.currencyCode}>{fromCurrency}</Text>
+                                        <Text style={styles.currencyCode}>{currentFrom}</Text>
                                     </View>
                                     <TextInput
                                         style={styles.amountInput}
@@ -193,7 +212,7 @@ export const CurrencyConversionModal: React.FC<CurrencyConversionModalProps> = (
                                 </TouchableOpacity>
                                 {exchangeRate && (
                                     <Text style={styles.rateText}>
-                                        1 {fromCurrency} = {exchangeRate.toFixed(4)} {toCurrency}
+                                        1 {currentFrom} = {exchangeRate.toFixed(4)} {currentTo}
                                     </Text>
                                 )}
                             </View>
@@ -206,7 +225,7 @@ export const CurrencyConversionModal: React.FC<CurrencyConversionModalProps> = (
                                         <Text style={styles.currencyFlag}>
                                             {toCurrencyObj?.flag}
                                         </Text>
-                                        <Text style={styles.currencyCode}>{toCurrency}</Text>
+                                        <Text style={styles.currencyCode}>{currentTo}</Text>
                                     </View>
                                     <Text style={styles.convertedAmount}>
                                         {convertedAmount !== null

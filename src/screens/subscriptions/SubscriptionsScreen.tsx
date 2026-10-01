@@ -40,6 +40,7 @@ import { typography } from '../../theme/typography';
 import { Button } from '../../components/forms/Button';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { format } from 'date-fns';
+import { formatCurrency } from '../../constants/currencies';
 
 type SubscriptionsNavigationProp = StackNavigationProp<
   MainStackParamList,
@@ -58,6 +59,7 @@ export default function SubscriptionsScreen() {
   const [subscriptions, setSubscriptions] = useState<SubscriptionWithCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [accountCurrency, setAccountCurrency] = useState<string>('USD');
 
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
 
@@ -67,6 +69,16 @@ export default function SubscriptionsScreen() {
     try {
       const subscriptionRepo = new SubscriptionRepository();
       const categoryRepo = new CategoryRepository();
+
+      try {
+        const { AccountRepository } = await import('../../database/repositories/AccountRepository');
+        const acc = await new AccountRepository().findById(currentAccountId);
+        if (acc?.currency) {
+          setAccountCurrency(acc.currency);
+        }
+      } catch (err) {
+        console.warn('[SubscriptionsScreen] Could not load account currency:', err);
+      }
 
       const subs = await subscriptionRepo.findByAccount(currentAccountId);
 
@@ -189,7 +201,7 @@ export default function SubscriptionsScreen() {
             {item.name}
           </Text>
           <Text style={styles.subscriptionDetails}>
-            ${item.amount.toFixed(2)} • {item.billingDay}
+            {formatCurrency(item.amount, accountCurrency)} • {item.billingDay}
             {getOrdinalSuffix(item.billingDay)} of month
           </Text>
           <Text style={styles.subscriptionNext}>
@@ -234,7 +246,7 @@ export default function SubscriptionsScreen() {
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>${totalMonthly.toFixed(0)}</Text>
+            <Text style={styles.statValue}>{formatCurrency(totalMonthly, accountCurrency)}</Text>
             <Text style={styles.statLabel}>Per Month</Text>
           </View>
         </View>

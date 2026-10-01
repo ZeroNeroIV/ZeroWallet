@@ -23,6 +23,7 @@ import { spacing, borderRadius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import type { GoalFundingSource } from '../../types/models';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { formatCurrency } from '../../constants/currencies';
 
 type CreateGoalNavigationProp = StackNavigationProp<MainStackParamList, 'CreateGoal'>;
 type CreateGoalRouteProp = RouteProp<MainStackParamList, 'CreateGoal' | 'EditGoal'>;
@@ -53,6 +54,7 @@ export default function CreateGoalScreen() {
     const [name, setName] = useState('');
     const [hasTargetAmount, setHasTargetAmount] = useState(true);
     const [targetAmount, setTargetAmount] = useState('');
+    const [accountCurrency, setAccountCurrency] = useState<string>('USD');
     const [fundingSource, setFundingSource] = useState<GoalFundingSource>('both');
     const [selectedIcon, setSelectedIcon] = useState(GOAL_ICONS[0]);
     const [selectedColor, setSelectedColor] = useState(GOAL_COLORS[0]);
@@ -65,7 +67,23 @@ export default function CreateGoalScreen() {
         if (isEditMode && goalId) {
             loadGoal();
         }
+        loadAccountCurrency();
     }, []);
+
+    const loadAccountCurrency = async () => {
+        try {
+            const currentAccountId = useAuthStore.getState().currentAccountId;
+            if (currentAccountId) {
+                const { AccountRepository } = await import('../../database/repositories/AccountRepository');
+                const acc = await new AccountRepository().findById(currentAccountId);
+                if (acc?.currency) {
+                    setAccountCurrency(acc.currency);
+                }
+            }
+        } catch (err) {
+            console.warn('[CreateGoal] Could not load account currency:', err);
+        }
+    };
 
     const loadGoal = async () => {
         if (!goalId) return;
@@ -274,7 +292,7 @@ export default function CreateGoalScreen() {
                     <View style={{ flex: 1 }}>
                         <Text style={styles.previewName}>{name || 'Goal Name'}</Text>
                         {hasTargetAmount && targetAmount && (
-                            <Text style={styles.previewAmount}>Target: ${parseFloat(targetAmount).toFixed(2)}</Text>
+                            <Text style={styles.previewAmount}>Target: {formatCurrency(parseFloat(targetAmount) || 0, accountCurrency)}</Text>
                         )}
                         <Text style={styles.previewSource}>
                             From {fundingSources.find((s) => s.key === fundingSource)?.label || 'Unknown'}

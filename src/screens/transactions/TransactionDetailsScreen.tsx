@@ -24,6 +24,7 @@ import { useThemeColors } from '../../hooks/useThemeColors';
 import { TransactionRepository } from '../../database/repositories/TransactionRepository';
 import { CategoryRepository } from '../../database/repositories/CategoryRepository';
 import { deleteTransactionImage } from '../../utils/imageStorage';
+import { formatCurrency } from '../../constants/currencies';
 
 type TransactionDetailsScreenNavigationProp = StackNavigationProp<
   MainStackParamList,
@@ -50,6 +51,7 @@ export const TransactionDetailsScreen: React.FC = () => {
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [imageLoadError, setImageLoadError] = useState(false);
+  const [accountCurrency, setAccountCurrency] = useState<string>('USD');
 
   const transactionRepo = new TransactionRepository();
   const categoryRepo = new CategoryRepository();
@@ -82,6 +84,16 @@ export const TransactionDetailsScreen: React.FC = () => {
       const { WalletRepository } = await import('../../database/repositories/WalletRepository');
       const walletRow = await new WalletRepository().findById(txn.vaultType).catch(() => null);
       setWalletName(walletRow?.name ?? null);
+
+      try {
+        const { AccountRepository } = await import('../../database/repositories/AccountRepository');
+        const acc = await new AccountRepository().findById(txn.accountId);
+        if (acc?.currency) {
+          setAccountCurrency(acc.currency);
+        }
+      } catch (err) {
+        console.warn('[TransactionDetails] Could not load account currency:', err);
+      }
 
       console.log('[TransactionDetails] Transaction loaded:', {
         id: txn.id,
@@ -146,8 +158,8 @@ export const TransactionDetailsScreen: React.FC = () => {
     );
   };
 
-  const formatAmount = (amount: number) => {
-    return `$${amount.toFixed(3)}`;
+  const formatAmount = (amount: number, currency: string = accountCurrency) => {
+    return formatCurrency(amount, currency);
   };
 
   const formatDate = (timestamp: number) => {
@@ -200,10 +212,10 @@ export const TransactionDetailsScreen: React.FC = () => {
             ]}
           >
             {transaction.type === 'income' ? '+' : '-'}
-            {formatAmount(transaction.convertedAmount || transaction.amount)}
-            {transaction.currency !== 'USD' && transaction.convertedAmount && (
+            {formatAmount(transaction.convertedAmount || transaction.amount, accountCurrency)}
+            {transaction.currency !== accountCurrency && transaction.convertedAmount && (
               <Text style={styles.originalAmount}>
-                {' '}({formatAmount(transaction.amount)} {transaction.currency})
+                {' '}({formatAmount(transaction.amount, transaction.currency)})
               </Text>
             )}
           </Text>
@@ -277,6 +289,20 @@ export const TransactionDetailsScreen: React.FC = () => {
               value="Yes"
             />
           )}
+          {transaction.currency !== accountCurrency && transaction.convertedAmount ? (
+            <>
+              <DetailRow
+                icon="cash-multiple"
+                label="Original Amount"
+                value={`${transaction.amount.toFixed(3)} ${transaction.currency}`}
+              />
+              <DetailRow
+                icon="currency-usd"
+                label="Exchange Rate"
+                value={`1 ${transaction.currency} ≈ ${(transaction.exchangeRate ?? (transaction.convertedAmount / transaction.amount)).toFixed(4)} ${accountCurrency}`}
+              />
+            </>
+          ) : null}
         </View>
 
         {/* Actions Section */}

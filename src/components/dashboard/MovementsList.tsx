@@ -23,6 +23,7 @@ import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { useUIStore } from '../../store/uiStore';
+import { formatCurrency } from '../../constants/currencies';
 import type { Transaction, Category } from '../../types/models';
 
 interface TransactionWithCategory extends Transaction {
@@ -51,10 +52,7 @@ export const MovementsList: React.FC<MovementsListProps> = React.memo(({
       return '••••••';
     }
     const sign = type === 'income' ? '+' : '-';
-    if (accountCurrency === 'USD') {
-      return `${sign}$${Math.abs(amount).toFixed(3)}`;
-    }
-    return `${sign}${Math.abs(amount).toFixed(3)} ${accountCurrency}`;
+    return `${sign}${formatCurrency(Math.abs(amount), accountCurrency)}`;
   }, [accountCurrency, isBalanceHidden]);
 
   const getIconGradient = useCallback((type: string): [string, string] => {
@@ -66,6 +64,8 @@ export const MovementsList: React.FC<MovementsListProps> = React.memo(({
 
   const renderTransaction = useCallback((transaction: TransactionWithCategory) => {
     const gradientColors = getIconGradient(transaction.type);
+    const displayAmount = transaction.convertedAmount || transaction.amount;
+    const isForeignCurrency = !!(transaction.convertedAmount && transaction.currency !== accountCurrency);
 
     return (
       <TouchableOpacity
@@ -101,21 +101,28 @@ export const MovementsList: React.FC<MovementsListProps> = React.memo(({
         </View>
 
         {/* Amount */}
-        <Text
-          style={[
-            styles.amount,
-            {
-              color: transaction.type === 'income'
-                ? themeColors.primary
-                : themeColors.text,
-            },
-          ]}
-        >
-          {formatAmount(transaction.amount, transaction.type)}
-        </Text>
+        <View style={styles.amountContainer}>
+          <Text
+            style={[
+              styles.amount,
+              {
+                color: transaction.type === 'income'
+                  ? themeColors.primary
+                  : themeColors.text,
+              },
+            ]}
+          >
+            {formatAmount(displayAmount, transaction.type)}
+          </Text>
+          {isForeignCurrency && (
+            <Text style={styles.originalAmountText}>
+              ({transaction.amount.toFixed(3)} {transaction.currency})
+            </Text>
+          )}
+        </View>
       </TouchableOpacity>
     );
-  }, [styles, themeColors, getIconGradient, formatAmount, onTransactionPress, isBalanceHidden]);
+  }, [styles, themeColors, getIconGradient, formatAmount, onTransactionPress, isBalanceHidden, accountCurrency]);
 
   if (transactions.length === 0) {
     return null;
@@ -214,5 +221,13 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) => StyleSh
     ...typography.body,
     fontSize: 13,
     fontWeight: '700',
+  },
+  amountContainer: {
+    alignItems: 'flex-end',
+  },
+  originalAmountText: {
+    fontSize: 10,
+    color: themeColors.textSecondary,
+    marginTop: 2,
   },
 });

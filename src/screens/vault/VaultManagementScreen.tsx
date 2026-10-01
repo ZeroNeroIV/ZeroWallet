@@ -22,6 +22,7 @@ import { WALLET_META, getWalletBalance } from '../../utils/wallets';
 import { syncBalancesFromDatabase, transferBetweenWallets } from '../../services/walletTransferService';
 import { useWallets } from '../../hooks/useWallets';
 import { AccountRepository } from '../../database/repositories/AccountRepository';
+import { formatCurrency } from '../../constants/currencies';
 
 const WALLET_FEATURES: Record<VaultType, string[]> = {
   main: [
@@ -69,6 +70,7 @@ export const VaultManagementScreen: React.FC = () => {
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
 
   const [transferModalVisible, setTransferModalVisible] = useState(false);
+  const [accountCurrency, setAccountCurrency] = useState<string>('USD');
   const [currentBalance, setCurrentBalance] = useState({
     mainBalance: 0,
     savingsBalance: 0,
@@ -96,6 +98,15 @@ export const VaultManagementScreen: React.FC = () => {
       await syncBalancesFromDatabase(currentAccountId);
     } catch (error) {
       console.error('[VaultManagement] Balance refresh failed:', error);
+    }
+
+    try {
+      const account = await new AccountRepository().findById(currentAccountId);
+      if (account?.currency) {
+        setAccountCurrency(account.currency);
+      }
+    } catch (err) {
+      console.warn('[VaultManagement] Failed to load account currency:', err);
     }
 
     const balance =
@@ -205,7 +216,7 @@ export const VaultManagementScreen: React.FC = () => {
                   </Text>
                 </View>
                 <Text style={styles.vaultDetailBalance}>
-                  ${vault.balance.toFixed(3)}
+                  {formatCurrency(vault.balance, accountCurrency)}
                 </Text>
               </View>
 

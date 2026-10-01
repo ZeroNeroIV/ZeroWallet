@@ -7,13 +7,15 @@ import { format, isBefore } from 'date-fns';
 import type { Debt } from '../../types/models';
 import { DebtStatusBadge } from './DebtStatusBadge';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { formatCurrency } from '../../constants/currencies';
 
 interface DebtCardProps {
     debt: Debt;
     onPress: () => void;
+    accountCurrency?: string;
 }
 
-export const DebtCard: React.FC<DebtCardProps> = ({ debt, onPress }) => {
+export const DebtCard: React.FC<DebtCardProps> = ({ debt, onPress, accountCurrency = 'USD' }) => {
     const themeColors = useThemeColors();
     const scale = useSharedValue(1);
     const animatedCardStyle = useAnimatedStyle(() => ({
@@ -102,17 +104,17 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, onPress }) => {
                             {debt.type === 'lent' ? 'They owe you' : 'You owe them'}
                         </Text>
                         <Text style={[styles.amount, { color: themeColors.text }]}>
-                            ${remainingAmount.toFixed(3)}
+                            {formatCurrency(remainingAmount, accountCurrency)}
                         </Text>
                     </View>
 
                     {debt.status === 'partial' && (
                         <View style={styles.partialInfo}>
                             <Text style={[styles.partialLabel, { color: themeColors.textSecondary }]}>
-                                Paid: ${debt.amountPaid.toFixed(3)}
+                                Paid: {formatCurrency(debt.amountPaid, accountCurrency)}
                             </Text>
                             <Text style={[styles.partialLabel, { color: themeColors.textSecondary }]}>
-                                of ${debt.amount.toFixed(3)}
+                                of {formatCurrency(debt.amount, accountCurrency)}
                             </Text>
                         </View>
                     )}

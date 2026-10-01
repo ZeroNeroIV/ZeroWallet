@@ -52,13 +52,15 @@ export const CURRENCIES: Currency[] = [
 
 // Get currency by code
 export const getCurrencyByCode = (code: string): Currency | undefined => {
-    return CURRENCIES.find((c) => c.code === code);
+    if (!code) return undefined;
+    const upper = code.trim().toUpperCase();
+    return CURRENCIES.find((c) => c.code === upper);
 };
 
 // Get currency symbol
 export const getCurrencySymbol = (code: string): string => {
     const currency = getCurrencyByCode(code);
-    return currency ? currency.symbol : code;
+    return currency ? currency.symbol : (code ? code.trim().toUpperCase() : '$');
 };
 
 // Format amount with currency
@@ -67,17 +69,20 @@ export const formatCurrency = (
     currencyCode: string,
     showCode: boolean = false
 ): string => {
-    const symbol = getCurrencySymbol(currencyCode);
-    const formattedAmount = amount.toLocaleString('en-US', {
+    const code = (currencyCode || 'USD').trim().toUpperCase();
+    const symbol = getCurrencySymbol(code);
+    const isNegative = amount < 0;
+    const absFormatted = Math.abs(amount).toLocaleString('en-US', {
         minimumFractionDigits: 3,
         maximumFractionDigits: 3,
     });
+    const sign = isNegative ? '-' : '';
 
     if (showCode) {
-        return `${symbol}${formattedAmount} ${currencyCode}`;
+        return `${sign}${symbol}${absFormatted} ${code}`;
     }
 
-    return `${symbol}${formattedAmount}`;
+    return `${sign}${symbol}${absFormatted}`;
 };
 
 // Search currencies by name or code

@@ -130,6 +130,9 @@ jest.mock('react-native-reanimated', () => {
 jest.mock('react-native-mmkv', () => ({
   createMMKV: () => ({
     getString: jest.fn(),
+    getNumber: jest.fn(),
+    getBoolean: jest.fn(),
+    contains: jest.fn(),
     set: jest.fn(),
     delete: jest.fn(),
     clearAll: jest.fn(),

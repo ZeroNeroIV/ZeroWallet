@@ -20,6 +20,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { getCurrencySymbol } from '../../constants/currencies';
 
 interface DebtsCardProps {
   totalLent: number;
@@ -29,15 +30,7 @@ interface DebtsCardProps {
 }
 
 const formatCurrency = (amount: number, currency: string): string => {
-  const currencySymbols: { [key: string]: string } = {
-    USD: '$',
-    EUR: '€',
-    GBP: '£',
-    JPY: '¥',
-    CNY: '¥',
-    INR: '₹',
-  };
-  const symbol = currencySymbols[currency] || currency + ' ';
+  const symbol = getCurrencySymbol(currency);
   return `${symbol}${Math.abs(amount).toFixed(0)}`;
 };
 

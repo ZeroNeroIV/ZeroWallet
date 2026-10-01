@@ -36,6 +36,7 @@ export default function GoalsScreen() {
     const [goals, setGoals] = useState<Goal[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [accountCurrency, setAccountCurrency] = useState<string>('USD');
     const [completionModalVisible, setCompletionModalVisible] = useState(false);
     const [selectedGoalForCompletion, setSelectedGoalForCompletion] = useState<Goal | null>(null);
 
@@ -46,6 +47,16 @@ export default function GoalsScreen() {
         if (!currentAccountId) return;
 
         try {
+            try {
+                const { AccountRepository } = await import('../../database/repositories/AccountRepository');
+                const acc = await new AccountRepository().findById(currentAccountId);
+                if (acc?.currency) {
+                    setAccountCurrency(acc.currency);
+                }
+            } catch (err) {
+                console.warn('[GoalsScreen] Could not load account currency:', err);
+            }
+
             const allGoals = await goalRepo.findByAccount(currentAccountId);
 
             // Update progress for all goals based on current vault balances
@@ -185,6 +196,7 @@ export default function GoalsScreen() {
         <GoalCard
             goal={item}
             onPress={() => handleGoalLongPress(item)}
+            accountCurrency={accountCurrency}
         />
     );
 

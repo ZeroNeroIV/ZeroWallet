@@ -43,6 +43,7 @@ import { typography } from '../../theme/typography';
 import { Button } from '../../components/forms/Button';
 import { format } from 'date-fns';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { formatCurrency } from '../../constants/currencies';
 
 type RecurringNavigationProp = StackNavigationProp<
   MainStackParamList,
@@ -62,6 +63,7 @@ export default function RecurringExpensesScreen() {
   const [expenses, setExpenses] = useState<RecurringExpenseWithCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [accountCurrency, setAccountCurrency] = useState<string>('USD');
 
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
 
@@ -71,6 +73,16 @@ export default function RecurringExpensesScreen() {
     try {
       const recurringRepo = new RecurringExpenseRepository();
       const categoryRepo = new CategoryRepository();
+
+      try {
+        const { AccountRepository } = await import('../../database/repositories/AccountRepository');
+        const acc = await new AccountRepository().findById(currentAccountId);
+        if (acc?.currency) {
+          setAccountCurrency(acc.currency);
+        }
+      } catch (err) {
+        console.warn('[RecurringExpenses] Could not load account currency:', err);
+      }
 
       const recurringExpenses = await recurringRepo.findByAccount(currentAccountId);
 
@@ -137,7 +149,7 @@ export default function RecurringExpensesScreen() {
   const handleManualTrigger = async (expense: RecurringExpenseWithCategory) => {
     Alert.alert(
       'Process Expense',
-      `Process "${expense.name}" now for $${expense.amount.toFixed(3)}?`,
+      `Process "${expense.name}" now for ${formatCurrency(expense.amount, accountCurrency)}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -146,7 +158,7 @@ export default function RecurringExpensesScreen() {
             try {
               const transactionRepo = new TransactionRepository();
               const recurringRepo = new RecurringExpenseRepository();
-              const currency = useSettingsStore.getState().appSettings.currency;
+              const currency = accountCurrency;
 
               // Create transaction
               await transactionRepo.create({
@@ -272,7 +284,7 @@ export default function RecurringExpensesScreen() {
             {item.name}
           </Text>
           <Text style={styles.expenseDetails}>
-            ${item.amount.toFixed(3)} • {getFrequencyText(item.frequency, item.interval)}
+            {formatCurrency(item.amount, accountCurrency)} • {getFrequencyText(item.frequency, item.interval)}
           </Text>
           <Text style={styles.expenseNext}>
             Next: {format(item.nextOccurrence, 'MMM d, yyyy')}

@@ -15,6 +15,7 @@ import { Input } from '../../components/forms/Input';
 import { Button } from '../../components/forms/Button';
 import { CurrencyPicker } from '../../components/forms/CurrencyPicker';
 import { useAuthStore } from '../../store/authStore';
+import { useSettingsStore } from '../../store/settingsStore';
 import { Account } from '../../types/models';
 import { AccountRepository } from '../../database/repositories/AccountRepository';
 import { spacing, borderRadius } from '../../theme/spacing';
@@ -118,6 +119,11 @@ export default function AccountSettingsScreen() {
                 icon: selectedIcon,
                 color: selectedColor,
             });
+
+            const currentAccountId = useAuthStore.getState().currentAccountId;
+            if (account.id === currentAccountId || account.isDefault) {
+                useSettingsStore.getState().updateAppSettings({ currency: selectedCurrency });
+            }
 
             Alert.alert('Success', 'Account updated successfully', [
                 {

@@ -12,7 +12,8 @@
  *   - Navigates to salary configuration screen
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -39,6 +40,7 @@ import { pickAndImportData } from '../../services/dataTransfer/importService';
 import { database } from '../../database';
 import { clearAllMMKVData } from '../../store/middleware/mmkvStorage';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { formatCurrency } from '../../constants/currencies';
 
 function smartNudgesSummary(notificationSettings: {
   dailyNudgeEnabled: boolean;
@@ -84,10 +86,12 @@ const SettingsScreen = ({ navigation }: any) => {
 
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
 
-  // Load current account currency
-  useEffect(() => {
-    loadCurrentAccount();
-  }, [currentAccountId]);
+  // Load current account currency whenever screen gains focus
+  useFocusEffect(
+    useCallback(() => {
+      loadCurrentAccount();
+    }, [currentAccountId])
+  );
 
   const loadCurrentAccount = async () => {
     if (!currentAccountId) return;
@@ -258,7 +262,7 @@ const SettingsScreen = ({ navigation }: any) => {
               <Text style={styles.settingLabel}>Monthly Salary</Text>
               <Text style={styles.settingValue}>
                 {salarySettings.isEnabled
-                  ? `$${salarySettings.amount.toFixed(3)} on ${ordinalDay(salarySettings.payDay ?? 1)} of month`
+                  ? `${formatCurrency(salarySettings.amount, currentAccountCurrency)} on ${ordinalDay(salarySettings.payDay ?? 1)} of month`
                   : 'Not configured'}
               </Text>
             </View>

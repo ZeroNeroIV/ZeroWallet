@@ -1,31 +1,16 @@
-// Widget Data Manager - Syncs balance data for Android home screen widget
 import { Platform } from 'react-native';
 import { setMMKVItem, getMMKVItem } from '../store/middleware/mmkvStorage';
 import { WidgetData } from '../types/models';
+import { getCurrencySymbol as getCommonCurrencySymbol } from '../constants/currencies';
 
 // MMKV key for widget data
 const WIDGET_DATA_KEY = 'widget-data';
-
-// Currency symbols map
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  USD: '$',
-  EUR: '€',
-  GBP: '£',
-  JPY: '¥',
-  INR: '₹',
-  CNY: '¥',
-  AUD: 'A$',
-  CAD: 'C$',
-  CHF: 'CHF',
-  SEK: 'kr',
-  NZD: 'NZ$',
-};
 
 /**
  * Get currency symbol from currency code
  */
 export function getCurrencySymbol(currencyCode: string): string {
-  return CURRENCY_SYMBOLS[currencyCode.toUpperCase()] || currencyCode;
+  return getCommonCurrencySymbol(currencyCode);
 }
 
 /**

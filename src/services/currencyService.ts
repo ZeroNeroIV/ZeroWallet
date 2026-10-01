@@ -42,6 +42,50 @@ const fetchExchangeRates = async (): Promise<ExchangeRates> => {
     }
 };
 
+// Bundled fallback exchange rates relative to USD (base: USD)
+// Used when device is offline on launch and no cached rates exist
+export const FALLBACK_EXCHANGE_RATES: Record<string, number> = {
+    USD: 1,
+    EUR: 0.92,
+    GBP: 0.79,
+    JPY: 155.0,
+    JOD: 0.709,
+    SAR: 3.75,
+    AED: 3.67,
+    EGP: 48.5,
+    KWD: 0.307,
+    BHD: 0.376,
+    OMR: 0.385,
+    QAR: 3.64,
+    ILS: 3.70,
+    TRY: 32.5,
+    CNY: 7.23,
+    INR: 83.5,
+    AUD: 1.52,
+    CAD: 1.36,
+    CHF: 0.89,
+    SEK: 10.5,
+    NOK: 10.6,
+    DKK: 6.87,
+    PLN: 3.95,
+    RUB: 91.0,
+    ZAR: 18.2,
+    BRL: 5.15,
+    MXN: 16.8,
+    SGD: 1.35,
+    HKD: 7.82,
+    KRW: 1370.0,
+    MYR: 4.72,
+    THB: 36.5,
+    IDR: 16100.0,
+    PHP: 57.5,
+    VND: 25400.0,
+    PKR: 278.0,
+    BDT: 117.0,
+    LKR: 300.0,
+    NPR: 133.0,
+};
+
 /**
  * Get exchange rates (from cache or fresh from API)
  */
@@ -86,8 +130,13 @@ export const getExchangeRates = async (
             };
         }
 
-        // No cache available, throw error
-        throw new Error('Failed to fetch exchange rates and no cache available');
+        // Use fallback bundled rates if offline and no cache
+        console.warn('[CurrencyService] Using fallback bundled rates (offline / API unavailable)');
+        return {
+            base: 'USD',
+            rates: FALLBACK_EXCHANGE_RATES,
+            timestamp: Date.now(),
+        };
     }
 };
 
@@ -103,10 +152,13 @@ export const convertCurrency = async (
     exchangeRate: number;
     timestamp: number;
 }> => {
+    const fromCode = (fromCurrency || 'USD').trim().toUpperCase();
+    const toCode = (toCurrency || 'USD').trim().toUpperCase();
+
     // If same currency, no conversion needed
-    if (fromCurrency === toCurrency) {
+    if (fromCode === toCode) {
         return {
-            convertedAmount: amount,
+            convertedAmount: Math.round(amount * 1000) / 1000,
             exchangeRate: 1,
             timestamp: Date.now(),
         };
@@ -115,27 +167,26 @@ export const convertCurrency = async (
     const rates = await getExchangeRates();
 
     // Get rates for both currencies (all rates are relative to USD)
-    const fromRate = rates.rates[fromCurrency];
-    const toRate = rates.rates[toCurrency];
+    const fromRate = fromCode === 'USD' ? 1 : (rates.rates[fromCode] ?? FALLBACK_EXCHANGE_RATES[fromCode]);
+    const toRate = toCode === 'USD' ? 1 : (rates.rates[toCode] ?? FALLBACK_EXCHANGE_RATES[toCode]);
 
     if (!fromRate || !toRate) {
         throw new Error(`Exchange rate not available for ${fromCurrency} or ${toCurrency}`);
     }
 
     // Convert: amount in fromCurrency -> USD -> toCurrency
-    // If fromCurrency is USD, fromRate would be undefined, so handle that
-    const amountInUSD = fromCurrency === 'USD' ? amount : amount / fromRate;
-    const convertedAmount = toCurrency === 'USD' ? amountInUSD : amountInUSD * toRate;
+    const amountInUSD = fromCode === 'USD' ? amount : amount / fromRate;
+    const convertedAmount = toCode === 'USD' ? amountInUSD : amountInUSD * toRate;
 
     // Calculate the direct exchange rate from fromCurrency to toCurrency
     const exchangeRate = toRate / fromRate;
 
     console.log(
-        `[CurrencyService] Converted ${amount} ${fromCurrency} to ${convertedAmount.toFixed(2)} ${toCurrency} (rate: ${exchangeRate.toFixed(4)})`
+        `[CurrencyService] Converted ${amount} ${fromCode} to ${convertedAmount.toFixed(3)} ${toCode} (rate: ${exchangeRate.toFixed(4)})`
     );
 
     return {
-        convertedAmount: Math.round(convertedAmount * 100) / 100, // Round to 2 decimals
+        convertedAmount: Math.round(convertedAmount * 1000) / 1000, // Round to 3 decimals
         exchangeRate,
         timestamp: rates.timestamp,
     };
@@ -175,11 +226,14 @@ export const getExchangeRate = async (
     fromCurrency: string,
     toCurrency: string
 ): Promise<number> => {
-    if (fromCurrency === toCurrency) return 1;
+    const fromCode = (fromCurrency || 'USD').trim().toUpperCase();
+    const toCode = (toCurrency || 'USD').trim().toUpperCase();
+
+    if (fromCode === toCode) return 1;
 
     const rates = await getExchangeRates();
-    const fromRate = fromCurrency === 'USD' ? 1 : rates.rates[fromCurrency];
-    const toRate = toCurrency === 'USD' ? 1 : rates.rates[toCurrency];
+    const fromRate = fromCode === 'USD' ? 1 : (rates.rates[fromCode] ?? FALLBACK_EXCHANGE_RATES[fromCode]);
+    const toRate = toCode === 'USD' ? 1 : (rates.rates[toCode] ?? FALLBACK_EXCHANGE_RATES[toCode]);
 
     if (!fromRate || !toRate) {
         throw new Error(`Exchange rate not available for ${fromCurrency} or ${toCurrency}`);
