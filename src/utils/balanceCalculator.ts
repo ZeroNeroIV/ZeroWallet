@@ -26,7 +26,7 @@ export function roundMoney(value: number): number {
 }
 
 export function calculateVaultBalances(transactions: Transaction[]): VaultBalances {
-  const balances = {
+  const balances: Record<string, number> = {
     mainBalance: 0,
     savingsBalance: 0,
     heldBalance: 0,
@@ -37,36 +37,116 @@ export function calculateVaultBalances(transactions: Transaction[]): VaultBalanc
   };
 
   for (const tx of transactions) {
-    const amount = tx.convertedAmount ?? tx.amount;
+    const rawAmount = tx.convertedAmount ?? tx.amount;
+    const amount = Number(rawAmount);
+    if (!Number.isFinite(amount)) continue;
+
     const value = amount * (tx.type === 'income' ? 1 : -1);
-    try {
-      const vt = VaultType.parse(tx.vaultType);
-      balances[vt.key] += value;
-    } catch {
-      // Unknown legacy vault value: count toward the main wallet so the
-      // money is never silently dropped from totals
-      balances.mainBalance += value;
+    const vt = VaultType.parse(tx.vaultType);
+    const key = vt.key;
+
+    if (balances[key] === undefined) {
+      balances[key] = 0;
+    }
+    balances[key] += value;
+  }
+
+  let totalBalance = 0;
+  for (const [k, v] of Object.entries(balances)) {
+    balances[k] = roundMoney(v);
+    totalBalance += balances[k];
+  }
+
+  totalBalance = roundMoney(totalBalance);
+  // Everything except the held (Recurring) wallet is available to spend
+  const availableBalance = roundMoney(totalBalance - (balances.heldBalance ?? 0));
+
+  return {
+    mainBalance: balances.mainBalance ?? 0,
+    savingsBalance: balances.savingsBalance ?? 0,
+    heldBalance: balances.heldBalance ?? 0,
+    salaryBalance: balances.salaryBalance ?? 0,
+    emergencyBalance: balances.emergencyBalance ?? 0,
+    cardBalance: balances.cardBalance ?? 0,
+    physicalBalance: balances.physicalBalance ?? 0,
+    ...balances,
+    totalBalance,
+    availableBalance,
+  };
+}
+
+/**
+ * Normalizes any legacy or partially formed balance record into a
+ * valid, fully populated 7-wallet AccountBalance.
+ */
+export function normalizeAccountBalance<T extends Record<string, any>>(
+  raw: T | null | undefined,
+  fallbackAccountId: string = ''
+): T & VaultBalances & { accountId: string; lastUpdated: number } {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      accountId: fallbackAccountId,
+      mainBalance: 0,
+      savingsBalance: 0,
+      heldBalance: 0,
+      salaryBalance: 0,
+      emergencyBalance: 0,
+      cardBalance: 0,
+      physicalBalance: 0,
+      totalBalance: 0,
+      availableBalance: 0,
+      lastUpdated: Date.now(),
+    } as any;
+  }
+
+  const result: Record<string, any> = {
+    ...raw,
+    accountId: raw.accountId || fallbackAccountId,
+    mainBalance: roundMoney(Number(raw.mainBalance) || 0),
+    savingsBalance: roundMoney(Number(raw.savingsBalance) || 0),
+    heldBalance: roundMoney(Number(raw.heldBalance) || 0),
+    salaryBalance: roundMoney(Number(raw.salaryBalance) || 0),
+    emergencyBalance: roundMoney(Number(raw.emergencyBalance) || 0),
+    cardBalance: roundMoney(Number(raw.cardBalance) || 0),
+    physicalBalance: roundMoney(Number(raw.physicalBalance) || 0),
+    lastUpdated:
+      typeof raw.lastUpdated === 'number' && !isNaN(raw.lastUpdated)
+        ? raw.lastUpdated
+        : Date.now(),
+  };
+
+  // Convert and remove legacy wallet names if present
+  if (raw.cashBalance) {
+    if (!result.physicalBalance) {
+      result.physicalBalance = roundMoney(Number(raw.cashBalance) || 0);
+    }
+    delete result.cashBalance;
+  }
+  if (raw.investmentBalance) {
+    if (!result.mainBalance) {
+      result.mainBalance = roundMoney(Number(raw.investmentBalance) || 0);
+    }
+    delete result.investmentBalance;
+  }
+  if (raw.billsBalance) {
+    if (!result.heldBalance) {
+      result.heldBalance = roundMoney(Number(raw.billsBalance) || 0);
+    }
+    delete result.billsBalance;
+  }
+
+  // Recalculate total across all *Balance fields
+  let total = 0;
+  for (const [k, v] of Object.entries(result)) {
+    if (k.endsWith('Balance') && k !== 'totalBalance' && k !== 'availableBalance') {
+      const num = roundMoney(Number(v) || 0);
+      result[k] = num;
+      total += num;
     }
   }
 
-  balances.mainBalance = roundMoney(balances.mainBalance);
-  balances.savingsBalance = roundMoney(balances.savingsBalance);
-  balances.heldBalance = roundMoney(balances.heldBalance);
-  balances.salaryBalance = roundMoney(balances.salaryBalance);
-  balances.emergencyBalance = roundMoney(balances.emergencyBalance);
-  balances.cardBalance = roundMoney(balances.cardBalance);
-  balances.physicalBalance = roundMoney(balances.physicalBalance);
+  result.totalBalance = roundMoney(total);
+  result.availableBalance = roundMoney(total - (result.heldBalance ?? 0));
 
-  const totalBalance =
-    balances.mainBalance +
-    balances.savingsBalance +
-    balances.heldBalance +
-    balances.salaryBalance +
-    balances.emergencyBalance +
-    balances.cardBalance +
-    balances.physicalBalance;
-  // Everything except the held (Recurring) wallet is available to spend
-  const availableBalance = totalBalance - balances.heldBalance;
-
-  return { ...balances, totalBalance, availableBalance };
+  return result as any;
 }

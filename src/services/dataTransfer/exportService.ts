@@ -8,6 +8,7 @@ import { RecurringExpenseRepository } from '../../database/repositories/Recurrin
 import { GoalRepository } from '../../database/repositories/GoalRepository';
 import { DebtRepository } from '../../database/repositories/DebtRepository';
 import { AccountRepository } from '../../database/repositories/AccountRepository';
+import { WalletRepository } from '../../database/repositories/WalletRepository';
 
 export const EXPORT_VERSION = '1.1';
 
@@ -18,7 +19,7 @@ export async function exportAllData(accountId: string, userId: string): Promise<
   const zipPath = `${RNFS.CachesDirectoryPath}/wallet-backup-${dateStr}.zip`;
 
   // ── 1. Fetch all data ────────────────────────────────────────────────────
-  const [account, categories, transactions, subscriptions, recurringExpenses, goals, debts] =
+  const [account, categories, transactions, subscriptions, recurringExpenses, goals, debts, wallets] =
     await Promise.all([
       new AccountRepository().findById(accountId),
       new CategoryRepository().findByUser(userId),
@@ -27,6 +28,7 @@ export async function exportAllData(accountId: string, userId: string): Promise<
       new RecurringExpenseRepository().findByAccount(accountId),
       new GoalRepository().findByAccount(accountId),
       new DebtRepository().findByAccount(accountId),
+      new WalletRepository().findByAccount(accountId),
     ]);
 
   // Also load per-transaction images from transaction_images table
@@ -46,6 +48,7 @@ export async function exportAllData(accountId: string, userId: string): Promise<
     exportedAt: new Date().toISOString(),
     data: {
       account,
+      wallets,
       categories,
       transactions: transactionsWithImages,
       subscriptions,

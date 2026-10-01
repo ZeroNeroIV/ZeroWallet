@@ -1,6 +1,7 @@
 // SQLite Database Initialization and Management
 import SQLite from 'react-native-sqlite-storage';
 import { ALL_TABLES, CREATE_INDEXES, SCHEMA_VERSION } from './schema';
+import { healDatabase } from './dataHealer';
 
 // Enable promises for SQLite
 SQLite.enablePromise(true);
@@ -31,8 +32,9 @@ export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
 
     console.log('[DB] Database opened successfully');
 
-    // Enable WAL mode, foreign keys, and optimized synchronous writing
-    await db.executeSql('PRAGMA foreign_keys = ON;');
+    // Keep foreign keys OFF during table creation, migration, and data healing
+    // to allow safe table rebuilds and healing of legacy data formats
+    await db.executeSql('PRAGMA foreign_keys = OFF;');
     await db.executeSql('PRAGMA journal_mode = WAL;');
     await db.executeSql('PRAGMA synchronous = NORMAL;');
 
@@ -44,6 +46,12 @@ export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
 
     // Check schema version and run migrations if needed
     await checkAndRunMigrations(db);
+
+    // Heal and normalize legacy data (backward compatibility)
+    await healDatabase(db);
+
+    // Enforce foreign keys now that data is clean and consistent
+    await db.executeSql('PRAGMA foreign_keys = ON;');
 
     console.log('[DB] Database initialization complete');
     return db;

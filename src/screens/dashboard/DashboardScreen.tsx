@@ -53,6 +53,8 @@ export const DashboardScreen: React.FC = () => {
 
   useEffect(() => {
     if (!currentAccountId || !currentUser) return;
+    loadData();
+    checkTasks();
     const unsubscribe = navigation.addListener('focus', () => {
       fadeAnim.setValue(0.3);
       loadData();

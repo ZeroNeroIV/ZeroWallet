@@ -11,18 +11,55 @@ import type {
   Debt,
 } from '../../types/models';
 
+import { v4 as uuidv4 } from 'uuid';
+import { VaultType } from '../../domain/vault/VaultType';
+import { calculateVaultBalances } from '../../utils/balanceCalculator';
+import { useAccountStore } from '../../store/accountStore';
+import { WalletRepository } from '../../database/repositories/WalletRepository';
+import { TransactionRepository } from '../../database/repositories/TransactionRepository';
+
 const IMAGES_DEST = `${RNFS.DocumentDirectoryPath}/transaction-images/originals`;
 
 interface ExportPayload {
-  version: string;
-  exportedAt: string;
+  version?: string;
+  exportedAt?: string;
   data: {
-    categories: Category[];
-    transactions: (Transaction & { images?: string[] })[];
-    subscriptions: Subscription[];
-    recurringExpenses: RecurringExpense[];
-    goals: Goal[];
-    debts: Debt[];
+    categories?: Category[];
+    transactions?: (Transaction & { images?: string[] })[];
+    subscriptions?: Subscription[];
+    recurringExpenses?: RecurringExpense[];
+    goals?: Goal[];
+    debts?: Debt[];
+    wallets?: any[];
+  };
+}
+
+/**
+ * Normalizes any legacy, unversioned, or raw JSON backup payload
+ * into the standard ExportPayload shape.
+ */
+function normalizeBackupPayload(raw: any): ExportPayload {
+  if (!raw || typeof raw !== 'object') {
+    throw new Error('Invalid backup file: file content is not an object');
+  }
+
+  // Handle payload without .data envelope (legacy format where arrays are top-level)
+  const data = raw.data && typeof raw.data === 'object' ? raw.data : raw;
+  const version = raw.version || '1.0';
+  const exportedAt = raw.exportedAt || new Date().toISOString();
+
+  return {
+    version,
+    exportedAt,
+    data: {
+      categories: Array.isArray(data.categories) ? data.categories : [],
+      transactions: Array.isArray(data.transactions) ? data.transactions : [],
+      subscriptions: Array.isArray(data.subscriptions) ? data.subscriptions : [],
+      recurringExpenses: Array.isArray(data.recurringExpenses) ? data.recurringExpenses : [],
+      goals: Array.isArray(data.goals) ? data.goals : [],
+      debts: Array.isArray(data.debts) ? data.debts : [],
+      wallets: Array.isArray(data.wallets) ? data.wallets : [],
+    },
   };
 }
 
@@ -48,7 +85,7 @@ export async function pickAndImportData(
   const isZip = (result.name ?? filePath).toLowerCase().endsWith('.zip') ||
     (result.type ?? '').includes('zip');
 
-  let payload: ExportPayload;
+  let rawPayload: any;
 
   if (isZip) {
     // Read ZIP from disk and parse with JSZip
@@ -59,7 +96,7 @@ export async function pickAndImportData(
     if (!dataFile) throw new Error('Invalid backup: data.json not found inside ZIP');
 
     const raw = await dataFile.async('string');
-    payload = JSON.parse(raw);
+    rawPayload = JSON.parse(raw);
 
     // Extract images
     const imageFiles = Object.keys(zip.files).filter(
@@ -68,7 +105,7 @@ export async function pickAndImportData(
 
     if (!(await RNFS.exists(IMAGES_DEST))) await RNFS.mkdir(IMAGES_DEST);
 
-    const imported = await importPayload(payload, currentAccountId, currentUserId, async (fileName: string) => {
+    const imported = await importPayload(rawPayload, currentAccountId, currentUserId, async (fileName: string) => {
       const zipEntry = zip.file(`images/${fileName}`);
       if (!zipEntry) return null;
       const destPath = `${IMAGES_DEST}/${fileName}`;
@@ -94,8 +131,8 @@ export async function pickAndImportData(
 
   // Legacy plain JSON backup
   const raw = await RNFS.readFile(filePath, 'utf8');
-  const jsonPayload = JSON.parse(raw) as ExportPayload;
-  const imported = await importPayload(jsonPayload, currentAccountId, currentUserId, null);
+  rawPayload = JSON.parse(raw);
+  const imported = await importPayload(rawPayload, currentAccountId, currentUserId, null);
 
   return { imported };
 }
@@ -111,16 +148,14 @@ async function existingIds(table: string, ownerColumn: string, ownerId: string):
 }
 
 async function importPayload(
-  payload: ExportPayload,
+  rawInput: any,
   currentAccountId: string,
   currentUserId: string,
   resolveImage: ImageResolver
 ): Promise<Record<string, number>> {
-  if (!payload.version || !payload.data) {
-    throw new Error('Invalid backup file format');
-  }
+  const payload = normalizeBackupPayload(rawInput);
 
-  const { categories, transactions, subscriptions, recurringExpenses, goals, debts } = payload.data;
+  const { categories, transactions, subscriptions, recurringExpenses, goals, debts, wallets } = payload.data;
   const counts: Record<string, number> = {
     categories: 0,
     transactions: 0,
@@ -129,6 +164,20 @@ async function importPayload(
     goals: 0,
     debts: 0,
   };
+
+  // Ensure default wallets exist for the account
+  await new WalletRepository().ensureDefaultWallets(currentAccountId);
+
+  // Import custom wallets if any
+  for (const w of wallets ?? []) {
+    if (w.id && w.name) {
+      await executeSql(
+        `INSERT OR IGNORE INTO wallets (id, account_id, name, icon, color, is_default, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [w.id, currentAccountId, w.name, w.icon || 'wallet', w.color || '#007AFF', w.isDefault ? 1 : 0, w.createdAt || Date.now(), w.updatedAt || Date.now()]
+      );
+    }
+  }
 
   // Import categories: adopt them to the current user and map backup ids
   // to usable ids (reusing an existing same-name category when present so
@@ -141,12 +190,17 @@ async function importPayload(
   const byNameType = new Map(
     knownCategories.map((c) => [`${c.type}|${c.name.toLowerCase()}`, c.id])
   );
+
+  let defaultCategoryId: string | null = knownCategories[0]?.id || null;
+
   for (const c of categories ?? []) {
-    const key = `${c.type}|${c.name.toLowerCase()}`;
+    const catType = c.type === 'income' ? 'income' : 'expense';
+    const catName = c.name || 'General';
+    const key = `${catType}|${catName.toLowerCase()}`;
     const reuseId = byNameType.get(key);
     if (reuseId) {
       categoryIdMap.set(c.id, reuseId);
-      // Heal rows that still point at the backup id
+      if (!defaultCategoryId) defaultCategoryId = reuseId;
       await remapCategoryReferences(c.id, reuseId, currentAccountId);
       continue;
     }
@@ -155,28 +209,50 @@ async function importPayload(
       [c.id]
     );
     if (alreadyThere.length > 0) {
-      // Adopt an orphaned category from a previous import/user
       await executeSql(
-        'UPDATE categories SET user_id = ?, name = ?, type = ?, icon = ?, color = ? WHERE id = ?',
-        [currentUserId, c.name, c.type, c.icon, c.color, c.id]
+        'UPDATE categories SET user_id = ?, name = ?, type = ?, icon = ?, color = ?, updated_at = ? WHERE id = ?',
+        [currentUserId, catName, catType, c.icon || 'tag', c.color || '#607D8B', Date.now(), c.id]
       );
     } else {
       await executeSql(
-        `INSERT INTO categories (id, user_id, name, type, icon, color, is_default, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [c.id, currentUserId, c.name, c.type, c.icon, c.color, c.isDefault ? 1 : 0, c.createdAt]
+        `INSERT INTO categories (id, user_id, name, type, icon, color, is_default, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [c.id, currentUserId, catName, catType, c.icon || 'tag', c.color || '#607D8B', c.isDefault ? 1 : 0, c.createdAt || Date.now(), c.createdAt || Date.now()]
       );
     }
     categoryIdMap.set(c.id, c.id);
     byNameType.set(key, c.id);
+    if (!defaultCategoryId) defaultCategoryId = c.id;
     counts.categories += 1;
+  }
+
+  // If user still has no category at all, create a default fallback
+  if (!defaultCategoryId) {
+    defaultCategoryId = uuidv4();
+    const now = Date.now();
+    await executeSql(
+      `INSERT OR IGNORE INTO categories (id, user_id, name, type, icon, color, is_default, created_at, updated_at)
+       VALUES (?, ?, 'General', 'expense', 'tag', '#607D8B', 1, ?, ?)`,
+      [defaultCategoryId, currentUserId, now, now]
+    );
   }
 
   // Import transactions + their images (skip ids already present, but heal
   // their category reference so re-importing fixes orphaned rows)
   const knownTxIds = await existingIds('transactions', 'account_id', currentAccountId);
   for (const t of transactions ?? []) {
-    const categoryId = categoryIdMap.get(t.categoryId) ?? t.categoryId;
+    let categoryId = categoryIdMap.get(t.categoryId) ?? t.categoryId;
+
+    // Validate that categoryId actually exists in the categories table
+    const catCheck = await executeSql<{ id: string }>(
+      'SELECT id FROM categories WHERE id = ?',
+      [categoryId]
+    );
+    if (catCheck.length === 0) {
+      // Re-link to default category to prevent foreign key violation
+      categoryId = defaultCategoryId;
+    }
+
     if (knownTxIds.has(t.id)) {
       await executeSql('UPDATE transactions SET category_id = ? WHERE id = ?', [categoryId, t.id]);
       continue;
@@ -199,6 +275,17 @@ async function importPayload(
       restoredImagePath = await resolveImage(fileName);
     }
 
+    const normalizedVaultType = VaultType.parse(t.vaultType).type;
+    const amount = Number(t.amount) || 0;
+    const convertedAmount =
+      t.convertedAmount !== null && t.convertedAmount !== undefined
+        ? Number(t.convertedAmount)
+        : amount;
+    const txType = t.type === 'income' ? 'income' : 'expense';
+    const txDate = Number(t.date) || Date.now();
+    const createdAt = Number(t.createdAt) || txDate;
+    const updatedAt = Number(t.updatedAt) || createdAt;
+
     await executeSql(
       `INSERT INTO transactions
        (id, account_id, type, amount, category_id, description, date, vault_type,
@@ -206,13 +293,13 @@ async function importPayload(
         original_amount, exchange_rate, converted_amount, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        t.id, currentAccountId, t.type, t.amount, categoryId, t.description ?? null,
-        t.date, t.vaultType, t.isRecurring ? 1 : 0,
+        t.id, currentAccountId, txType, amount, categoryId, t.description ?? null,
+        txDate, normalizedVaultType, t.isRecurring ? 1 : 0,
         t.recurringExpenseId ?? null, t.subscriptionId ?? null,
         restoredImagePath,
         t.currency ?? 'USD', t.originalAmount ?? null,
-        t.exchangeRate ?? null, t.convertedAmount ?? null,
-        t.createdAt, t.updatedAt,
+        t.exchangeRate ?? null, convertedAmount,
+        createdAt, updatedAt,
       ]
     );
     counts.transactions += 1;
@@ -230,20 +317,29 @@ async function importPayload(
   // Import subscriptions
   const knownSubIds = await existingIds('subscriptions', 'account_id', currentAccountId);
   for (const s of subscriptions ?? []) {
-    const categoryId = categoryIdMap.get(s.categoryId) ?? s.categoryId;
+    let categoryId = categoryIdMap.get(s.categoryId) ?? s.categoryId;
+    const catCheck = await executeSql<{ id: string }>(
+      'SELECT id FROM categories WHERE id = ?',
+      [categoryId]
+    );
+    if (catCheck.length === 0) categoryId = defaultCategoryId;
+
     if (knownSubIds.has(s.id)) {
       await executeSql('UPDATE subscriptions SET category_id = ? WHERE id = ?', [categoryId, s.id]);
       continue;
     }
+
+    const normalizedVaultType = VaultType.parse(s.vaultType).type;
+
     await executeSql(
       `INSERT INTO subscriptions
        (id, account_id, name, amount, category_id, billing_day, is_active,
         vault_type, last_processed, next_processing, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        s.id, currentAccountId, s.name, s.amount, categoryId, s.billingDay,
-        s.isActive ? 1 : 0, s.vaultType, s.lastProcessed ?? null,
-        s.nextProcessing, s.createdAt, s.updatedAt,
+        s.id, currentAccountId, s.name, Number(s.amount) || 0, categoryId, Number(s.billingDay) || 1,
+        s.isActive ? 1 : 0, normalizedVaultType, s.lastProcessed ?? null,
+        Number(s.nextProcessing) || Date.now(), Number(s.createdAt) || Date.now(), Number(s.updatedAt) || Date.now(),
       ]
     );
     counts.subscriptions += 1;
@@ -252,20 +348,29 @@ async function importPayload(
   // Import recurring expenses
   const knownRecIds = await existingIds('recurring_expenses', 'account_id', currentAccountId);
   for (const r of recurringExpenses ?? []) {
-    const categoryId = categoryIdMap.get(r.categoryId) ?? r.categoryId;
+    let categoryId = categoryIdMap.get(r.categoryId) ?? r.categoryId;
+    const catCheck = await executeSql<{ id: string }>(
+      'SELECT id FROM categories WHERE id = ?',
+      [categoryId]
+    );
+    if (catCheck.length === 0) categoryId = defaultCategoryId;
+
     if (knownRecIds.has(r.id)) {
       await executeSql('UPDATE recurring_expenses SET category_id = ? WHERE id = ?', [categoryId, r.id]);
       continue;
     }
+
+    const normalizedVaultType = VaultType.parse(r.vaultType).type;
+
     await executeSql(
       `INSERT INTO recurring_expenses
        (id, account_id, name, amount, category_id, frequency, interval,
         next_occurrence, vault_type, is_active, auto_deduct, last_processed, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        r.id, currentAccountId, r.name, r.amount, categoryId, r.frequency,
-        r.interval, r.nextOccurrence, r.vaultType, r.isActive ? 1 : 0,
-        r.autoDeduct ? 1 : 0, r.lastProcessed ?? null, r.createdAt, r.updatedAt,
+        r.id, currentAccountId, r.name, Number(r.amount) || 0, categoryId, r.frequency || 'monthly',
+        Number(r.interval) || 1, Number(r.nextOccurrence) || Date.now(), normalizedVaultType, r.isActive ? 1 : 0,
+        r.autoDeduct ? 1 : 0, r.lastProcessed ?? null, Number(r.createdAt) || Date.now(), Number(r.updatedAt) || Date.now(),
       ]
     );
     counts.recurringExpenses += 1;
@@ -281,9 +386,9 @@ async function importPayload(
         icon, color, is_completed, completed_at, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        g.id, currentAccountId, g.name, g.targetAmount, g.currentAmount,
-        g.fundingSource, g.icon, g.color, g.isCompleted ? 1 : 0,
-        g.completedAt ?? null, g.createdAt, g.updatedAt,
+        g.id, currentAccountId, g.name, g.targetAmount !== null ? Number(g.targetAmount) : null,
+        Number(g.currentAmount) || 0, g.fundingSource || 'main', g.icon || 'flag', g.color || '#007AFF',
+        g.isCompleted ? 1 : 0, g.completedAt ?? null, Number(g.createdAt) || Date.now(), Number(g.updatedAt) || Date.now(),
       ]
     );
     counts.goals += 1;
@@ -292,26 +397,41 @@ async function importPayload(
   // Import debts
   const knownDebtIds = await existingIds('debts', 'account_id', currentAccountId);
   for (const d of debts ?? []) {
-    const categoryId = d.categoryId ? (categoryIdMap.get(d.categoryId) ?? d.categoryId) : null;
+    let categoryId = d.categoryId ? (categoryIdMap.get(d.categoryId) ?? d.categoryId) : null;
+    if (categoryId) {
+      const catCheck = await executeSql<{ id: string }>(
+        'SELECT id FROM categories WHERE id = ?',
+        [categoryId]
+      );
+      if (catCheck.length === 0) categoryId = null;
+    }
+
     if (knownDebtIds.has(d.id)) {
       if (d.categoryId) {
         await executeSql('UPDATE debts SET category_id = ? WHERE id = ?', [categoryId, d.id]);
       }
       continue;
     }
+
     await executeSql(
       `INSERT INTO debts
        (id, account_id, type, person_name, amount, amount_paid, due_date,
         status, description, category_id, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        d.id, currentAccountId, d.type, d.personName, d.amount, d.amountPaid,
-        d.dueDate ?? null, d.status, d.description ?? null,
-        categoryId, d.createdAt, d.updatedAt,
+        d.id, currentAccountId, d.type || 'lent', d.personName || 'Unknown',
+        Number(d.amount) || 0, Number(d.amountPaid) || 0,
+        d.dueDate ? Number(d.dueDate) : null, d.status || 'pending', d.description ?? null,
+        categoryId, Number(d.createdAt) || Date.now(), Number(d.updatedAt) || Date.now(),
       ]
     );
     counts.debts += 1;
   }
+
+  // Resynchronize account balances after import
+  const allTx = await new TransactionRepository().findByAccount(currentAccountId);
+  const updatedBalances = calculateVaultBalances(allTx);
+  useAccountStore.getState().updateBalance(currentAccountId, updatedBalances);
 
   return counts;
 }

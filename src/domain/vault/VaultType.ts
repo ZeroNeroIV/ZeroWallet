@@ -68,7 +68,7 @@ export class VaultType {
   static readonly Card = new VaultType('card');
   static readonly Physical = new VaultType('physical');
 
-  private static readonly ALL: Record<VaultTypeString, VaultType> = {
+  private static readonly ALL: Record<string, VaultType> = {
     main: VaultType.Main,
     savings: VaultType.Savings,
     held: VaultType.Held,
@@ -78,22 +78,53 @@ export class VaultType {
     physical: VaultType.Physical,
   };
 
-  static parse(s: string): VaultType {
-    if (!s || typeof s !== 'string') throw new Error(`Invalid vault type: '${s}'.`);
-    const vt = VaultType.ALL[s as VaultTypeString];
-    // Custom wallets are valid too — they resolve to generic instances
-    return vt ?? new VaultType(s);
+  private static readonly ALIASES: Record<string, VaultTypeString> = {
+    investment: 'main',
+    invest: 'main',
+    spending: 'main',
+    general: 'main',
+    recurring: 'held',
+    bills: 'held',
+    emergency_fund: 'emergency',
+    'emergency-fund': 'emergency',
+    cash: 'physical',
+    credit: 'card',
+    debit: 'card',
+    credit_card: 'card',
+    'credit-card': 'card',
+  };
+
+  /**
+   * Resilient parsing of vault strings. Tolerates null, undefined, casing,
+   * legacy aliases, and custom wallet identifiers.
+   */
+  static parse(s: unknown): VaultType {
+    if (!s || typeof s !== 'string') {
+      return VaultType.Main;
+    }
+    const clean = s.trim().toLowerCase();
+    const alias = VaultType.ALIASES[clean];
+    const key = (alias ?? clean) as VaultTypeString;
+
+    const vt = VaultType.ALL[key];
+    return vt ?? new VaultType(s.trim());
   }
 
   get key(): keyof AccountBalanceShape {
     return (KEYS[this.type] ?? `${this.type}Balance`) as keyof AccountBalanceShape;
   }
 
-  getBalance(balances: AccountBalanceShape): number {
-    return balances[KEYS[this.type]] ?? 0;
+  getBalance(balances: AccountBalanceShape | Record<string, number | undefined>): number {
+    if (!balances) return 0;
+    const field = KEYS[this.type] ?? `${this.type}Balance`;
+    return (balances as Record<string, any>)[field] ?? 0;
   }
 
-  adjustBalance(balances: AccountBalanceShape, delta: number): Partial<AccountBalanceShape> {
-    return { [KEYS[this.type]]: this.getBalance(balances) + delta };
+  adjustBalance(
+    balances: AccountBalanceShape | Record<string, number | undefined>,
+    delta: number
+  ): Partial<AccountBalanceShape> {
+    const field = (KEYS[this.type] ?? `${this.type}Balance`) as keyof AccountBalanceShape;
+    return { [field]: this.getBalance(balances) + delta };
   }
 }
