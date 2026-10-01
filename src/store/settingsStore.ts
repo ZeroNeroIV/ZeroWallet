@@ -52,8 +52,14 @@ const defaultSecuritySettings = {
 };
 
 const defaultAISettings: AISettings = {
+  provider: 'groq',
   apiKey: null,
-  selectedModel: 'gemini-2.5-flash', // Recommended model
+  geminiApiKey: null,
+  groqApiKey: null,
+  customApiKey: null,
+  customBaseUrl: 'http://localhost:11434/v1',
+  selectedModel: 'llama-3.2-3b-preview',
+  system1Enabled: true,
   isConfigured: false,
   totalTokensUsed: 0,
   conversationCount: 0,

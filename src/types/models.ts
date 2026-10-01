@@ -120,7 +120,8 @@ export interface Wallet {
   name: string;
   icon: string; // Icon name from react-native-vector-icons
   color: string; // Hex color
-  isDefault: boolean; // Built-in wallets (cannot delete, can rename)
+  isDefault: boolean; // Starter / default wallet
+  sortOrder?: number; // Ordering in wallet list and balance display
   createdAt: number;
   updatedAt: number;
 }

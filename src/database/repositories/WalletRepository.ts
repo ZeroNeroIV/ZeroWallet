@@ -12,6 +12,7 @@ const FIELD_MAPPINGS: FieldMapping[] = [
   { field: 'icon', column: 'icon' },
   { field: 'color', column: 'color' },
   { field: 'isDefault', column: 'is_default' },
+  { field: 'sortOrder', column: 'sort_order' },
 ];
 
 export class WalletRepository extends BaseRepository<Wallet> {
@@ -26,6 +27,7 @@ export class WalletRepository extends BaseRepository<Wallet> {
       icon: row.icon as string,
       color: row.color as string,
       isDefault: (row.is_default as number) === 1,
+      sortOrder: (row.sort_order as number) ?? 0,
       createdAt: row.created_at as number,
       updatedAt: (row.updated_at as number) ?? 0,
     };
@@ -33,7 +35,7 @@ export class WalletRepository extends BaseRepository<Wallet> {
 
   async findByAccount(accountId: string): Promise<Wallet[]> {
     return this.rawQuery(
-      'SELECT * FROM wallets WHERE account_id = ? ORDER BY is_default DESC, created_at ASC',
+      'SELECT * FROM wallets WHERE account_id = ? ORDER BY sort_order ASC, created_at ASC',
       [accountId],
     );
   }
@@ -65,18 +67,20 @@ export class WalletRepository extends BaseRepository<Wallet> {
     const icon = data.icon || 'wallet';
     const color = data.color || '#007AFF';
     const isDefault = data.isDefault ? 1 : 0;
+    const sortOrder = data.sortOrder ?? 0;
     const createdAt = data.createdAt || now;
     const updatedAt = data.updatedAt || now;
 
     await executeSql(
-      `INSERT INTO wallets (id, account_id, name, icon, color, is_default, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO wallets (id, account_id, name, icon, color, is_default, sort_order, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id, account_id) DO UPDATE SET
          name = excluded.name,
          icon = excluded.icon,
          color = excluded.color,
+         sort_order = excluded.sort_order,
          updated_at = excluded.updated_at`,
-      [id, accountId, name, icon, color, isDefault, createdAt, updatedAt]
+      [id, accountId, name, icon, color, isDefault, sortOrder, createdAt, updatedAt]
     );
 
     const created = await this.findByAccountAndId(accountId, id);
@@ -187,6 +191,26 @@ export class WalletRepository extends BaseRepository<Wallet> {
   }
 
   /**
+   * Purpose: Atomically update the sort_order of all wallets in an account.
+   */
+  async reorderWallets(accountId: string, orderedIds: string[]): Promise<void> {
+    await executeSql('BEGIN TRANSACTION;');
+    try {
+      const now = Date.now();
+      for (let i = 0; i < orderedIds.length; i++) {
+        await executeSql(
+          'UPDATE wallets SET sort_order = ?, updated_at = ? WHERE id = ? AND account_id = ?;',
+          [i, now, orderedIds[i], accountId]
+        );
+      }
+      await executeSql('COMMIT;');
+    } catch (err) {
+      await executeSql('ROLLBACK;');
+      throw err;
+    }
+  }
+
+  /**
    * Purpose: Seed initial starter wallets for an account on initial creation.
    * If the account already has wallets (even if the user deleted some starter wallets),
    * do not resurrect deleted wallets.
@@ -197,13 +221,14 @@ export class WalletRepository extends BaseRepository<Wallet> {
       return existing;
     }
     const now = Date.now();
+    let orderIndex = 0;
     for (const key of VAULT_TYPE_VALUES) {
       const meta = WALLET_META[key as keyof typeof WALLET_META];
       if (!meta) continue;
       await executeSql(
-        `INSERT OR IGNORE INTO wallets (id, account_id, name, icon, color, is_default, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
-        [key, accountId, meta.name, meta.icon, meta.color, now, now]
+        `INSERT OR IGNORE INTO wallets (id, account_id, name, icon, color, is_default, sort_order, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+        [key, accountId, meta.name, meta.icon, meta.color, orderIndex++, now, now]
       );
     }
     return this.findByAccount(accountId);

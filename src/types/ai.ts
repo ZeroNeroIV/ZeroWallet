@@ -1,11 +1,15 @@
 /**
- * Purpose: Type definitions for AI chat integration with Google Gemini
+ * Purpose: Type definitions for AI chat integration with Google Gemini, Groq SLMs,
+ * and Laya System-1 fast decision router.
  *
  * Outputs:
  *   - Exports all TypeScript types and interfaces for AI features
- *
- * Side effects: None
  */
+
+/**
+ * Supported AI Providers
+ */
+export type AIProvider = 'gemini' | 'groq' | 'custom_openai';
 
 /**
  * Available Gemini model identifiers
@@ -16,27 +20,43 @@ export type GeminiModel =
   | 'gemini-1.5-pro';
 
 /**
- * Detailed information about a Gemini model
+ * Available Groq SLM/LLM model identifiers
+ */
+export type GroqModel =
+  | 'llama-3.2-1b-preview'
+  | 'llama-3.2-3b-preview'
+  | 'llama-3.1-8b-instant'
+  | 'llama-3.3-70b-versatile';
+
+/**
+ * Detailed information about an AI model
  */
 export interface ModelInfo {
-  id: GeminiModel;
+  id: string;
   name: string;
+  provider?: AIProvider;
   description: string;
   speed: number; // 1-3 (1 = slowest, 3 = fastest)
   accuracy: number; // 1-4 (1 = basic, 4 = best)
-  tokensPerMinute: number; // Rate limit
-  maxOutputTokens: number; // Maximum tokens in response
-  bestFor: string; // Use case description
-  recommended: boolean; // Is this the recommended model
+  tokensPerMinute?: number;
+  maxOutputTokens?: number;
+  bestFor: string;
+  recommended: boolean;
 }
 
 /**
  * User AI settings stored in settings store
  */
 export interface AISettings {
-  apiKey: string | null; // Google AI Studio API key
-  selectedModel: GeminiModel; // Currently selected model
-  isConfigured: boolean; // Whether API key is set
+  provider: AIProvider; // Currently selected provider
+  apiKey: string | null; // Active or Gemini API key
+  geminiApiKey?: string | null;
+  groqApiKey?: string | null;
+  customApiKey?: string | null;
+  customBaseUrl?: string; // Custom endpoint (e.g., http://localhost:11434/v1)
+  selectedModel: string; // Model identifier
+  system1Enabled: boolean; // Whether Laya System-1 fast decision router is active
+  isConfigured: boolean; // Whether active provider is configured
   totalTokensUsed: number; // Total tokens consumed (for stats)
   conversationCount: number; // Number of conversations started
   lastUsed: number | null; // Timestamp of last usage
@@ -58,6 +78,7 @@ export interface AIMessage {
   isError?: boolean; // Whether this is an error message
   functionCalls?: string[]; // Names of functions called (for debugging)
   pendingActionId?: string; // ID of pending action associated with this message
+  engineBadge?: 'system1' | 'system2'; // Which engine generated this response
 }
 
 /**
@@ -85,7 +106,10 @@ export interface DataQueryResult {
  * AI service configuration
  */
 export interface AIServiceConfig {
-  apiKey: string; // Google AI Studio API key
-  accountId: string; // Current account ID
-  modelId: GeminiModel; // Model to use
+  provider: AIProvider;
+  apiKey: string;
+  accountId: string;
+  userId: string;
+  modelId: string;
+  customBaseUrl?: string;
 }

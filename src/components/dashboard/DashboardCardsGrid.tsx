@@ -88,10 +88,9 @@ export const DashboardCardsGrid: React.FC<DashboardCardsGridProps> = React.memo(
   }, [navigation]);
 
   const cards: CardItem[] = useMemo(() => [
+    { id: 'recurring', type: 'recurring' },
     { id: 'goals', type: 'goals' },
     { id: 'debts', type: 'debts' },
-    { id: 'subscriptions', type: 'subscriptions' },
-    { id: 'recurring', type: 'recurring' },
     { id: 'categories', type: 'categories' },
   ], []);
 
@@ -131,7 +130,7 @@ export const DashboardCardsGrid: React.FC<DashboardCardsGridProps> = React.memo(
       case 'recurring':
         return (
           <RecurringCard
-            activeRecurringCount={recurringCount}
+            activeRecurringCount={recurringCount + subscriptionsCount}
             onViewAll={handleRecurringPress}
           />
         );

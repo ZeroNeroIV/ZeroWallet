@@ -23,27 +23,37 @@ export const useThemeColors = () => {
     gilded: brand.gilded,
     gold: brand.gilded,
 
-    // Background colors
+    // Background & Surface colors
     background: isDark ? brand.espresso : brand.creamAlabaster,
     surface: isDark ? brand.espressoSurface : brand.pureWhite,
+    surfaceHighlight: isDark ? 'rgba(254, 239, 182, 0.08)' : 'rgba(67, 47, 46, 0.05)',
+    card: isDark ? brand.espressoSurface : brand.pureWhite,
+    cardBorder: isDark ? brand.espressoBorder : 'rgba(67, 47, 46, 0.12)',
 
-    // Text colors
+    // Text & Content colors
     text: isDark ? '#FDFBFA' : brand.chestnut,
     textSecondary: isDark ? brand.arctic : '#6B5857',
+    textMuted: isDark ? '#9EBECF' : '#8A7776',
     textDisabled: isDark ? '#7A6B6A' : colors.textDisabled,
 
     // Border colors
     border: isDark ? brand.espressoBorder : 'rgba(195, 218, 232, 0.6)',
 
-    // Primary colors
+    // Primary colors & contrast onPrimary
     primary: isDark ? brand.gilded : brand.chestnut,
     primaryDark: isDark ? '#E5D69F' : '#2D1E1D',
     primaryLight: isDark ? '#FFF7D6' : '#5E4341',
+    onPrimary: isDark ? '#150F0E' : '#FFFFFF',
 
-    // Secondary colors
+    // Secondary colors & contrast onSecondary
     secondary: isDark ? brand.arctic : brand.gilded,
     secondaryDark: isDark ? '#A2C2D4' : '#E5D69F',
     secondaryLight: isDark ? '#E0EEF7' : '#FFF9DE',
+    onSecondary: isDark ? '#150F0E' : '#432F2E',
+
+    // Surface / Background contrast
+    onSurface: isDark ? '#FDFBFA' : brand.chestnut,
+    onBackground: isDark ? '#FDFBFA' : brand.chestnut,
 
     // Accent colors
     accent: isDark ? brand.gilded : brand.arctic,

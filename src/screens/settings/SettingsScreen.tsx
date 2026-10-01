@@ -539,38 +539,9 @@ const SettingsScreen = ({ navigation }: any) => {
         </View>
       </View>
 
-      {/* Account Actions Section */}
+      {/* Account / Preferences Section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Account</Text>
-
-        <TouchableOpacity
-          style={styles.settingRow}
-          onPress={() => {
-            lightHaptic();
-            navigation.navigate('AccountsList');
-          }}
-        >
-          <View style={styles.settingLeft}>
-            <View style={[styles.iconContainer, { backgroundColor: colors.primary.light }]}>
-              <MaterialCommunityIcons
-                name="wallet-outline"
-                size={20}
-                color={colors.primary.main}
-              />
-            </View>
-            <View style={styles.settingInfo}>
-              <Text style={styles.settingLabel}>Manage Accounts</Text>
-              <Text style={styles.settingDescription}>
-                Switch, create and view accounts
-              </Text>
-            </View>
-          </View>
-          <MaterialCommunityIcons
-            name="chevron-right"
-            size={24}
-            color={themeColors.textSecondary}
-          />
-        </TouchableOpacity>
+        <Text style={styles.sectionTitle}>Account & Currency</Text>
 
         <TouchableOpacity
           style={styles.settingRow}

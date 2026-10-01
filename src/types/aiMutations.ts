@@ -127,6 +127,7 @@ export interface CreateTransactionParams {
   description?: string;
   date?: string;
   vaultType?: VaultType;
+  currency?: string;
 }
 
 export interface UpdateTransactionParams {

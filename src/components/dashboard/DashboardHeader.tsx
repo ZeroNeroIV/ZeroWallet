@@ -21,11 +21,15 @@ import { useThemeColors } from '../../hooks/useThemeColors';
 import { useAuthStore } from '../../store/authStore';
 
 interface DashboardHeaderProps {
-  onNotificationsPress: () => void;
+  onQuickAccessPress: () => void;
+  onRefreshPress?: () => void;
+  isRefreshing?: boolean;
 }
 
 export const DashboardHeader: React.FC<DashboardHeaderProps> = React.memo(({
-  onNotificationsPress,
+  onQuickAccessPress,
+  onRefreshPress,
+  isRefreshing = false,
 }) => {
   const themeColors = useThemeColors();
   const { top } = useSafeAreaInsets();
@@ -67,18 +71,36 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = React.memo(({
         </View>
       </View>
 
-      {/* Action Buttons */}
+      {/* Action Buttons: Refresh & Quick Access */}
       <View style={styles.actions}>
-        {/* Notifications Button */}
+        {onRefreshPress && (
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={onRefreshPress}
+            activeOpacity={0.7}
+            hitSlop={6}
+            accessibilityLabel="Refresh dashboard data"
+          >
+            <MaterialCommunityIcons
+              name="reload"
+              size={22}
+              color={themeColors.text}
+            />
+          </TouchableOpacity>
+        )}
+
+        {/* Quick Access Command Button */}
         <TouchableOpacity
-          style={styles.notificationButton}
-          onPress={onNotificationsPress}
+          style={[styles.headerButton, styles.quickAccessButton]}
+          onPress={onQuickAccessPress}
           activeOpacity={0.7}
+          hitSlop={6}
+          accessibilityLabel="Open Quick Access"
         >
           <MaterialCommunityIcons
-            name="bell-outline"
-            size={24}
-            color={themeColors.text}
+            name="view-grid-outline"
+            size={22}
+            color={themeColors.onPrimary}
           />
         </TouchableOpacity>
       </View>
@@ -129,16 +151,20 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>, topInset: 
   actions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: spacing.sm,
   },
-  notificationButton: {
-    width: 44,
-    height: 44,
+  headerButton: {
+    width: 42,
+    height: 42,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
-    backgroundColor: themeColors.glass.background,
+    borderRadius: 14,
+    backgroundColor: themeColors.surface,
     borderWidth: 1,
-    borderColor: themeColors.glass.borderLight,
+    borderColor: themeColors.border,
+  },
+  quickAccessButton: {
+    backgroundColor: themeColors.primary,
+    borderColor: themeColors.primary,
   },
 });

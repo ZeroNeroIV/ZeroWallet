@@ -32,7 +32,7 @@ export class DataQueryService {
   private subscriptionRepo: SubscriptionRepository;
   private recurringRepo: RecurringExpenseRepository;
   private accountRepo: AccountRepository;
-  private queryHandlers: Map<string, (params: Record<string, any>) => Promise<any>>;
+  private queryHandlers: Map<string, (params: any) => Promise<any>>;
 
   constructor(accountId: string) {
     this.accountId = accountId;
@@ -43,7 +43,7 @@ export class DataQueryService {
     this.subscriptionRepo = new SubscriptionRepository();
     this.recurringRepo = new RecurringExpenseRepository();
     this.accountRepo = new AccountRepository();
-    this.queryHandlers = new Map([
+    this.queryHandlers = new Map<string, (params: any) => Promise<any>>([
       ['getRecentTransactions', (p) => this.getRecentTransactions(p.limit, p.type)],
       ['getMonthlyStats', (p) => this.getMonthlyStats(p.year, p.month)],
       ['getCategoryBreakdown', (p) => this.getCategoryBreakdown(p.startDate, p.endDate, p.type)],

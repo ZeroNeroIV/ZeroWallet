@@ -46,40 +46,10 @@ const SalarySettingsScreen = ({ navigation }: any) => {
   const [amount, setAmount] = useState(salarySettings.amount.toString());
   const [selectedVault, setSelectedVault] = useState<VaultType>(salarySettings.targetVault);
   const [payDay, setPayDay] = useState(salarySettings.payDay ?? 1);
-  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [showPayDayPicker, setShowPayDayPicker] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
-
-  // Load income categories
-  useEffect(() => {
-    const loadCategories = async () => {
-      if (!currentUser) return;
-
-      const categoryRepo = new CategoryRepository();
-      const incomeCategories = await categoryRepo.findByUserAndType(currentUser.id, 'income');
-      setCategories(incomeCategories);
-
-      // Pre-select current category
-      if (salarySettings.categoryId) {
-        const current = incomeCategories.find((c: Category) => c.id === salarySettings.categoryId);
-        if (current) {
-          setSelectedCategory(current);
-        }
-      } else {
-        // Auto-select "Salary" category if exists
-        const salaryCategory = incomeCategories.find((c: Category) => c.name === 'Salary');
-        if (salaryCategory) {
-          setSelectedCategory(salaryCategory);
-        }
-      }
-    };
-
-    loadCategories();
-  }, [currentUser, salarySettings.categoryId]);
 
   // Handle save
   const handleSave = async () => {
@@ -96,11 +66,6 @@ const SalarySettingsScreen = ({ navigation }: any) => {
       return;
     }
 
-    if (!selectedCategory) {
-      Alert.alert('Error', 'Please select a category');
-      return;
-    }
-
     const numAmount = parseFloat(amount);
     if (isNaN(numAmount) || numAmount <= 0) {
       Alert.alert('Error', 'Please enter a valid amount');
@@ -108,6 +73,19 @@ const SalarySettingsScreen = ({ navigation }: any) => {
     }
 
     setIsSaving(true);
+
+    // Auto-resolve "Salary" category for the user
+    let categoryId = salarySettings.categoryId;
+    if (!categoryId && currentUser) {
+      try {
+        const categoryRepo = new CategoryRepository();
+        const incomeCategories = await categoryRepo.findByUserAndType(currentUser.id, 'income');
+        const salaryCat = incomeCategories.find((c: Category) => c.name.toLowerCase() === 'salary') || incomeCategories[0];
+        if (salaryCat) categoryId = salaryCat.id;
+      } catch (err) {
+        console.warn('[SalarySettings] Could not resolve salary category:', err);
+      }
+    }
 
     // Import the auto salary task to get the schedule initializer
     const { initializeAutoSalarySchedule } = await import('../../services/backgroundTasks/autoSalaryTask');
@@ -118,7 +96,7 @@ const SalarySettingsScreen = ({ navigation }: any) => {
     updateSalarySettings({
       isEnabled,
       amount: numAmount,
-      categoryId: selectedCategory.id,
+      categoryId,
       targetVault: selectedVault,
       payDay,
       nextProcessing,
@@ -180,42 +158,6 @@ const SalarySettingsScreen = ({ navigation }: any) => {
     );
   };
 
-  // Render category item
-  const renderCategoryItem = ({ item }: { item: Category }) => {
-    const isSelected = selectedCategory?.id === item.id;
-
-    return (
-      <TouchableOpacity
-        style={[styles.categoryItem, isSelected && styles.categoryItemSelected]}
-        onPress={() => {
-          setSelectedCategory(item);
-          setShowCategoryPicker(false);
-        }}
-      >
-        <View
-          style={[
-            styles.categoryIcon,
-            { backgroundColor: item.color + '30' },
-          ]}
-        >
-          <MaterialCommunityIcons
-            name={item.icon}
-            size={20}
-            color={item.color}
-          />
-        </View>
-        <Text style={styles.categoryName}>{item.name}</Text>
-        {isSelected && (
-          <MaterialCommunityIcons
-            name="check"
-            size={20}
-            color={themeColors.primary}
-          />
-        )}
-      </TouchableOpacity>
-    );
-  };
-
   return (
     <View style={styles.container}>
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
@@ -249,43 +191,6 @@ const SalarySettingsScreen = ({ navigation }: any) => {
             placeholder="0.000"
             editable={isEnabled}
           />
-        </View>
-
-        {/* Category Selection */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Category</Text>
-          <TouchableOpacity
-            style={styles.categorySelector}
-            onPress={() => isEnabled && setShowCategoryPicker(true)}
-            disabled={!isEnabled}
-          >
-            {selectedCategory ? (
-              <View style={styles.selectedCategoryContent}>
-                <View
-                  style={[
-                    styles.selectedCategoryIcon,
-                    { backgroundColor: selectedCategory.color + '30' },
-                  ]}
-                >
-                  <MaterialCommunityIcons
-                    name={selectedCategory.icon}
-                    size={20}
-                    color={selectedCategory.color}
-                  />
-                </View>
-                <Text style={styles.selectedCategoryText}>
-                  {selectedCategory.name}
-                </Text>
-              </View>
-            ) : (
-              <Text style={styles.placeholderText}>Select Category</Text>
-            )}
-            <MaterialCommunityIcons
-              name="chevron-down"
-              size={24}
-              color={themeColors.textSecondary}
-            />
-          </TouchableOpacity>
         </View>
 
         {/* Payday */}
@@ -345,7 +250,7 @@ const SalarySettingsScreen = ({ navigation }: any) => {
         <Button
           title={isSaving ? 'Saving...' : 'Save Settings'}
           onPress={handleSave}
-          disabled={isSaving || (isEnabled && (!selectedCategory || !amount))}
+          disabled={isSaving || (isEnabled && (!amount || parseFloat(amount) <= 0))}
           loading={isSaving}
         />
       </View>
@@ -388,35 +293,6 @@ const SalarySettingsScreen = ({ navigation }: any) => {
                 );
               })}
             </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Category Picker Modal */}
-      <Modal
-        visible={showCategoryPicker}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowCategoryPicker(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Category</Text>
-              <TouchableOpacity onPress={() => setShowCategoryPicker(false)}>
-                <MaterialCommunityIcons
-                  name="close"
-                  size={24}
-                  color={themeColors.textSecondary}
-                />
-              </TouchableOpacity>
-            </View>
-            <FlashList estimatedItemSize={64}
-              data={categories}
-              renderItem={renderCategoryItem}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.categoryList}
-            />
           </View>
         </View>
       </Modal>

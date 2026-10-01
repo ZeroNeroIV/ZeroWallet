@@ -75,6 +75,10 @@ async function applyMigration(
       await migration_v10(database);
       break;
 
+    case 11:
+      await migration_v11(database);
+      break;
+
     default:
       console.warn(`[Migrations] No migration defined for version ${version}`);
   }
@@ -639,5 +643,24 @@ async function migration_v10(database: any): Promise<void> {
   }
 
   console.log('[Migration v10] Successfully applied migration v10');
+}
+
+/**
+ * Migration v11: Add sort_order to wallets table for custom wallet reordering
+ */
+export async function migration_v11(database: SQLite.SQLiteDatabase): Promise<void> {
+  console.log('[Migration] Running migration v11 (add sort_order to wallets)...');
+  try {
+    await database.executeSql(
+      'ALTER TABLE wallets ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;'
+    );
+    console.log('[Migration v11] Successfully added sort_order to wallets table');
+  } catch (err: any) {
+    if (err?.message?.includes('duplicate column')) {
+      console.log('[Migration v11] sort_order column already exists');
+    } else {
+      console.warn('[Migration v11] Warning adding sort_order to wallets:', err);
+    }
+  }
 }
 

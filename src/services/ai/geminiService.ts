@@ -39,7 +39,7 @@ export class GeminiService {
   private dataQuery: DataQueryService;
   private dataMutation: DataMutationService;
   private baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models';
-  private writeHandlers: Map<string, (params: Record<string, any>) => Promise<any>>;
+  private writeHandlers: Map<string, (params: any) => Promise<any>>;
 
   constructor(apiKey: string, accountId: string, userId: string, modelId: GeminiModel) {
     this.apiKey = apiKey;
@@ -48,7 +48,7 @@ export class GeminiService {
     this.modelId = modelId;
     this.dataQuery = new DataQueryService(accountId);
     this.dataMutation = new DataMutationService(accountId, userId);
-    this.writeHandlers = new Map([
+    this.writeHandlers = new Map<string, (params: any) => Promise<any>>([
       ['createTransaction', this.dataMutation.createTransactionAction.bind(this.dataMutation)],
       ['updateTransaction', this.dataMutation.updateTransactionAction.bind(this.dataMutation)],
       ['deleteTransaction', this.dataMutation.deleteTransactionAction.bind(this.dataMutation)],

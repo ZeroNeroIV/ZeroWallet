@@ -241,12 +241,69 @@ export default function WalletsScreen() {
     }
   };
 
-  const renderItem = ({ item }: { item: Wallet }) => {
+  const handleMoveUp = async (index: number) => {
+    if (index <= 0 || !currentAccountId) return;
+    const reordered = [...wallets];
+    const temp = reordered[index - 1];
+    reordered[index - 1] = reordered[index];
+    reordered[index] = temp;
+    lightHaptic();
+    try {
+      await new WalletRepository().reorderWallets(currentAccountId, reordered.map((w) => w.id));
+      await refresh();
+    } catch (e: any) {
+      console.warn('Failed to reorder wallets:', e);
+    }
+  };
+
+  const handleMoveDown = async (index: number) => {
+    if (index >= wallets.length - 1 || !currentAccountId) return;
+    const reordered = [...wallets];
+    const temp = reordered[index + 1];
+    reordered[index + 1] = reordered[index];
+    reordered[index] = temp;
+    lightHaptic();
+    try {
+      await new WalletRepository().reorderWallets(currentAccountId, reordered.map((w) => w.id));
+      await refresh();
+    } catch (e: any) {
+      console.warn('Failed to reorder wallets:', e);
+    }
+  };
+
+  const renderItem = ({ item, index }: { item: Wallet; index: number }) => {
     const balance = currentAccountId
       ? getWalletBalance(balances[currentAccountId] as any, item.id)
       : 0;
     return (
       <View style={styles.card}>
+        <View style={styles.reorderActions}>
+          <TouchableOpacity
+            style={[styles.miniAction, index === 0 && styles.miniActionDisabled]}
+            disabled={index === 0}
+            onPress={() => handleMoveUp(index)}
+            hitSlop={6}
+          >
+            <MaterialCommunityIcons
+              name="chevron-up"
+              size={20}
+              color={index === 0 ? themeColors.textDisabled : themeColors.textSecondary}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.miniAction, index === wallets.length - 1 && styles.miniActionDisabled]}
+            disabled={index === wallets.length - 1}
+            onPress={() => handleMoveDown(index)}
+            hitSlop={6}
+          >
+            <MaterialCommunityIcons
+              name="chevron-down"
+              size={20}
+              color={index === wallets.length - 1 ? themeColors.textDisabled : themeColors.textSecondary}
+            />
+          </TouchableOpacity>
+        </View>
+
         <View style={[styles.iconCircle, { backgroundColor: item.color }]}>
           <MaterialCommunityIcons name={item.icon as any} size={22} color="#FFF" />
         </View>
@@ -269,7 +326,7 @@ export default function WalletsScreen() {
 
   return (
     <View style={styles.container}>
-      <FlashList estimatedItemSize={80}
+      <FlashList
         data={wallets}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
@@ -460,9 +517,21 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
       backgroundColor: themeColors.surface,
       borderRadius: borderRadius.lg,
       padding: spacing.md,
-      gap: spacing.md,
+      gap: spacing.sm,
       borderWidth: 1,
       borderColor: themeColors.border,
+    },
+    reorderActions: {
+      flexDirection: 'column',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: -4,
+    },
+    miniAction: {
+      padding: 2,
+    },
+    miniActionDisabled: {
+      opacity: 0.25,
     },
     iconCircle: {
       width: 44,

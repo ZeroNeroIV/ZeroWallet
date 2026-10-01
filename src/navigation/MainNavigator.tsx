@@ -46,9 +46,10 @@ export function MainNavigator() {
         headerStyle: {
           backgroundColor: themeColors.primary,
         },
-        headerTintColor: '#fff',
+        headerTintColor: themeColors.onPrimary,
         headerTitleStyle: {
-          fontWeight: '600',
+          fontWeight: '700',
+          color: themeColors.onPrimary,
         },
       }}
     >
@@ -122,7 +123,7 @@ export function MainNavigator() {
       <Stack.Screen
         name="Recurring"
         component={RecurringHubScreen}
-        options={{ title: 'Recurring' }}
+        options={{ title: 'Recurring & Subscriptions' }}
       />
       <Stack.Screen
         name="AddSubscription"

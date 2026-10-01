@@ -103,6 +103,9 @@ export async function scheduleDailyNudge(): Promise<void> {
       type: TriggerType.TIMESTAMP,
       timestamp: triggerDate.getTime(),
       repeatFrequency: RepeatFrequency.DAILY,
+      alarmManager: {
+        allowWhileIdle: true,
+      },
     };
 
     // Schedule notification with random message
@@ -218,6 +221,9 @@ export async function schedulePeriodicNudges(): Promise<void> {
         type: TriggerType.TIMESTAMP,
         timestamp: triggerDate.getTime(),
         repeatFrequency: RepeatFrequency.DAILY,
+        alarmManager: {
+          allowWhileIdle: true,
+        },
       };
 
       await notifee.createTriggerNotification(
@@ -297,6 +303,9 @@ export async function scheduleSubscriptionReminder(
     const trigger: TimestampTrigger = {
       type: TriggerType.TIMESTAMP,
       timestamp: triggerDate.getTime(),
+      alarmManager: {
+        allowWhileIdle: true,
+      },
     };
 
     const dayText = daysUntil <= 0 ? 'today' : daysUntil === 1 ? 'tomorrow' : `in ${daysUntil} days`;
@@ -373,6 +382,9 @@ export async function scheduleRecurringReminder(
     const trigger: TimestampTrigger = {
       type: TriggerType.TIMESTAMP,
       timestamp: triggerDate.getTime(),
+      alarmManager: {
+        allowWhileIdle: true,
+      },
     };
 
     const dayText = daysUntil <= 0 ? 'today' : daysUntil === 1 ? 'tomorrow' : `in ${daysUntil} days`;
@@ -456,6 +468,9 @@ export async function scheduleSalaryReminder(): Promise<void> {
     const trigger: TimestampTrigger = {
       type: TriggerType.TIMESTAMP,
       timestamp: triggerDate.getTime(),
+      alarmManager: {
+        allowWhileIdle: true,
+      },
     };
 
     await notifee.createTriggerNotification(

@@ -258,7 +258,6 @@ export default function SubscriptionsScreen() {
         keyExtractor={(item) => item.id}
         renderItem={renderSubscriptionItem}
         contentContainerStyle={styles.listContent}
-        estimatedItemSize={92}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }

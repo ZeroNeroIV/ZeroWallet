@@ -1,5 +1,4 @@
-// Button Component
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   TouchableOpacity,
   Text,
@@ -10,7 +9,7 @@ import {
   TouchableOpacityProps,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { colors } from '../../theme/colors';
+import { useThemeColors } from '../../hooks/useThemeColors';
 import { spacing, borderRadius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { lightHaptic } from '../../services/haptics/hapticFeedback';
@@ -39,6 +38,8 @@ export function Button({
   textStyle,
   ...props
 }: ButtonProps) {
+  const themeColors = useThemeColors();
+  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
   const isDisabled = disabled || loading;
 
   const handlePress = (event: any) => {
@@ -46,17 +47,29 @@ export function Button({
     props.onPress?.(event);
   };
 
+  const getIconColor = () => {
+    switch (variant) {
+      case 'primary':
+        return themeColors.onPrimary;
+      case 'secondary':
+        return themeColors.onSecondary;
+      case 'outline':
+      case 'ghost':
+      default:
+        return themeColors.primary;
+    }
+  };
+
   const renderIcon = (icon: React.ReactNode | string | undefined) => {
     if (!icon) return null;
     
     // If it's a string, treat it as an icon name and render MaterialCommunityIcon
     if (typeof icon === 'string') {
-      const iconColor = variant === 'primary' ? colors.neutral.white : colors.primary.main;
       return (
         <MaterialCommunityIcons
           name={icon}
           size={20}
-          color={iconColor}
+          color={getIconColor()}
         />
       );
     }
@@ -80,9 +93,7 @@ export function Button({
       onPress={handlePress}
     >
       {loading ? (
-        <ActivityIndicator
-          color={variant === 'primary' ? colors.neutral.white : colors.primary.main}
-        />
+        <ActivityIndicator color={getIconColor()} />
       ) : (
         <>
           {renderIcon(leftIcon)}
@@ -96,7 +107,7 @@ export function Button({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (themeColors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
   button: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -107,15 +118,15 @@ const styles = StyleSheet.create({
 
   // Variants
   primary: {
-    backgroundColor: colors.primary.main,
+    backgroundColor: themeColors.primary,
   },
   secondary: {
-    backgroundColor: colors.secondary.main,
+    backgroundColor: themeColors.secondary,
   },
   outline: {
     backgroundColor: 'transparent',
     borderWidth: 1.5,
-    borderColor: colors.primary.main,
+    borderColor: themeColors.primary,
   },
   ghost: {
     backgroundColor: 'transparent',
@@ -144,16 +155,16 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.semiBold,
   },
   primaryText: {
-    color: colors.neutral.white,
+    color: themeColors.onPrimary,
   },
   secondaryText: {
-    color: colors.text,
+    color: themeColors.onSecondary,
   },
   outlineText: {
-    color: colors.primary.main,
+    color: themeColors.primary,
   },
   ghostText: {
-    color: colors.primary.main,
+    color: themeColors.primary,
   },
 
   // States

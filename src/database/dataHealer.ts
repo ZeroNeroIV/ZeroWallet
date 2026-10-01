@@ -224,18 +224,26 @@ async function healWalletsAndVaultTypes(database: SQLite.SQLiteDatabase): Promis
   try {
     const now = Date.now();
 
-    // 1. Ensure the 7 default wallets exist for each account in the wallets table
+    // 1. Ensure initial starter wallets exist ONLY for accounts that have 0 wallets.
+    // Never resurrect deleted starter wallets if the account already has active wallets!
     const [accRows] = await database.executeSql('SELECT id FROM accounts');
     for (let i = 0; i < accRows.rows.length; i++) {
       const accountId = accRows.rows.item(i).id;
-      for (const key of VAULT_TYPE_VALUES) {
-        const meta = WALLET_META[key as keyof typeof WALLET_META];
-        if (!meta) continue;
-        await database.executeSql(
-          `INSERT OR IGNORE INTO wallets (id, account_id, name, icon, color, is_default, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
-          [key, accountId, meta.name, meta.icon, meta.color, now, now]
-        );
+      const [countRows] = await database.executeSql(
+        'SELECT COUNT(*) as count FROM wallets WHERE account_id = ?',
+        [accountId]
+      );
+      const count = countRows?.rows?.item(0)?.count ?? 0;
+      if (count === 0) {
+        for (const key of VAULT_TYPE_VALUES) {
+          const meta = WALLET_META[key as keyof typeof WALLET_META];
+          if (!meta) continue;
+          await database.executeSql(
+            `INSERT OR IGNORE INTO wallets (id, account_id, name, icon, color, is_default, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+            [key, accountId, meta.name, meta.icon, meta.color, now, now]
+          );
+        }
       }
     }
 

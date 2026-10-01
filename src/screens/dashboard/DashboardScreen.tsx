@@ -7,8 +7,9 @@ import {
   Animated,
   Alert,
   Text,
+  AppState,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { spacing } from '../../theme/spacing';
 import { MainStackParamList } from '../../types/navigation';
@@ -31,6 +32,7 @@ import { SpendingDonutChart } from '../../components/dashboard/SpendingDonutChar
 import { GoalsProgressCard } from '../../components/dashboard/GoalsProgressCard';
 import { CategoryBudgetsCard } from '../../components/dashboard/CategoryBudgetsCard';
 import { FloatingFastLog } from '../../components/dashboard/FloatingFastLog';
+import { QuickAccessCommandSheet } from '../../components/dashboard/QuickAccessCommandSheet';
 
 type NavProp = StackNavigationProp<MainStackParamList, 'Dashboard'>;
 
@@ -43,6 +45,7 @@ export const DashboardScreen: React.FC = () => {
   const themeColors = useThemeColors();
 
   const [refreshing, setRefreshing] = useState(false);
+  const [showQuickAccess, setShowQuickAccess] = useState(false);
   const { wallets } = useWallets();
   const [data, setData] = useState<DashboardData | null>(null);
   const [analyticsTab, setAnalyticsTab] = useState<'income' | 'expense' | 'combined'>('combined');
@@ -53,24 +56,12 @@ export const DashboardScreen: React.FC = () => {
   const headerTranslateY = useRef(new Animated.Value(0)).current;
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
 
-  useEffect(() => {
-    if (!currentAccountId || !currentUser) return;
-    loadData();
-    checkTasks();
-    const unsubscribe = navigation.addListener('focus', () => {
-      fadeAnim.setValue(0.3);
-      loadData();
-      checkTasks();
-    });
-    return unsubscribe;
-  }, [navigation, currentAccountId, currentUser]);
-
   const getService = useCallback(() => {
     if (!currentAccountId || !currentUser) return null;
     return new DashboardService(currentAccountId, currentUser.id);
   }, [currentAccountId, currentUser]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     const svc = getService();
     if (!svc) return;
     const result = await svc.loadAll();
@@ -78,16 +69,35 @@ export const DashboardScreen: React.FC = () => {
     Animated.timing(fadeAnim, {
       toValue: 1, duration: 300, useNativeDriver: true,
     }).start();
-  };
+  }, [getService, fadeAnim]);
 
-  const checkTasks = async () => {
+  const checkTasks = useCallback(async () => {
     const svc = getService();
     if (!svc) return;
     const notifications = await svc.checkBackgroundTasks();
     if (notifications.length > 0) {
       Alert.alert('🔔 Updates', notifications.join('\n\n'), [{ text: 'OK' }]);
     }
-  };
+  }, [getService]);
+
+  // Auto-reload whenever screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      if (!currentAccountId || !currentUser) return;
+      loadData();
+      checkTasks();
+    }, [currentAccountId, currentUser, loadData, checkTasks])
+  );
+
+  // Auto-reload on active AppState (returning from background / other apps)
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        loadData();
+      }
+    });
+    return () => sub.remove();
+  }, [loadData]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -109,7 +119,11 @@ export const DashboardScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <Animated.View style={[styles.headerContainer, { transform: [{ translateY: headerTranslateY }] }]}>
-        <DashboardHeader onNotificationsPress={() => Alert.alert('Notifications', 'No new notifications')} />
+        <DashboardHeader
+          onQuickAccessPress={() => setShowQuickAccess(true)}
+          onRefreshPress={handleRefresh}
+          isRefreshing={refreshing}
+        />
       </Animated.View>
 
       <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
@@ -134,6 +148,17 @@ export const DashboardScreen: React.FC = () => {
               <View style={styles.section}>
                 <ActionButtons />
               </View>
+
+              {/* Quick Access Cards Slider right under Action Buttons */}
+              <DashboardCardsGrid
+                goalsCount={data.goalsCount}
+                debtsStats={data.debtsStats}
+                subscriptionsCount={data.subscriptionsCount}
+                categoriesCount={data.categoriesCount}
+                recurringCount={data.recurringCount}
+                accountCurrency={data.currency}
+              />
+
               <View style={styles.section}>
                 <WealthAnalyticsCard data={data.chartData} activeTab={analyticsTab} onTabChange={setAnalyticsTab} />
               </View>
@@ -153,14 +178,6 @@ export const DashboardScreen: React.FC = () => {
               <View style={styles.section}>
                 <GoalsProgressCard goals={data.activeGoals} />
               </View>
-              <DashboardCardsGrid
-                goalsCount={data.goalsCount}
-                debtsStats={data.debtsStats}
-                subscriptionsCount={data.subscriptionsCount}
-                categoriesCount={data.categoriesCount}
-                recurringCount={data.recurringCount}
-                accountCurrency={data.currency}
-              />
               <MovementsList
                 transactions={data.recentTransactions}
                 accountCurrency={data.currency}
@@ -180,6 +197,11 @@ export const DashboardScreen: React.FC = () => {
           onLogged={loadData}
         />
       )}
+
+      <QuickAccessCommandSheet
+        visible={showQuickAccess}
+        onClose={() => setShowQuickAccess(false)}
+      />
 
       <BottomNavigation />
     </View>

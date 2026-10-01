@@ -81,7 +81,7 @@ export const AllSectionsScreen: React.FC = () => {
   ], [themeColors]);
 
   const handleSectionPress = useCallback((route: keyof MainStackParamList) => {
-    navigation.navigate(route);
+    navigation.navigate(route as any);
   }, [navigation]);
 
   const renderSectionItem = useCallback(({ item }: { item: SectionItem }) => (
@@ -116,7 +116,7 @@ export const AllSectionsScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <FlashList estimatedItemSize={88}
+      <FlashList
         data={sections}
         renderItem={renderSectionItem}
         keyExtractor={(item) => item.id}
