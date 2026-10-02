@@ -181,6 +181,64 @@ export default function TransferScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+        {/* Segmented Type Switch */}
+        <View
+          style={[
+            styles.typeSwitchContainer,
+            {
+              backgroundColor: themeColors.surface,
+              borderColor: themeColors.cardBorder,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => {
+              triggerHaptic('selection');
+              navigation.replace('AddTransaction', { type: 'expense' });
+            }}
+            style={styles.typeTab}
+          >
+            <Text style={[styles.typeTabText, { color: themeColors.textMuted }]}>
+              EXPENSE
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => {
+              triggerHaptic('selection');
+              navigation.replace('AddTransaction', { type: 'income' });
+            }}
+            style={styles.typeTab}
+          >
+            <Text style={[styles.typeTabText, { color: themeColors.textMuted }]}>
+              INCOME
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={[
+              styles.typeTab,
+              {
+                backgroundColor: themeColors.text,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.typeTabText,
+                {
+                  color: themeColors.background,
+                },
+              ]}
+            >
+              TRANSFER ⇄
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Visual From -> To Route Card */}
         <View
           style={[
@@ -539,8 +597,27 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 20,
+    padding: 16,
     paddingBottom: 40,
+  },
+  typeSwitchContainer: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    padding: 3,
+    marginBottom: 16,
+  },
+  typeTab: {
+    flex: 1,
+    paddingVertical: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 2,
+  },
+  typeTabText: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
   },
   routeCard: {
     borderWidth: 1,

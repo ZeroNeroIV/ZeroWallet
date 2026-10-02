@@ -26,7 +26,7 @@ import { TransactionRepository } from '../../database/repositories/TransactionRe
 import { CategoryRepository } from '../../database/repositories/CategoryRepository';
 import { AccountRepository } from '../../database/repositories/AccountRepository';
 import { WalletRepository } from '../../database/repositories/WalletRepository';
-import { syncBalancesFromDatabase } from '../../services/walletTransferService';
+import { transferBetweenWallets, syncBalancesFromDatabase } from '../../services/walletTransferService';
 import { convertCurrency } from '../../services/currencyService';
 import { formatCurrency } from '../../utils/currencyFormatter';
 import { triggerHaptic } from '../../services/haptics/hapticFeedback';
@@ -48,10 +48,15 @@ export const AddTransactionScreen: React.FC = () => {
   const editTransactionId = route.params?.transactionId;
   const isEditMode = !!editTransactionId;
 
-  const [type, setType] = useState<'expense' | 'income'>('expense');
+  const [type, setType] = useState<'expense' | 'income' | 'transfer'>(
+    (route.params?.type as 'expense' | 'income' | 'transfer') || 'expense'
+  );
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [selectedWalletId, setSelectedWalletId] = useState<string>('');
+  const [fromWalletId, setFromWalletId] = useState<string>(route.params?.fromWalletId || '');
+  const [toWalletId, setToWalletId] = useState<string>(route.params?.toWalletId || '');
+  const [derivedBalances, setDerivedBalances] = useState<Record<string, number>>({});
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   const [date, setDate] = useState<number>(Date.now());
   const [currency, setCurrency] = useState('USD');
@@ -65,7 +70,7 @@ export const AddTransactionScreen: React.FC = () => {
   // Entities
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [walletPickerVisible, setWalletPickerVisible] = useState(false);
+  const [walletPickerTarget, setWalletPickerTarget] = useState<'single' | 'from' | 'to' | null>(null);
   const [currencyPickerVisible, setCurrencyPickerVisible] = useState(false);
 
   // Load initial data & edit record if present
@@ -79,10 +84,11 @@ export const AddTransactionScreen: React.FC = () => {
         const catRepo = new CategoryRepository();
         const txRepo = new TransactionRepository();
 
-        const [acc, wList, cList] = await Promise.all([
+        const [acc, wList, cList, balances] = await Promise.all([
           accRepo.findById(currentAccountId),
           walletRepo.findByAccount(currentAccountId),
           catRepo.findByUser(currentUser.id),
+          walletRepo.getDerivedBalances(currentAccountId),
         ]);
 
         const accCur = acc?.currency || 'USD';
@@ -90,10 +96,20 @@ export const AddTransactionScreen: React.FC = () => {
         setCurrency(accCur);
         setWallets(wList);
         setCategories(cList);
+        setDerivedBalances(balances);
 
         // Preselect default wallet
         const defaultWallet = wList.find((w) => w.isDefault) || wList[0];
-        if (defaultWallet) setSelectedWalletId(defaultWallet.id);
+        if (defaultWallet) {
+          setSelectedWalletId(defaultWallet.id);
+          const initialFrom = route.params?.fromWalletId || defaultWallet.id;
+          const initialTo =
+            route.params?.toWalletId ||
+            wList.find((w) => w.id !== initialFrom)?.id ||
+            initialFrom;
+          setFromWalletId(initialFrom);
+          setToWalletId(initialTo);
+        }
 
         // If editing existing transaction
         if (editTransactionId) {
@@ -161,13 +177,92 @@ export const AddTransactionScreen: React.FC = () => {
     return wallets.find((w) => w.id === selectedWalletId);
   }, [wallets, selectedWalletId]);
 
+  const fromWallet = useMemo(() => {
+    return wallets.find((w) => w.id === fromWalletId);
+  }, [wallets, fromWalletId]);
+
+  const toWallet = useMemo(() => {
+    return wallets.find((w) => w.id === toWalletId);
+  }, [wallets, toWalletId]);
+
+  const fromBalance = (fromWalletId ? derivedBalances[fromWalletId] : 0) ?? 0;
+  const toBalance = (toWalletId ? derivedBalances[toWalletId] : 0) ?? 0;
+
+  const handleSwapWallets = () => {
+    triggerHaptic('impactLight');
+    const prev = fromWalletId;
+    setFromWalletId(toWalletId);
+    setToWalletId(prev);
+  };
+
+  const handleQuickPercent = (percent: number) => {
+    triggerHaptic('selection');
+    const available = Math.max(0, fromBalance);
+    const calculated = (available * percent).toFixed(2);
+    setAmount(calculated);
+  };
+
   const handleTypeSelect = (selectedType: 'expense' | 'income' | 'transfer') => {
     triggerHaptic('selection');
-    if (selectedType === 'transfer') {
-      navigation.navigate('Transfer');
+    setType(selectedType);
+  };
+
+  const handleTransfer = async () => {
+    const numAmount = parseFloat(amount);
+    if (isNaN(numAmount) || numAmount <= 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid transfer amount.');
+      triggerHaptic('notificationError');
       return;
     }
-    setType(selectedType);
+
+    if (!currentAccountId || !currentUser) {
+      Alert.alert('Error', 'Active account not found.');
+      return;
+    }
+
+    if (!fromWalletId || !toWalletId || fromWalletId === toWalletId) {
+      Alert.alert('Routing Error', 'Source and destination wallets must be different.');
+      triggerHaptic('notificationError');
+      return;
+    }
+
+    const isCreditWallet =
+      fromWallet?.icon?.includes('credit') || fromWallet?.name?.toLowerCase().includes('credit');
+    if (!isCreditWallet && numAmount > fromBalance + 0.0001) {
+      Alert.alert(
+        'Insufficient Balance',
+        `Available balance in ${fromWallet?.name || 'source'} is ${formatCurrency(fromBalance, baseCurrency)}.`,
+      );
+      triggerHaptic('notificationError');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      await transferBetweenWallets(
+        currentAccountId,
+        currentUser.id,
+        fromWalletId,
+        toWalletId,
+        numAmount,
+        description.trim() || undefined,
+        baseCurrency,
+      );
+
+      await syncBalancesFromDatabase(currentAccountId);
+
+      triggerHaptic('notificationSuccess');
+      Alert.alert(
+        'Transfer Complete',
+        `${formatCurrency(numAmount, baseCurrency)} moved from ${fromWallet?.name || 'source'} to ${toWallet?.name || 'destination'}`,
+        [{ text: 'DONE', onPress: () => navigation.goBack() }]
+      );
+    } catch (err: any) {
+      triggerHaptic('notificationError');
+      Alert.alert('Transfer Error', err?.message || 'Failed to complete transfer.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleSave = async () => {
@@ -320,19 +415,280 @@ export const AddTransactionScreen: React.FC = () => {
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={() => handleTypeSelect('transfer')}
-            style={styles.typeTab}
-          >
-            <Text style={[styles.typeTabText, { color: themeColors.textMuted }]}>
-              TRANSFER ⇄
-            </Text>
-          </TouchableOpacity>
+          {!isEditMode && (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => handleTypeSelect('transfer')}
+              style={[
+                styles.typeTab,
+                type === 'transfer' && {
+                  backgroundColor: themeColors.text,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.typeTabText,
+                  {
+                    color: type === 'transfer' ? themeColors.background : themeColors.textMuted,
+                  },
+                ]}
+              >
+                TRANSFER ⇄
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
-        {/* 2. Hero Tabular Amount Card */}
-        <View
+        {type === 'transfer' ? (
+          <>
+            {/* Visual From -> To Route Card */}
+            <View
+              style={[
+                styles.routeCard,
+                {
+                  backgroundColor: themeColors.surface,
+                  borderColor: themeColors.cardBorder,
+                },
+              ]}
+            >
+              {/* Source Wallet Block */}
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => {
+                  triggerHaptic('selection');
+                  setWalletPickerTarget('from');
+                }}
+                style={styles.walletBox}
+              >
+                <View style={styles.walletMetaTop}>
+                  <Text style={[styles.microLabel, { color: themeColors.textMuted }]}>
+                    FROM SOURCE WALLET
+                  </Text>
+                  <MaterialCommunityIcons
+                    name="chevron-down"
+                    size={16}
+                    color={themeColors.textMuted}
+                  />
+                </View>
+
+                <View style={styles.walletSelectedRow}>
+                  <View
+                    style={[
+                      styles.iconSmall,
+                      {
+                        backgroundColor: themeColors.background,
+                        borderColor: themeColors.hairline,
+                      },
+                    ]}
+                  >
+                    <MaterialCommunityIcons
+                      name={fromWallet?.icon || 'wallet-outline'}
+                      size={16}
+                      color={themeColors.text}
+                    />
+                  </View>
+                  <Text
+                    style={[styles.walletTitleText, { color: themeColors.text }]}
+                    numberOfLines={1}
+                  >
+                    {fromWallet?.name || 'Select Wallet'}
+                  </Text>
+                </View>
+
+                <Text
+                  style={[
+                    styles.balanceSubtext,
+                    { color: fromBalance < 0 ? themeColors.error : themeColors.textMuted },
+                  ]}
+                >
+                  AVAILABLE: {formatCurrency(fromBalance, baseCurrency)}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Hairline Divider & Swap Button */}
+              <View style={styles.dividerRow}>
+                <View style={[styles.hairlineSegment, { backgroundColor: themeColors.hairline }]} />
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={handleSwapWallets}
+                  style={[
+                    styles.swapButton,
+                    {
+                      backgroundColor: themeColors.surface,
+                      borderColor: themeColors.cardBorder,
+                    },
+                  ]}
+                >
+                  <MaterialCommunityIcons
+                    name="swap-vertical"
+                    size={20}
+                    color={themeColors.text}
+                  />
+                </TouchableOpacity>
+                <View style={[styles.hairlineSegment, { backgroundColor: themeColors.hairline }]} />
+              </View>
+
+              {/* Destination Wallet Block */}
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => {
+                  triggerHaptic('selection');
+                  setWalletPickerTarget('to');
+                }}
+                style={styles.walletBox}
+              >
+                <View style={styles.walletMetaTop}>
+                  <Text style={[styles.microLabel, { color: themeColors.textMuted }]}>
+                    TO DESTINATION WALLET
+                  </Text>
+                  <MaterialCommunityIcons
+                    name="chevron-down"
+                    size={16}
+                    color={themeColors.textMuted}
+                  />
+                </View>
+
+                <View style={styles.walletSelectedRow}>
+                  <View
+                    style={[
+                      styles.iconSmall,
+                      {
+                        backgroundColor: themeColors.background,
+                        borderColor: themeColors.hairline,
+                      },
+                    ]}
+                  >
+                    <MaterialCommunityIcons
+                      name={toWallet?.icon || 'wallet-outline'}
+                      size={16}
+                      color={themeColors.text}
+                    />
+                  </View>
+                  <Text
+                    style={[styles.walletTitleText, { color: themeColors.text }]}
+                    numberOfLines={1}
+                  >
+                    {toWallet?.name || 'Select Wallet'}
+                  </Text>
+                </View>
+
+                <Text style={[styles.balanceSubtext, { color: themeColors.textMuted }]}>
+                  CURRENT: {formatCurrency(toBalance, baseCurrency)}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Transfer Amount Input Card */}
+            <View
+              style={[
+                styles.amountCard,
+                {
+                  backgroundColor: themeColors.surface,
+                  borderColor: themeColors.cardBorder,
+                },
+              ]}
+            >
+              <Text style={[styles.microLabel, { color: themeColors.textMuted, marginBottom: 8 }]}>
+                TRANSFER AMOUNT ({baseCurrency})
+              </Text>
+
+              <TextInput
+                value={amount}
+                onChangeText={setAmount}
+                placeholder="0.00"
+                placeholderTextColor={themeColors.textMuted}
+                keyboardType="decimal-pad"
+                style={[styles.amountInput, { color: themeColors.text }]}
+                autoFocus={!isEditMode}
+              />
+
+              {/* Quick Percentage Chips */}
+              <View style={styles.chipsRow}>
+                <TouchableOpacity
+                  onPress={() => handleQuickPercent(0.25)}
+                  style={[styles.chip, { borderColor: themeColors.hairline }]}
+                >
+                  <Text style={[styles.chipText, { color: themeColors.text }]}>25%</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => handleQuickPercent(0.5)}
+                  style={[styles.chip, { borderColor: themeColors.hairline }]}
+                >
+                  <Text style={[styles.chipText, { color: themeColors.text }]}>50%</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => handleQuickPercent(1.0)}
+                  style={[
+                    styles.chip,
+                    {
+                      borderColor: themeColors.text,
+                      backgroundColor: themeColors.text,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.chipText, { color: themeColors.background }]}>MAX</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Optional Note / Memo */}
+            <View
+              style={[
+                styles.noteCard,
+                {
+                  backgroundColor: themeColors.surface,
+                  borderColor: themeColors.cardBorder,
+                },
+              ]}
+            >
+              <Text style={[styles.microLabel, { color: themeColors.textMuted, marginBottom: 8 }]}>
+                OPTIONAL NOTE
+              </Text>
+              <TextInput
+                value={description}
+                onChangeText={setDescription}
+                placeholder="e.g. Savings allocation, Rent coverage"
+                placeholderTextColor={themeColors.textMuted}
+                style={[
+                  styles.noteInput,
+                  {
+                    color: themeColors.text,
+                    borderColor: themeColors.hairline,
+                    backgroundColor: themeColors.background,
+                  },
+                ]}
+              />
+            </View>
+
+            {/* Confirm Transfer Button */}
+            <TouchableOpacity
+              activeOpacity={0.8}
+              disabled={saving}
+              onPress={handleTransfer}
+              style={[
+                styles.submitButton,
+                {
+                  backgroundColor: themeColors.text,
+                  borderColor: themeColors.text,
+                },
+              ]}
+            >
+              {saving ? (
+                <ActivityIndicator color={themeColors.background} size="small" />
+              ) : (
+                <Text style={[styles.submitButtonText, { color: themeColors.background }]}>
+                  CONFIRM TRANSFER
+                </Text>
+              )}
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            {/* 2. Hero Tabular Amount Card */}
+            <View
           style={[
             styles.amountCard,
             {
@@ -397,7 +753,7 @@ export const AddTransactionScreen: React.FC = () => {
               activeOpacity={0.7}
               onPress={() => {
                 triggerHaptic('selection');
-                setWalletPickerVisible(true);
+                setWalletPickerTarget('single');
               }}
               style={[
                 styles.walletChip,
@@ -545,18 +901,20 @@ export const AddTransactionScreen: React.FC = () => {
             </Text>
           )}
         </TouchableOpacity>
+          </>
+        )}
       </ScrollView>
 
       {/* Wallet Picker Modal */}
       <Modal
-        visible={walletPickerVisible}
+        visible={walletPickerTarget !== null}
         transparent
         animationType="fade"
-        onRequestClose={() => setWalletPickerVisible(false)}
+        onRequestClose={() => setWalletPickerTarget(null)}
       >
         <TouchableOpacity
           activeOpacity={1}
-          onPress={() => setWalletPickerVisible(false)}
+          onPress={() => setWalletPickerTarget(null)}
           style={styles.modalBackdrop}
         >
           <View
@@ -570,24 +928,41 @@ export const AddTransactionScreen: React.FC = () => {
           >
             <View style={[styles.sheetHeader, { borderBottomColor: themeColors.hairline }]}>
               <Text style={[styles.sheetTitle, { color: themeColors.text }]}>
-                SELECT WALLET
+                {walletPickerTarget === 'from'
+                  ? 'SELECT SOURCE WALLET'
+                  : walletPickerTarget === 'to'
+                  ? 'SELECT DESTINATION WALLET'
+                  : 'SELECT WALLET'}
               </Text>
-              <TouchableOpacity onPress={() => setWalletPickerVisible(false)}>
+              <TouchableOpacity onPress={() => setWalletPickerTarget(null)}>
                 <MaterialCommunityIcons name="close" size={20} color={themeColors.textMuted} />
               </TouchableOpacity>
             </View>
 
             <ScrollView style={{ maxHeight: 320 }}>
               {wallets.map((w) => {
-                const isSelected = selectedWalletId === w.id;
+                const currentSelected =
+                  walletPickerTarget === 'from'
+                    ? fromWalletId
+                    : walletPickerTarget === 'to'
+                    ? toWalletId
+                    : selectedWalletId;
+                const isSelected = currentSelected === w.id;
+                const b = derivedBalances[w.id] ?? 0;
                 return (
                   <TouchableOpacity
                     key={w.id}
                     activeOpacity={0.7}
                     onPress={() => {
                       triggerHaptic('selection');
-                      setSelectedWalletId(w.id);
-                      setWalletPickerVisible(false);
+                      if (walletPickerTarget === 'from') {
+                        setFromWalletId(w.id);
+                      } else if (walletPickerTarget === 'to') {
+                        setToWalletId(w.id);
+                      } else {
+                        setSelectedWalletId(w.id);
+                      }
+                      setWalletPickerTarget(null);
                     }}
                     style={[
                       styles.pickerRow,
@@ -601,9 +976,14 @@ export const AddTransactionScreen: React.FC = () => {
                         color={themeColors.text}
                         style={{ marginRight: 10 }}
                       />
-                      <Text style={[styles.pickerName, { color: themeColors.text }]}>
-                        {w.name}
-                      </Text>
+                      <View>
+                        <Text style={[styles.pickerName, { color: themeColors.text }]}>
+                          {w.name}
+                        </Text>
+                        <Text style={[styles.pickerBalance, { color: themeColors.textMuted }]}>
+                          {formatCurrency(b, baseCurrency)}
+                        </Text>
+                      </View>
                     </View>
                     {isSelected && (
                       <MaterialCommunityIcons name="check" size={18} color={themeColors.text} />
@@ -885,5 +1265,100 @@ const styles = StyleSheet.create({
   pickerName: {
     fontSize: 15,
     fontWeight: '600',
+  },
+  pickerBalance: {
+    fontSize: 11,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+    marginTop: 2,
+  },
+  routeCard: {
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    padding: 16,
+    marginBottom: 16,
+  },
+  walletBox: {
+    paddingVertical: 4,
+  },
+  walletMetaTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  walletSelectedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  iconSmall: {
+    width: 28,
+    height: 28,
+    borderRadius: 2,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  walletTitleText: {
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  balanceSubtext: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    fontVariant: ['tabular-nums'],
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  hairlineSegment: {
+    flex: 1,
+    height: 1,
+  },
+  swapButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 2,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 10,
+  },
+  chipsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+  chip: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 2,
+    paddingVertical: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  noteCard: {
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    padding: 16,
+    marginBottom: 16,
+  },
+  noteInput: {
+    borderWidth: 1,
+    borderRadius: 2,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
   },
 });

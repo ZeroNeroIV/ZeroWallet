@@ -20,9 +20,11 @@ export type AuthStackParamList = {
 export type MainStackParamList = {
   Dashboard: undefined;
   AddTransaction: {
-    type?: 'income' | 'expense';
+    type?: 'income' | 'expense' | 'transfer';
     initialDate?: number;
     transactionId?: string;
+    fromWalletId?: string;
+    toWalletId?: string;
   } | undefined;
   TransactionHistory: undefined;
   TransactionDetails: {

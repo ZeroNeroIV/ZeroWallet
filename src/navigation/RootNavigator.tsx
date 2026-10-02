@@ -38,7 +38,7 @@ const linking = {
           AddTransaction: {
             path: 'add-transaction',
             parse: {
-              type: (type: string) => type as 'income' | 'expense',
+              type: (type: string) => type as 'income' | 'expense' | 'transfer',
             },
           },
         },
