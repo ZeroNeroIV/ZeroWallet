@@ -1,443 +1,484 @@
+/**
+ * Purpose: Full-screen Simplizum Goal creation and editing screen.
+ */
+
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-    View,
-    Text,
-    StyleSheet,
-    ScrollView,
-    Alert,
-    TouchableOpacity,
-    Switch,
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Alert,
+  TouchableOpacity,
+  TextInput,
+  SafeAreaView,
+  StatusBar,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RouteProp } from '@react-navigation/native';
 import type { MainStackParamList } from '../../types/navigation';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { Input } from '../../components/forms/Input';
-import { AmountInput } from '../../components/forms/AmountInput';
-import { Button } from '../../components/forms/Button';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+
+import { useThemeColors } from '../../hooks/useThemeColors';
 import { useAuthStore } from '../../store/authStore';
-import { GoalRepository } from '../../database/repositories/GoalRepository';
-import { validateGoalInput, getFundingSourceIcon } from '../../utils/goalUtils';
+import { useAccountStore } from '../../store/accountStore';
 import { spacing, borderRadius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import type { GoalFundingSource } from '../../types/models';
-import { useThemeColors } from '../../hooks/useThemeColors';
-import { formatCurrency } from '../../constants/currencies';
+import { getCurrencySymbol } from '../../utils/currencyFormatter';
+import { triggerHaptic } from '../../services/haptics/hapticFeedback';
+import { GoalRepository } from '../../database/repositories/GoalRepository';
+import { AccountRepository } from '../../database/repositories/AccountRepository';
 
-type CreateGoalNavigationProp = StackNavigationProp<MainStackParamList, 'CreateGoal'>;
-type CreateGoalRouteProp = RouteProp<MainStackParamList, 'CreateGoal' | 'EditGoal'>;
+type NavigationProp = StackNavigationProp<MainStackParamList, 'CreateGoal'>;
+type ScreenRouteProp = RouteProp<MainStackParamList, 'CreateGoal'>;
 
-// Goal icons (emojis for simplicity)
 const GOAL_ICONS = [
-    '🎯', '💰', '🏠', '🚗', '✈️', '🎓', '💍', '🎮',
-    '📱', '💻', '⌚', '🚲', '🏖️', '🎸', '📷', '🎨',
-    '👕', '👟', '🎁', '🏆', '💎', '🌟', '🔑', '🛍️',
+  '🎯', '💰', '🏠', '🚗', '✈️', '🎓', '💍', '🎮',
+  '💻', '🏖️', '🛡️', '💎', '🚲', '🎁', '🏆', '🌟',
 ];
 
-// Goal colors
-const GOAL_COLORS = [
-    '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
-    '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1',
-    '#14b8a6', '#f43f5e', '#a855f7', '#22c55e', '#eab308',
+const ARCHITECTURAL_COLORS = [
+  '#EF4444',
+  '#F97316',
+  '#F59E0B',
+  '#10B981',
+  '#06B6D4',
+  '#3B82F6',
+  '#6366F1',
+  '#8B5CF6',
+  '#EC4899',
+  '#64748B',
 ];
 
 export default function CreateGoalScreen() {
-    const navigation = useNavigation<CreateGoalNavigationProp>();
-    const route = useRoute<CreateGoalRouteProp>();
-    const { currentAccountId } = useAuthStore();
-    const themeColors = useThemeColors();
+  const navigation = useNavigation<NavigationProp>();
+  const route = useRoute<ScreenRouteProp>();
+  const themeColors = useThemeColors();
 
-    const isEditMode = route.params && 'goalId' in route.params;
-    const goalId = route.params && 'goalId' in route.params ? route.params.goalId : undefined;
+  const currentUser = useAuthStore((s) => s.currentUser);
+  const currentAccountId = useAuthStore((s) => s.currentAccountId) || useAccountStore((s) => s.currentAccountId);
 
-    const [name, setName] = useState('');
-    const [hasTargetAmount, setHasTargetAmount] = useState(true);
-    const [targetAmount, setTargetAmount] = useState('');
-    const [accountCurrency, setAccountCurrency] = useState<string>('USD');
-    const [fundingSource, setFundingSource] = useState<GoalFundingSource>('both');
-    const [selectedIcon, setSelectedIcon] = useState(GOAL_ICONS[0]);
-    const [selectedColor, setSelectedColor] = useState(GOAL_COLORS[0]);
-    const [loading, setLoading] = useState(false);
+  const routeParams = (route.params as any) || {};
+  const goalId = routeParams.goalId;
+  const isEditMode = Boolean(goalId);
 
-    const goalRepo = new GoalRepository();
-    const styles = useMemo(() => createStyles(themeColors), [themeColors]);
+  const [name, setName] = useState('');
+  const [targetAmount, setTargetAmount] = useState('');
+  const [selectedIcon, setSelectedIcon] = useState(GOAL_ICONS[0]);
+  const [selectedColor, setSelectedColor] = useState(ARCHITECTURAL_COLORS[3]);
+  const [currency, setCurrency] = useState('USD');
+  const [saving, setSaving] = useState(false);
 
-    useEffect(() => {
-        if (isEditMode && goalId) {
-            loadGoal();
-        }
-        loadAccountCurrency();
-    }, []);
+  const currencySymbol = useMemo(() => getCurrencySymbol(currency), [currency]);
 
-    const loadAccountCurrency = async () => {
-        try {
-            const currentAccountId = useAuthStore.getState().currentAccountId;
-            if (currentAccountId) {
-                const { AccountRepository } = await import('../../database/repositories/AccountRepository');
-                const acc = await new AccountRepository().findById(currentAccountId);
-                if (acc?.currency) {
-                    setAccountCurrency(acc.currency);
-                }
+  useEffect(() => {
+    loadAccountCurrency();
+    if (goalId) {
+      loadGoal(goalId);
+    }
+  }, [goalId]);
+
+  const loadAccountCurrency = async () => {
+    if (!currentAccountId) return;
+    try {
+      const accRepo = new AccountRepository();
+      const acc = await accRepo.findById(currentAccountId);
+      if (acc?.currency) setCurrency(acc.currency);
+    } catch (err) {
+      console.warn('[CreateGoal] Could not load account currency:', err);
+    }
+  };
+
+  const loadGoal = async (id: string) => {
+    try {
+      const goalRepo = new GoalRepository();
+      const g = await goalRepo.findById(id);
+      if (g) {
+        setName(g.name);
+        setTargetAmount(g.targetAmount ? g.targetAmount.toString() : '');
+        setSelectedIcon(g.icon || GOAL_ICONS[0]);
+        setSelectedColor(g.color || ARCHITECTURAL_COLORS[0]);
+      }
+    } catch (err) {
+      console.error('[CreateGoal] Failed to load goal:', err);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!currentAccountId) return;
+    if (!name.trim()) {
+      Alert.alert('Required', 'Please enter a goal name');
+      return;
+    }
+
+    const parsedTarget = targetAmount.trim() ? parseFloat(targetAmount) : null;
+    if (parsedTarget !== null && (isNaN(parsedTarget) || parsedTarget <= 0)) {
+      Alert.alert('Invalid Target', 'Please enter a target amount greater than 0');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      triggerHaptic('notificationSuccess');
+      const goalRepo = new GoalRepository();
+
+      if (isEditMode && goalId) {
+        await goalRepo.update(goalId, {
+          name: name.trim(),
+          targetAmount: parsedTarget,
+          icon: selectedIcon,
+          color: selectedColor,
+        });
+      } else {
+        await goalRepo.create({
+          accountId: currentAccountId,
+          name: name.trim(),
+          targetAmount: parsedTarget,
+          currentAmount: 0,
+          fundingSource: 'main',
+          icon: selectedIcon,
+          color: selectedColor,
+        });
+      }
+
+      navigation.goBack();
+    } catch (err: any) {
+      console.error('[CreateGoal] Save failed:', err);
+      Alert.alert('Error', err?.message || 'Failed to save goal');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = () => {
+    if (!goalId) return;
+    Alert.alert(
+      'Delete Goal',
+      `Are you sure you want to delete "${name}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              triggerHaptic('notificationWarning');
+              const goalRepo = new GoalRepository();
+              await goalRepo.delete(goalId);
+              navigation.goBack();
+            } catch (err: any) {
+              Alert.alert('Error', err?.message || 'Failed to delete goal');
             }
-        } catch (err) {
-            console.warn('[CreateGoal] Could not load account currency:', err);
-        }
-    };
-
-    const loadGoal = async () => {
-        if (!goalId) return;
-
-        try {
-            const goal = await goalRepo.findById(goalId);
-            if (goal) {
-                setName(goal.name);
-                setHasTargetAmount(goal.targetAmount !== null);
-                setTargetAmount(goal.targetAmount?.toString() || '');
-                setFundingSource(goal.fundingSource);
-                setSelectedIcon(goal.icon);
-                setSelectedColor(goal.color);
-            } else {
-                Alert.alert('Error', 'Goal not found');
-                navigation.goBack();
-            }
-        } catch (error) {
-            console.error('[CreateGoal] Failed to load goal:', error);
-            Alert.alert('Error', 'Failed to load goal');
-            navigation.goBack();
-        }
-    };
-
-    const handleSave = async () => {
-        if (!currentAccountId) {
-            Alert.alert('Error', 'No account selected');
-            return;
-        }
-
-        const targetAmountValue = hasTargetAmount ? parseFloat(targetAmount) || null : null;
-
-        const validation = validateGoalInput(name, targetAmountValue, fundingSource);
-        if (!validation.valid) {
-            Alert.alert('Validation Error', validation.error);
-            return;
-        }
-
-        setLoading(true);
-
-        try {
-            if (isEditMode && goalId) {
-                await goalRepo.update(goalId, {
-                    name: name.trim(),
-                    targetAmount: targetAmountValue,
-                    fundingSource,
-                    icon: selectedIcon,
-                    color: selectedColor,
-                });
-
-                Alert.alert('Success', 'Goal updated successfully', [
-                    { text: 'OK', onPress: () => navigation.goBack() },
-                ]);
-            } else {
-                await goalRepo.create({
-                    accountId: currentAccountId,
-                    name: name.trim(),
-                    targetAmount: targetAmountValue,
-                    fundingSource,
-                    icon: selectedIcon,
-                    color: selectedColor,
-                });
-
-                Alert.alert('Success', 'Goal created successfully', [
-                    { text: 'OK', onPress: () => navigation.goBack() },
-                ]);
-            }
-        } catch (error) {
-            console.error('[CreateGoal] Failed to save goal:', error);
-            Alert.alert('Error', 'Failed to save goal');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const fundingSources: Array<{ key: GoalFundingSource; label: string; icon: string }> = [
-        { key: 'main', label: 'Main Balance', icon: 'wallet' },
-        { key: 'savings', label: 'Savings', icon: 'piggy-bank' },
-        { key: 'both', label: 'Main & Savings', icon: 'wallet-plus' },
-    ];
-
-    return (
-        <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-            {/* Goal Name */}
-            <Input
-                label="Goal Name"
-                placeholder="e.g., Buy a car, Vacation to Hawaii"
-                value={name}
-                onChangeText={setName}
-                leftIcon="target"
-                autoFocus={!isEditMode}
-            />
-
-            {/* Target Amount Toggle */}
-            <View style={styles.section}>
-                <View style={styles.toggleRow}>
-                    <View style={{ flex: 1 }}>
-                        <Text style={styles.sectionTitle}>Set Target Amount</Text>
-                        <Text style={styles.sectionSubtitle}>
-                            {hasTargetAmount ? 'Goal has a specific price' : 'Just tracking by name'}
-                        </Text>
-                    </View>
-                    <Switch
-                        value={hasTargetAmount}
-                        onValueChange={setHasTargetAmount}
-                        trackColor={{ false: themeColors.border, true: themeColors.primary + '60' }}
-                        thumbColor={hasTargetAmount ? themeColors.primary : themeColors.textSecondary}
-                    />
-                </View>
-            </View>
-
-            {/* Amount Input (conditional) */}
-            {hasTargetAmount && (
-                <AmountInput
-                    label="Target Amount"
-                    value={targetAmount}
-                    onChangeText={setTargetAmount}
-                    placeholder="0.000"
-                />
-            )}
-
-            {/* Funding Source */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Funding Source</Text>
-                <Text style={styles.sectionSubtitle}>
-                    Choose which vault(s) to track for this goal
-                </Text>
-                <View style={styles.fundingGrid}>
-                    {fundingSources.map((source) => (
-                        <TouchableOpacity
-                            key={source.key}
-                            style={[
-                                styles.fundingOption,
-                                fundingSource === source.key && styles.fundingOptionSelected,
-                                { borderColor: fundingSource === source.key ? themeColors.primary : themeColors.border },
-                            ]}
-                            onPress={() => setFundingSource(source.key)}
-                        >
-                            <MaterialCommunityIcons
-                                name={source.icon as any}
-                                size={28}
-                                color={fundingSource === source.key ? themeColors.primary : themeColors.textSecondary}
-                            />
-                            <Text
-                                style={[
-                                    styles.fundingLabel,
-                                    fundingSource === source.key && { color: themeColors.primary },
-                                ]}
-                            >
-                                {source.label}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
-                </View>
-            </View>
-
-            {/* Icon Picker */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Choose Icon</Text>
-                <View style={styles.iconGrid}>
-                    {GOAL_ICONS.map((icon) => (
-                        <TouchableOpacity
-                            key={icon}
-                            style={[
-                                styles.iconOption,
-                                selectedIcon === icon && styles.iconOptionSelected,
-                                { borderColor: selectedIcon === icon ? selectedColor : themeColors.border },
-                            ]}
-                            onPress={() => setSelectedIcon(icon)}
-                        >
-                            <Text style={styles.iconText}>{icon}</Text>
-                        </TouchableOpacity>
-                    ))}
-                </View>
-            </View>
-
-            {/* Color Picker */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Choose Color</Text>
-                <View style={styles.colorGrid}>
-                    {GOAL_COLORS.map((color) => (
-                        <TouchableOpacity
-                            key={color}
-                            style={[
-                                styles.colorOption,
-                                { backgroundColor: color },
-                                selectedColor === color && styles.colorOptionSelected,
-                            ]}
-                            onPress={() => setSelectedColor(color)}
-                        >
-                            {selectedColor === color && (
-                                <MaterialCommunityIcons name="check" size={20} color="#FFFFFF" />
-                            )}
-                        </TouchableOpacity>
-                    ))}
-                </View>
-            </View>
-
-            {/* Preview */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Preview</Text>
-                <View style={styles.preview}>
-                    <View style={[styles.previewIcon, { backgroundColor: selectedColor + '20' }]}>
-                        <Text style={styles.previewIconText}>{selectedIcon}</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                        <Text style={styles.previewName}>{name || 'Goal Name'}</Text>
-                        {hasTargetAmount && targetAmount && (
-                            <Text style={styles.previewAmount}>Target: {formatCurrency(parseFloat(targetAmount) || 0, accountCurrency)}</Text>
-                        )}
-                        <Text style={styles.previewSource}>
-                            From {fundingSources.find((s) => s.key === fundingSource)?.label || 'Unknown'}
-                        </Text>
-                    </View>
-                </View>
-            </View>
-
-            {/* Save Button */}
-            <View style={styles.footer}>
-                <Button
-                    title={isEditMode ? 'Update Goal' : 'Create Goal'}
-                    onPress={handleSave}
-                    loading={loading}
-                    leftIcon={<MaterialCommunityIcons name={isEditMode ? 'check' : 'plus'} size={20} color="#FFF" />}
-                />
-            </View>
-        </ScrollView>
+          },
+        },
+      ]
     );
+  };
+
+  return (
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]}>
+      <StatusBar
+        barStyle={themeColors.isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={themeColors.background}
+      />
+
+      {/* Header Bar */}
+      <View style={[styles.headerBar, { borderBottomColor: themeColors.borderSubtle }]}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={[styles.headerNavButton, { borderColor: themeColors.borderSubtle }]}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Icon name="close" size={18} color={themeColors.text} />
+        </TouchableOpacity>
+
+        <View style={styles.headerTitleBox}>
+          <Text style={[styles.headerSubtitle, { color: themeColors.textMuted }]}>
+            {isEditMode ? 'TARGET RECONFIGURATION' : 'SAVINGS INITIATIVE'}
+          </Text>
+          <Text style={[styles.headerTitle, { color: themeColors.text }]}>
+            {isEditMode ? 'Edit Target' : 'Create Goal'}
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          onPress={handleSave}
+          disabled={saving}
+          style={[styles.saveHeaderButton, { backgroundColor: themeColors.text }]}
+        >
+          <Text style={[styles.saveHeaderText, { color: themeColors.background }]}>
+            {saving ? '...' : 'SAVE'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Goal Name */}
+        <View style={styles.sectionBlock}>
+          <Text style={[styles.inputLabel, { color: themeColors.textSecondary }]}>
+            TARGET NAME
+          </Text>
+          <TextInput
+            style={[
+              styles.textInput,
+              {
+                color: themeColors.text,
+                backgroundColor: themeColors.surface,
+                borderColor: themeColors.border,
+              },
+            ]}
+            placeholder="e.g. Vacation Fund, Down Payment, New Laptop"
+            placeholderTextColor={themeColors.textMuted}
+            value={name}
+            onChangeText={setName}
+            autoCapitalize="words"
+          />
+        </View>
+
+        {/* Target Amount */}
+        <View style={styles.sectionBlock}>
+          <Text style={[styles.inputLabel, { color: themeColors.textSecondary }]}>
+            TARGET AMOUNT ({currency})
+          </Text>
+          <View
+            style={[
+              styles.amountInputRow,
+              {
+                backgroundColor: themeColors.surface,
+                borderColor: themeColors.border,
+              },
+            ]}
+          >
+            <Text style={[styles.currencyPrefix, { color: themeColors.textMuted }]}>
+              {currencySymbol}
+            </Text>
+            <TextInput
+              style={[styles.amountInput, { color: themeColors.text }]}
+              placeholder="0.00"
+              placeholderTextColor={themeColors.textMuted}
+              keyboardType="numeric"
+              value={targetAmount}
+              onChangeText={setTargetAmount}
+            />
+          </View>
+        </View>
+
+        {/* Symbol Selection */}
+        <View style={styles.sectionBlock}>
+          <Text style={[styles.inputLabel, { color: themeColors.textSecondary }]}>
+            SELECT SYMBOL
+          </Text>
+          <View style={styles.iconGrid}>
+            {GOAL_ICONS.map((ic) => {
+              const isSelected = ic === selectedIcon;
+              return (
+                <TouchableOpacity
+                  key={ic}
+                  style={[
+                    styles.iconItem,
+                    {
+                      borderColor: isSelected ? themeColors.text : themeColors.borderSubtle,
+                      backgroundColor: isSelected
+                        ? themeColors.surfaceElevated
+                        : 'transparent',
+                    },
+                  ]}
+                  onPress={() => {
+                    triggerHaptic('selection');
+                    setSelectedIcon(ic);
+                  }}
+                >
+                  <Text style={styles.emojiText}>{ic}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Architectural Palette */}
+        <View style={styles.sectionBlock}>
+          <Text style={[styles.inputLabel, { color: themeColors.textSecondary }]}>
+            ARCHITECTURAL ACCENT COLOR
+          </Text>
+          <View style={styles.colorRow}>
+            {ARCHITECTURAL_COLORS.map((c) => {
+              const isSelected = c === selectedColor;
+              return (
+                <TouchableOpacity
+                  key={c}
+                  style={[
+                    styles.colorSwatch,
+                    {
+                      backgroundColor: c,
+                      borderColor: isSelected ? themeColors.text : 'transparent',
+                    },
+                  ]}
+                  onPress={() => {
+                    triggerHaptic('selection');
+                    setSelectedColor(c);
+                  }}
+                >
+                  {isSelected && <Icon name="check" size={12} color="#FFFFFF" />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Delete Option */}
+        {isEditMode && (
+          <TouchableOpacity
+            style={[
+              styles.deleteButton,
+              { borderColor: themeColors.error, backgroundColor: `${themeColors.error}10` },
+            ]}
+            onPress={handleDelete}
+          >
+            <Icon name="trash-can-outline" size={16} color={themeColors.error} />
+            <Text style={[styles.deleteButtonText, { color: themeColors.error }]}>
+              DELETE TARGET
+            </Text>
+          </TouchableOpacity>
+        )}
+      </ScrollView>
+    </SafeAreaView>
+  );
 }
 
-const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
-    StyleSheet.create({
-        container: {
-            flex: 1,
-            backgroundColor: themeColors.background,
-        },
-        content: {
-            padding: spacing.md,
-            paddingBottom: spacing.xxxl,
-        },
-        section: {
-            marginBottom: spacing.xl,
-        },
-        toggleRow: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-        },
-        sectionTitle: {
-            ...typography.h3,
-            marginBottom: spacing.xs,
-            color: themeColors.text,
-        },
-        sectionSubtitle: {
-            ...typography.caption,
-            color: themeColors.textSecondary,
-        },
-        fundingGrid: {
-            flexDirection: 'row',
-            gap: spacing.sm,
-            marginTop: spacing.md,
-        },
-        fundingOption: {
-            flex: 1,
-            alignItems: 'center',
-            padding: spacing.md,
-            borderRadius: borderRadius.md,
-            borderWidth: 2,
-            backgroundColor: themeColors.surface,
-            gap: spacing.xs,
-        },
-        fundingOptionSelected: {
-            backgroundColor: themeColors.background,
-        },
-        fundingLabel: {
-            ...typography.caption,
-            fontWeight: '600',
-            color: themeColors.textSecondary,
-            textAlign: 'center',
-        },
-        iconGrid: {
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            gap: spacing.sm,
-            marginTop: spacing.md,
-        },
-        iconOption: {
-            width: 56,
-            height: 56,
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: borderRadius.md,
-            borderWidth: 2,
-            backgroundColor: themeColors.surface,
-        },
-        iconOptionSelected: {
-            borderWidth: 3,
-            backgroundColor: themeColors.background,
-        },
-        iconText: {
-            fontSize: 28,
-        },
-        colorGrid: {
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            gap: spacing.sm,
-            marginTop: spacing.md,
-        },
-        colorOption: {
-            width: 48,
-            height: 48,
-            borderRadius: 24,
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderWidth: 3,
-            borderColor: 'transparent',
-        },
-        colorOptionSelected: {
-            borderColor: themeColors.text,
-        },
-        preview: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            padding: spacing.lg,
-            backgroundColor: themeColors.surface,
-            borderRadius: borderRadius.lg,
-            gap: spacing.md,
-            marginTop: spacing.md,
-        },
-        previewIcon: {
-            width: 56,
-            height: 56,
-            borderRadius: 28,
-            alignItems: 'center',
-            justifyContent: 'center',
-        },
-        previewIconText: {
-            fontSize: 28,
-        },
-        previewName: {
-            ...typography.h3,
-            color: themeColors.text,
-            marginBottom: spacing.xs,
-        },
-        previewAmount: {
-            ...typography.body,
-            fontWeight: '600',
-            color: themeColors.primary,
-        },
-        previewSource: {
-            ...typography.caption,
-            color: themeColors.textSecondary,
-        },
-        footer: {
-            marginTop: spacing.lg,
-        },
-    });
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+  },
+  headerNavButton: {
+    width: 32,
+    height: 32,
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitleBox: {
+    flex: 1,
+    marginLeft: spacing.md,
+  },
+  headerSubtitle: {
+    fontSize: 9,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 1,
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: typography.weights.bold,
+    letterSpacing: -0.3,
+    marginTop: 1,
+  },
+  saveHeaderButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: borderRadius.xs,
+  },
+  saveHeaderText: {
+    fontSize: 11,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 0.8,
+  },
+  scroll: {
+    flex: 1,
+    paddingHorizontal: spacing.lg,
+  },
+  scrollContent: {
+    paddingVertical: spacing.lg,
+    gap: spacing.lg,
+  },
+  sectionBlock: {
+    gap: spacing.xs,
+  },
+  inputLabel: {
+    fontSize: 10,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 0.8,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    fontSize: 14,
+  },
+  amountInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    paddingHorizontal: spacing.md,
+  },
+  currencyPrefix: {
+    fontSize: 16,
+    fontWeight: typography.weights.bold,
+    marginRight: spacing.xs,
+  },
+  amountInput: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: typography.weights.bold,
+    fontVariant: ['tabular-nums'],
+    paddingVertical: spacing.sm,
+  },
+  iconGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  iconItem: {
+    width: 40,
+    height: 40,
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emojiText: {
+    fontSize: 18,
+  },
+  colorRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  colorSwatch: {
+    width: 28,
+    height: 28,
+    borderRadius: borderRadius.xs,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.md,
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    marginTop: spacing.md,
+  },
+  deleteButtonText: {
+    fontSize: 11,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 0.8,
+  },
+});

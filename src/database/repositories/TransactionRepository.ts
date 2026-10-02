@@ -14,6 +14,8 @@ const FIELD_MAPPINGS: FieldMapping[] = [
   { field: 'description', column: 'description' },
   { field: 'date', column: 'date' },
   { field: 'vaultType', column: 'vault_type' },
+  { field: 'walletId', column: 'wallet_id' },
+  { field: 'destinationWalletId', column: 'destination_wallet_id' },
   { field: 'isRecurring', column: 'is_recurring' },
   { field: 'recurringExpenseId', column: 'recurring_expense_id' },
   { field: 'subscriptionId', column: 'subscription_id' },
@@ -38,6 +40,8 @@ export class TransactionRepository extends BaseRepository<Transaction, Transacti
       description: row.description as string,
       date: row.date as number,
       vaultType: row.vault_type as Transaction['vaultType'],
+      walletId: (row.wallet_id as string) || (row.vault_type as string),
+      destinationWalletId: (row.destination_wallet_id as string) || undefined,
       isRecurring: (row.is_recurring as number) === 1,
       recurringExpenseId: row.recurring_expense_id as string | undefined,
       subscriptionId: row.subscription_id as string | undefined,
@@ -61,6 +65,23 @@ export class TransactionRepository extends BaseRepository<Transaction, Transacti
     return this.rawQuery(
       'SELECT * FROM transactions WHERE account_id = ? ORDER BY date DESC, created_at DESC',
       [accountId],
+    );
+  }
+
+  async findByWallet(walletId: string, accountId: string, limit?: number): Promise<Transaction[]> {
+    if (limit) {
+      return this.rawQuery(
+        `SELECT * FROM transactions
+         WHERE account_id = ? AND (wallet_id = ? OR vault_type = ? OR destination_wallet_id = ?)
+         ORDER BY date DESC, created_at DESC LIMIT ?`,
+        [accountId, walletId, walletId, walletId, limit],
+      );
+    }
+    return this.rawQuery(
+      `SELECT * FROM transactions
+       WHERE account_id = ? AND (wallet_id = ? OR vault_type = ? OR destination_wallet_id = ?)
+       ORDER BY date DESC, created_at DESC`,
+      [accountId, walletId, walletId, walletId],
     );
   }
 

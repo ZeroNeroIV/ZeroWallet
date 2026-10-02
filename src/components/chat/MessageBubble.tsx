@@ -1,16 +1,10 @@
 /**
- * Purpose: Display individual chat message bubble with styling and copy functionality
+ * MessageBubble — Simplizum Architectural Ledger Message
  *
- * Inputs:
- *   - message (AIMessage): Message object containing content, role, timestamp
- *
- * Outputs:
- *   - Returns (JSX.Element): Styled message bubble (user or AI)
- *
- * Side effects:
- *   - Copies message text to clipboard on long press
- *   - Shows toast/alert confirmation when copied
- *   - Triggers haptic feedback on long press
+ * Razor-thin hairline message cells:
+ *  - Subtle right-aligned user frames with monospace timestamps
+ *  - Structured left-aligned assistant blocks with system metadata
+ *  - Embedded inline mutation tickets (PendingActionCard)
  */
 
 import React, { useMemo, useCallback } from 'react';
@@ -24,10 +18,10 @@ import {
 import Clipboard from '@react-native-clipboard/clipboard';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import type { AIMessage } from '../../types/ai';
-import { spacing, borderRadius } from '../../theme/spacing';
+import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { mediumHaptic } from '../../services/haptics/hapticFeedback';
+import { lightHaptic } from '../../services/haptics/hapticFeedback';
 import { useAIChatStore } from '../../store/aiChatStore';
 import { PendingActionCard } from './PendingActionCard';
 
@@ -46,89 +40,56 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
 
   const isUser = message.role === 'user';
 
-  // Format timestamp
   const formattedTime = useMemo(() => {
     const date = new Date(message.timestamp);
-    const hours = date.getHours();
-    const minutes = date.getMinutes();
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    const displayHours = hours % 12 || 12;
-    const displayMinutes = minutes < 10 ? `0${minutes}` : minutes;
-    return `${displayHours}:${displayMinutes} ${ampm}`;
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    return `${hours}:${minutes}`;
   }, [message.timestamp]);
 
-  // Handle long press to copy message
   const handleLongPress = useCallback(() => {
-    mediumHaptic();
+    lightHaptic();
     Clipboard.setString(message.content);
-    Alert.alert('Copied', 'Message copied to clipboard');
+    Alert.alert('COPIED', 'Message content copied to clipboard.');
   }, [message.content]);
 
-  // Handle pending action confirmation
-  const handleConfirmAction = useCallback(async (actionId: string) => {
-    await confirmAction(actionId);
-  }, [confirmAction]);
+  const handleConfirmAction = useCallback(
+    async (actionId: string) => {
+      await confirmAction(actionId);
+    },
+    [confirmAction]
+  );
 
   return (
-    <View style={[styles.container, isUser ? styles.userContainer : styles.aiContainer]}>
+    <View style={[styles.wrapper, isUser ? styles.userWrapper : styles.aiWrapper]}>
       <TouchableOpacity
         style={[
-          styles.bubble,
-          isUser ? styles.userBubble : styles.aiBubble,
-          message.isError && styles.errorBubble,
+          styles.cell,
+          isUser ? styles.userCell : styles.aiCell,
+          message.isError ? styles.errorCell : null,
         ]}
         onLongPress={handleLongPress}
-        activeOpacity={0.8}
-        delayLongPress={500}
+        activeOpacity={0.85}
+        delayLongPress={400}
       >
-        {/* AI Icon */}
-        {!isUser && (
-          <View style={styles.aiIconContainer}>
-            <MaterialCommunityIcons
-              name="robot-outline"
-              size={16}
-              color={themeColors.primary}
-            />
-          </View>
-        )}
+        {/* Cell Header Tag */}
+        <View style={styles.cellHeader}>
+          <Text style={styles.cellSuper}>
+            {isUser ? `USER COMMAND · ${formattedTime}` : `LAYA INTELLIGENCE · ${formattedTime}`}
+          </Text>
+        </View>
 
         {/* Message Content */}
-        <Text style={[styles.text, isUser ? styles.userText : styles.aiText]}>
+        <Text style={[styles.bodyText, message.isError ? styles.errorText : null]}>
           {message.content}
         </Text>
 
-        {/* Timestamp */}
-        <Text
-          style={[
-            styles.timestamp,
-            isUser ? styles.userTimestamp : styles.aiTimestamp,
-          ]}
-        >
-          {formattedTime}
-        </Text>
-
-        {/* Error Indicator */}
-        {message.isError && (
-          <View style={styles.errorIndicator}>
-            <MaterialCommunityIcons
-              name="alert-circle"
-              size={14}
-              color={themeColors.error}
-            />
-            <Text style={styles.errorText}>Failed to send</Text>
-          </View>
-        )}
-
-        {/* Function Calls Debug (optional) */}
+        {/* Debug Function Calls if any */}
         {message.functionCalls && message.functionCalls.length > 0 && (
-          <View style={styles.functionsDebug}>
-            <MaterialCommunityIcons
-              name="function"
-              size={12}
-              color={themeColors.textSecondary}
-            />
-            <Text style={styles.functionsText}>
-              Called: {message.functionCalls.join(', ')}
+          <View style={styles.debugRow}>
+            <MaterialCommunityIcons name="function" size={12} color={themeColors.textSecondary} />
+            <Text style={styles.debugText}>
+              DISPATCH: {message.functionCalls.join(', ').toUpperCase()}
             </Text>
           </View>
         )}
@@ -136,7 +97,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
 
       {/* Pending Action Card */}
       {pendingAction && pendingAction.status === 'pending' && !isUser && (
-        <View style={styles.pendingActionContainer}>
+        <View style={styles.pendingActionWrap}>
           <PendingActionCard
             action={pendingAction}
             onConfirm={handleConfirmAction}
@@ -148,122 +109,79 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
   );
 };
 
-const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
+const createStyles = (theme: any) =>
   StyleSheet.create({
-    // Container
-    container: {
+    wrapper: {
       width: '100%',
-      marginBottom: spacing.md,
-      paddingHorizontal: spacing.md,
-      alignItems: 'stretch', // Allow children to fill width
+      marginBottom: spacing.sm + 4,
     },
-    userContainer: {
+    userWrapper: {
       alignItems: 'flex-end',
     },
-    aiContainer: {
+    aiWrapper: {
       alignItems: 'flex-start',
     },
-
-    // Bubble
-    bubble: {
-      maxWidth: '80%',
-      borderRadius: borderRadius.lg,
-      padding: spacing.md,
-      position: 'relative',
-    },
-    userBubble: {
-      backgroundColor: themeColors.primary,
-      borderBottomRightRadius: spacing.xs,
-    },
-    aiBubble: {
-      backgroundColor: themeColors.surface,
+    cell: {
+      maxWidth: '88%',
       borderWidth: 1,
-      borderColor: themeColors.border,
-      borderBottomLeftRadius: spacing.xs,
+      borderRadius: 2,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm + 2,
     },
-    errorBubble: {
-      backgroundColor: themeColors.isDark
-        ? `${themeColors.error}20`
-        : `${themeColors.error}10`,
-      borderColor: themeColors.error,
+    userCell: {
+      borderColor: theme.hairline || theme.border,
+      backgroundColor: theme.card || theme.surface,
     },
-
-    // AI Icon
-    aiIconContainer: {
-      position: 'absolute',
-      top: spacing.sm,
-      left: spacing.sm,
-      width: 24,
-      height: 24,
-      borderRadius: 12,
-      backgroundColor: `${themeColors.primary}15`,
-      justifyContent: 'center',
-      alignItems: 'center',
+    aiCell: {
+      borderColor: theme.hairline || theme.border,
+      backgroundColor: theme.card || theme.surface,
+      borderLeftWidth: 2,
+      borderLeftColor: theme.text,
     },
-
-    // Text
-    text: {
-      ...typography.body,
-      lineHeight: 22,
+    errorCell: {
+      borderColor: '#FF3B30',
+      backgroundColor: '#FF3B3010',
+      borderLeftColor: '#FF3B30',
     },
-    userText: {
-      color: themeColors.neutral.white,
+    cellHeader: {
+      marginBottom: 4,
     },
-    aiText: {
-      color: themeColors.text,
-      paddingLeft: spacing.lg + spacing.sm, // Make room for AI icon
-    },
-
-    // Timestamp
-    timestamp: {
+    cellSuper: {
       ...typography.caption,
-      marginTop: spacing.xs,
+      color: theme.textSecondary,
+      fontSize: 9,
+      fontWeight: '700',
+      letterSpacing: 1,
+      fontFamily: 'monospace',
     },
-    userTimestamp: {
-      color: themeColors.neutral.white,
-      opacity: 0.8,
-      textAlign: 'right',
-    },
-    aiTimestamp: {
-      color: themeColors.textSecondary,
-      textAlign: 'left',
-      paddingLeft: spacing.lg + spacing.sm, // Align with message text
-    },
-
-    // Error Indicator
-    errorIndicator: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.xs,
-      marginTop: spacing.xs,
+    bodyText: {
+      ...typography.body,
+      color: theme.text,
+      fontSize: 13,
+      lineHeight: 19,
     },
     errorText: {
-      ...typography.caption,
-      color: themeColors.error,
-      fontWeight: typography.fontWeight.medium,
+      color: '#FF3B30',
     },
-
-    // Functions Debug
-    functionsDebug: {
+    debugRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: spacing.xs,
-      marginTop: spacing.xs,
-      paddingTop: spacing.xs,
+      gap: 4,
+      marginTop: 6,
+      paddingTop: 4,
       borderTopWidth: 1,
-      borderTopColor: themeColors.border,
+      borderTopColor: theme.hairline || theme.border,
     },
-    functionsText: {
+    debugText: {
       ...typography.caption,
-      color: themeColors.textSecondary,
-      fontStyle: 'italic',
-      flex: 1,
+      color: theme.textSecondary,
+      fontSize: 9,
+      fontFamily: 'monospace',
+      letterSpacing: 0.5,
     },
-
-    // Pending Action Container
-    pendingActionContainer: {
+    pendingActionWrap: {
       width: '100%',
-      marginTop: spacing.sm,
-      alignSelf: 'stretch',
+      maxWidth: '92%',
+      marginTop: 4,
     },
   });

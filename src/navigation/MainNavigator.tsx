@@ -29,10 +29,9 @@ import AISettingsScreen from '../screens/settings/AISettingsScreen';
 import ChatScreen from '../screens/chat/ChatScreen';
 import AllSectionsScreen from '../screens/sections/AllSectionsScreen';
 import TransferScreen from '../screens/accounts/TransferScreen';
+import WalletDetailScreen from '../screens/wallets/WalletDetailScreen';
+import { AnalyticsScreen } from '../screens/analytics/AnalyticsScreen';
 import { useThemeColors } from '../hooks/useThemeColors';
-import { TouchableOpacity, Alert } from 'react-native';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useAIChatStore } from '../store/aiChatStore';
 
 const Stack = createStackNavigator<MainStackParamList>();
 
@@ -44,12 +43,19 @@ export function MainNavigator() {
       screenOptions={{
         headerShown: true,
         headerStyle: {
-          backgroundColor: themeColors.primary,
+          backgroundColor: themeColors.surface,
+          borderBottomWidth: 1,
+          borderBottomColor: themeColors.hairline,
+          elevation: 0,
+          shadowOpacity: 0,
         },
-        headerTintColor: themeColors.onPrimary,
+        headerTintColor: themeColors.text,
         headerTitleStyle: {
+          fontSize: 13,
           fontWeight: '700',
-          color: themeColors.onPrimary,
+          letterSpacing: 1,
+          color: themeColors.text,
+          textTransform: 'uppercase',
         },
       }}
     >
@@ -76,7 +82,7 @@ export function MainNavigator() {
       <Stack.Screen
         name="Settings"
         component={SettingsScreen}
-        options={{ title: 'Settings' }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="AddTransaction"
@@ -150,12 +156,12 @@ export function MainNavigator() {
       <Stack.Screen
         name="SalarySettings"
         component={SalarySettingsScreen}
-        options={{ title: 'Salary Settings' }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="SmartNudges"
         component={SmartNudgesScreen}
-        options={{ title: 'Smart Nudges' }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="Wallets"
@@ -163,9 +169,14 @@ export function MainNavigator() {
         options={{ title: 'Wallets' }}
       />
       <Stack.Screen
+        name="WalletDetails"
+        component={WalletDetailScreen}
+        options={{ title: 'Wallet Details' }}
+      />
+      <Stack.Screen
         name="SecuritySettings"
         component={SecuritySettingsScreen}
-        options={{ title: 'Security Settings' }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="GoalsScreen"
@@ -213,50 +224,22 @@ export function MainNavigator() {
       <Stack.Screen
         name="AISettings"
         component={AISettingsScreen}
-        options={{ title: 'AI Settings' }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="ChatScreen"
         component={ChatScreen}
-        options={({ navigation }) => ({
-          title: 'AI Assistant',
-          headerRight: () => (
-            <TouchableOpacity
-              onPress={() => {
-                Alert.alert(
-                  'Clear Conversation',
-                  'Are you sure you want to clear all messages? This cannot be undone.',
-                  [
-                    {
-                      text: 'Cancel',
-                      style: 'cancel',
-                    },
-                    {
-                      text: 'Clear',
-                      style: 'destructive',
-                      onPress: () => {
-                        const { clearMessages } = useAIChatStore.getState();
-                        clearMessages();
-                      },
-                    },
-                  ]
-                );
-              }}
-              style={{ marginRight: 16 }}
-            >
-              <MaterialCommunityIcons
-                name="delete-outline"
-                size={24}
-                color="#fff"
-              />
-            </TouchableOpacity>
-          ),
-        })}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="AllSectionsScreen"
         component={AllSectionsScreen}
         options={{ title: 'All Sections' }}
+      />
+      <Stack.Screen
+        name="Analytics"
+        component={AnalyticsScreen}
+        options={{ title: 'Analytics' }}
       />
       <Stack.Screen
         name="Transfer"

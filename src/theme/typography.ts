@@ -113,10 +113,42 @@ const textStyles = {
     fontWeight: baseTypography.fontWeight.semiBold,
     lineHeight: Math.round(baseTypography.fontSize.xl * baseTypography.lineHeight.normal),
   },
+
+  // Simplizum Precision Typography
+  heroBalance: {
+    fontSize: 34,
+    fontWeight: '700' as const,
+    letterSpacing: -0.5,
+    fontVariant: ['tabular-nums' as const],
+  },
+  heroLabel: {
+    fontSize: 10,
+    fontWeight: '600' as const,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 1.8,
+  },
+  sectionHeader: {
+    fontSize: 11,
+    fontWeight: '600' as const,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 1.5,
+  },
+  tabularAmount: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    fontVariant: ['tabular-nums' as const],
+  },
+  actionButtonLabel: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 1.2,
+  },
 };
 
 // Export merged typography with both base values and text styles
 export const typography = {
   ...baseTypography,
+  weights: baseTypography.fontWeight,
   ...textStyles,
 };

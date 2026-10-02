@@ -1,13 +1,13 @@
 /**
- * Purpose: AI Assistant Chat Screen
+ * ChatScreen — Simplizum Architectural Edition
  *
- * Implements a Hybrid Architecture:
- *   1. Laya System-1 Fast Decision Router: Handles instant transaction parsing,
- *      balance lookups, and spending queries in <20ms on-device.
- *   2. System-2 Multi-Provider Engine: Groq Cloud (Llama 3.2 SLMs), Google Gemini,
- *      or Local Ollama/OpenAI for deep financial reasoning and budgeting advice.
- *
- * Airy Minimalist Bento design with high contrast badges and quick action chips.
+ * Full-featured financial intelligence console:
+ *  1. Laya System-1 Fast Decision Router (<20ms local heuristic)
+ *  2. Foundation SLM/LLM Engine (Gemini 2.5 Flash, Groq Llama 3.3, Ollama)
+ *  3. Architectural conversational ledger stream
+ *  4. Inline actionable mutation tickets
+ *  5. Horizontal micro-chips quick command bar
+ *  6. Floating hairline command bar with live engine badge
  */
 
 import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
@@ -21,7 +21,6 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAIChatStore } from '../../store/aiChatStore';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -32,17 +31,18 @@ import { TypingIndicator } from '../../components/chat/TypingIndicator';
 import { LayaSystem1Router } from '../../services/ai/layaSystem1';
 import { AIProviderService } from '../../services/ai/aiProviderService';
 import { ChatContextManager } from '../../services/ai/chatContextManager';
-import { spacing, borderRadius } from '../../theme/spacing';
+import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { lightHaptic, mediumHaptic } from '../../services/haptics/hapticFeedback';
 import { AccountRepository } from '../../database/repositories/AccountRepository';
 
-const QUICK_SUGGESTIONS = [
-  { icon: 'lightning-bolt', label: 'Spent 10 on lunch', text: 'Spent 10 on lunch' },
-  { icon: 'wallet-outline', label: 'Check balance', text: "What's my current balance?" },
-  { icon: 'chart-pie', label: 'Spending this month', text: 'How much did I spend this month?' },
-  { icon: 'calendar-sync', label: 'Upcoming bills', text: 'What are my upcoming bills and subscriptions?' },
+const QUICK_COMMAND_CHIPS = [
+  { label: 'SPENT $15 ON LUNCH', text: 'Spent 15 on lunch' },
+  { label: 'CHECK RUNWAY & BALANCES', text: "What's my current balance and runway?" },
+  { label: 'MONTHLY EXPENSE BREAKDOWN', text: 'How much did I spend this month and what are the top categories?' },
+  { label: 'UPCOMING BILLS & DUES', text: 'What are my upcoming bills and recurring commitments?' },
+  { label: 'SAVINGS ADVICE', text: 'How can I optimize my savings rate this month?' },
 ];
 
 export default function ChatScreen({ navigation }: any) {
@@ -64,9 +64,8 @@ export default function ChatScreen({ navigation }: any) {
   const { currentAccountId, currentUser } = useAuthStore();
 
   const [accountCurrency, setAccountCurrency] = useState<string>('USD');
-  const flashListRef = useRef<any>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
 
-  // Load account currency
   useEffect(() => {
     if (!currentAccountId) return;
     new AccountRepository().findById(currentAccountId).then((acc) => {
@@ -74,46 +73,42 @@ export default function ChatScreen({ navigation }: any) {
     });
   }, [currentAccountId]);
 
-  // Auto scroll to latest message
   useEffect(() => {
     if (messages.length > 0) {
       setTimeout(() => {
-        flashListRef.current?.scrollToEnd({ animated: true });
+        scrollViewRef.current?.scrollToEnd({ animated: true });
       }, 100);
     }
-  }, [messages.length]);
+  }, [messages.length, isLoading]);
 
-  // Provider label badge
-  const engineLabel = useMemo(() => {
+  const engineNameBadge = useMemo(() => {
     const isSys1 = aiSettings?.system1Enabled !== false;
     const providerName =
       aiSettings?.provider === 'groq'
-        ? 'Groq (Llama-3.2)'
+        ? 'GROQ'
         : aiSettings?.provider === 'custom_openai'
-        ? 'Local SLM'
-        : 'Gemini';
+        ? 'LOCAL'
+        : 'GEMINI';
 
-    return isSys1 ? `⚡ Laya + ${providerName}` : providerName;
+    return isSys1 ? `⚡ LAYA + ${providerName}` : providerName;
   }, [aiSettings]);
 
-  // Handle sending a message
   const handleSend = useCallback(
     async (text: string) => {
       if (!currentAccountId || !currentUser?.id) {
-        Alert.alert('Error', 'No account or user session active');
+        Alert.alert('Session Error', 'No active user session found.');
         return;
       }
 
       const promptText = text.trim();
       if (!promptText) return;
 
-      // 1. Add user message
       addMessage('user', promptText);
       setLoading(true);
       setError(null);
 
       try {
-        // 2. Try Laya System-1 Fast Router first (if enabled)
+        // Step 1: Laya System-1 Fast Router
         if (aiSettings?.system1Enabled !== false) {
           const system1 = new LayaSystem1Router(currentAccountId, currentUser.id, accountCurrency);
           const s1Result = await system1.route(promptText);
@@ -133,7 +128,7 @@ export default function ChatScreen({ navigation }: any) {
           }
         }
 
-        // 3. Fallback to System-2 Multi-Provider Engine
+        // Step 2: System-2 Multi-Provider Deep Reasoning
         const providerService = new AIProviderService(aiSettings, currentAccountId, currentUser.id);
         const context = await ChatContextManager.buildContext(messages, currentAccountId);
         const response = await providerService.sendMessage(promptText, context);
@@ -148,7 +143,6 @@ export default function ChatScreen({ navigation }: any) {
 
         addMessage('assistant', response.text, false, pendingActionId);
 
-        // Update usage statistics
         settingsStore.updateAISettings({
           conversationCount: (aiSettings?.conversationCount || 0) + 1,
           lastUsed: Date.now(),
@@ -156,15 +150,14 @@ export default function ChatScreen({ navigation }: any) {
       } catch (err: any) {
         console.error('[ChatScreen] Send error:', err);
         const errorMsg =
-          err?.message || 'Failed to communicate with AI provider. Please check your settings.';
+          err?.message || 'Failed to communicate with intelligence provider. Please verify API key.';
 
-        addMessage('assistant', `⚠️ ${errorMsg}`, true);
+        addMessage('assistant', errorMsg, true);
 
-        // Suggest settings if key missing
         if (errorMsg.includes('not configured') || errorMsg.includes('key')) {
-          Alert.alert('Provider Key Required', errorMsg, [
+          Alert.alert('Configuration Required', errorMsg, [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Configure Provider', onPress: () => navigation.navigate('AISettings') },
+            { text: 'Configure Engine', onPress: () => navigation.navigate('AISettings') },
           ]);
         }
       } finally {
@@ -176,10 +169,10 @@ export default function ChatScreen({ navigation }: any) {
 
   const handleClearHistory = () => {
     mediumHaptic();
-    Alert.alert('Clear Chat History', 'Are you sure you want to clear this conversation?', [
+    Alert.alert('PURGE CONVERSATION', 'Are you sure you want to clear this ledger transcript?', [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Clear All',
+        text: 'Clear Transcript',
         style: 'destructive',
         onPress: () => {
           clearMessages();
@@ -190,289 +183,360 @@ export default function ChatScreen({ navigation }: any) {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      {/* Top Engine Banner */}
-      <View style={styles.topBanner}>
-        <View style={styles.engineBadge}>
-          <View style={styles.engineDot} />
-          <Text style={styles.engineBadgeText}>{engineLabel}</Text>
+      {/* Architectural Header */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => {
+              lightHaptic();
+              navigation.goBack();
+            }}
+          >
+            <MaterialCommunityIcons name="arrow-left" size={18} color={themeColors.text} />
+          </TouchableOpacity>
+          <View>
+            <Text style={styles.headerSuper}>INTELLIGENCE AGENT</Text>
+            <Text style={styles.headerTitle}>LAYA CONSOLE</Text>
+          </View>
         </View>
 
-        <View style={styles.headerActions}>
+        <View style={styles.headerRight}>
+          <View style={styles.engineBadge}>
+            <Text style={styles.engineBadgeText}>{engineNameBadge}</Text>
+          </View>
+
           <TouchableOpacity
-            style={styles.iconBtn}
-            onPress={() => navigation.navigate('AISettings')}
-            hitSlop={8}
+            style={styles.actionBtn}
+            onPress={() => {
+              lightHaptic();
+              navigation.navigate('AISettings');
+            }}
           >
-            <MaterialCommunityIcons name="cog-outline" size={20} color={themeColors.textSecondary} />
+            <MaterialCommunityIcons name="tune" size={18} color={themeColors.text} />
           </TouchableOpacity>
 
           {messages.length > 0 && (
-            <TouchableOpacity style={styles.iconBtn} onPress={handleClearHistory} hitSlop={8}>
-              <MaterialCommunityIcons name="trash-can-outline" size={20} color={themeColors.textMuted} />
+            <TouchableOpacity style={styles.actionBtn} onPress={handleClearHistory}>
+              <MaterialCommunityIcons name="trash-can-outline" size={18} color={themeColors.textSecondary} />
             </TouchableOpacity>
           )}
         </View>
       </View>
 
-      {/* Messages List or Empty State */}
-      <View style={styles.listContainer}>
+      {/* Stream Area */}
+      <View style={styles.streamContainer}>
         {messages.length === 0 ? (
-          <ScrollView contentContainerStyle={styles.emptyContainer}>
-            <View style={styles.emptyBento}>
-              <View style={[styles.avatarCircle, { backgroundColor: `${themeColors.primary}20` }]}>
-                <MaterialCommunityIcons name="robot-outline" size={36} color={themeColors.primary} />
+          <ScrollView
+            contentContainerStyle={styles.emptySlate}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* System Specification Briefing */}
+            <View style={styles.briefingCard}>
+              <View style={styles.briefingHeader}>
+                <Text style={styles.briefingSuper}>AUTONOMOUS LEDGER COPILOT</Text>
+                <Text style={styles.briefingTitle}>ZERO WALLET · LAYA OS</Text>
               </View>
-              <Text style={styles.emptyTitle}>ZeroWallet Financial AI</Text>
-              <Text style={styles.emptySubtitle}>
-                Powered by a hybrid architecture with <Text style={styles.boldText}>Laya System-1</Text> for instant (&lt;20ms) parsing and multi-provider SLMs for personalized financial planning.
+
+              <Text style={styles.briefingBody}>
+                Hybrid financial intelligence: Sub-20ms local intent classifier for instant transaction
+                logging + deep reasoning foundation models for cash flow planning.
               </Text>
 
-              <View style={styles.capabilityRow}>
-                <View style={styles.capItem}>
-                  <MaterialCommunityIcons name="lightning-bolt" size={18} color="#F59E0B" />
-                  <Text style={styles.capText}>Instant Actions (&lt;20ms)</Text>
+              {/* Specs Table */}
+              <View style={styles.specsTable}>
+                <View style={styles.specRow}>
+                  <Text style={styles.specLabel}>SYSTEM-1 DISPATCH</Text>
+                  <Text style={styles.specVal}>&lt;20MS LOCAL</Text>
                 </View>
-                <View style={styles.capItem}>
-                  <MaterialCommunityIcons name="shield-check-outline" size={18} color={themeColors.success} />
-                  <Text style={styles.capText}>Confirmation Required</Text>
+                <View style={styles.specDivider} />
+                <View style={styles.specRow}>
+                  <Text style={styles.specLabel}>MUTATION SAFETY</Text>
+                  <Text style={styles.specVal}>EXPLICIT AUDIT TICKET</Text>
+                </View>
+                <View style={styles.specDivider} />
+                <View style={styles.specRow}>
+                  <Text style={styles.specLabel}>REASONING ENGINE</Text>
+                  <Text style={styles.specVal}>GEMINI 2.5 / GROQ</Text>
                 </View>
               </View>
             </View>
 
-            {/* Quick Action Suggestion Cards */}
-            <Text style={styles.suggestionsHeading}>TRY A QUICK COMMAND</Text>
-            <View style={styles.suggestionsGrid}>
-              {QUICK_SUGGESTIONS.map((item, idx) => (
+            {/* Empty State Prompts */}
+            <Text style={styles.emptyPromptsTitle}>QUICK INTENT TEMPLATES</Text>
+            <View style={styles.promptsGrid}>
+              {QUICK_COMMAND_CHIPS.map((chip, idx) => (
                 <TouchableOpacity
                   key={idx}
-                  style={styles.suggestionCard}
+                  style={styles.promptTile}
                   onPress={() => {
                     lightHaptic();
-                    handleSend(item.text);
+                    handleSend(chip.text);
                   }}
-                  activeOpacity={0.8}
                 >
-                  <MaterialCommunityIcons name={item.icon as any} size={18} color={themeColors.primary} />
-                  <Text style={styles.suggestionText}>{item.label}</Text>
+                  <Text style={styles.promptTileText}>{chip.label}</Text>
+                  <MaterialCommunityIcons name="arrow-top-right" size={14} color={themeColors.textSecondary} />
                 </TouchableOpacity>
               ))}
             </View>
           </ScrollView>
         ) : (
-          <FlashList
-            ref={flashListRef}
-            data={messages}
-            renderItem={({ item }) => <MessageBubble message={item} />}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.listContent}
-          />
+          <ScrollView
+            ref={scrollViewRef}
+            style={styles.messagesScroll}
+            contentContainerStyle={styles.messagesContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {messages.map((m) => (
+              <MessageBubble key={m.id} message={m} />
+            ))}
+            {isLoading && <TypingIndicator isVisible={isLoading} />}
+          </ScrollView>
         )}
       </View>
 
-      {/* Typing Indicator */}
-      {isLoading && (
-        <View style={styles.typingContainer}>
-          <TypingIndicator isVisible={isLoading} />
+      {/* Horizontal Micro-Chips Bar (Accessible anytime) */}
+      {!isLoading && (
+        <View style={styles.chipsBar}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipsScroll}
+          >
+            {QUICK_COMMAND_CHIPS.map((chip, idx) => (
+              <TouchableOpacity
+                key={idx}
+                style={styles.chipPill}
+                onPress={() => {
+                  lightHaptic();
+                  handleSend(chip.text);
+                }}
+              >
+                <Text style={styles.chipPillText}>{chip.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
       )}
 
-      {/* Quick Pills Bar (When messages exist) */}
-      {messages.length > 0 && !isLoading && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.horizontalPills}
-        >
-          {QUICK_SUGGESTIONS.map((item, idx) => (
-            <TouchableOpacity
-              key={idx}
-              style={styles.miniPill}
-              onPress={() => {
-                lightHaptic();
-                handleSend(item.text);
-              }}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.miniPillText}>{item.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      )}
-
-      {/* Input */}
-      <ChatInput onSend={handleSend} isLoading={isLoading} />
+      {/* Hairline Floating Command Bar */}
+      <ChatInput
+        onSend={handleSend}
+        isLoading={isLoading}
+        engineName={engineNameBadge}
+      />
     </KeyboardAvoidingView>
   );
 }
 
-const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
+const createStyles = (theme: any) =>
   StyleSheet.create({
-    container: {
+    root: {
       flex: 1,
-      backgroundColor: themeColors.background,
+      backgroundColor: theme.background,
     },
-    topBanner: {
+    header: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingHorizontal: spacing.lg,
-      paddingVertical: 10,
+      paddingHorizontal: spacing.md,
+      paddingTop: spacing.xl,
+      paddingBottom: spacing.sm + 4,
       borderBottomWidth: 1,
-      borderBottomColor: themeColors.cardBorder,
-      backgroundColor: themeColors.surface,
+      borderBottomColor: theme.hairline || theme.border,
+      backgroundColor: theme.card || theme.surface,
     },
-    engineBadge: {
+    headerLeft: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
-      backgroundColor: themeColors.surfaceHighlight,
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-      borderRadius: borderRadius.round,
-      borderWidth: 1,
-      borderColor: themeColors.cardBorder,
+      gap: spacing.sm,
     },
-    engineDot: {
-      width: 7,
-      height: 7,
-      borderRadius: 3.5,
-      backgroundColor: '#10B981',
+    backButton: {
+      width: 32,
+      height: 32,
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      borderRadius: 2,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: theme.background,
+    },
+    headerSuper: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 9,
+      letterSpacing: 1.5,
+      fontWeight: '700',
+    },
+    headerTitle: {
+      ...typography.h3,
+      color: theme.text,
+      letterSpacing: 0.5,
+      fontWeight: '700',
+    },
+    headerRight: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs + 2,
+    },
+    engineBadge: {
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      paddingHorizontal: spacing.xs + 2,
+      paddingVertical: 3,
+      borderRadius: 2,
+      backgroundColor: theme.background,
     },
     engineBadgeText: {
       ...typography.caption,
+      color: theme.text,
+      fontSize: 10,
       fontWeight: '700',
-      color: themeColors.text,
+      letterSpacing: 0.5,
+      fontFamily: 'monospace',
     },
-    headerActions: {
-      flexDirection: 'row',
+    actionBtn: {
+      width: 32,
+      height: 32,
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      borderRadius: 2,
+      justifyContent: 'center',
       alignItems: 'center',
-      gap: 12,
+      backgroundColor: theme.background,
     },
-    iconBtn: {
-      padding: 6,
-    },
-    listContainer: {
+    streamContainer: {
       flex: 1,
     },
-    listContent: {
-      paddingHorizontal: spacing.lg,
-      paddingVertical: spacing.md,
+    emptySlate: {
+      padding: spacing.md,
+      paddingTop: spacing.lg,
     },
-    emptyContainer: {
-      padding: spacing.lg,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    emptyBento: {
-      width: '100%',
-      backgroundColor: themeColors.surface,
-      borderRadius: 24,
-      padding: 22,
+    briefingCard: {
       borderWidth: 1,
-      borderColor: themeColors.cardBorder,
-      alignItems: 'center',
-      marginBottom: 24,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.08,
-      shadowRadius: 8,
-      elevation: 3,
+      borderColor: theme.hairline || theme.border,
+      backgroundColor: theme.card || theme.surface,
+      borderRadius: 2,
+      padding: spacing.md,
+      marginBottom: spacing.lg,
     },
-    avatarCircle: {
-      width: 64,
-      height: 64,
-      borderRadius: 32,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: 14,
+    briefingHeader: {
+      marginBottom: spacing.xs,
     },
-    emptyTitle: {
+    briefingSuper: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 9,
+      fontWeight: '700',
+      letterSpacing: 1.2,
+      marginBottom: 2,
+    },
+    briefingTitle: {
       ...typography.h3,
-      fontWeight: '800',
-      color: themeColors.text,
-      marginBottom: 8,
-    },
-    emptySubtitle: {
-      ...typography.bodySmall,
-      color: themeColors.textSecondary,
-      textAlign: 'center',
-      lineHeight: 20,
-      marginBottom: 16,
-    },
-    boldText: {
+      color: theme.text,
       fontWeight: '700',
-      color: themeColors.text,
+      letterSpacing: 0.5,
     },
-    capabilityRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-      paddingTop: 12,
+    briefingBody: {
+      ...typography.body,
+      color: theme.textSecondary,
+      fontSize: 12,
+      lineHeight: 18,
+      marginBottom: spacing.md,
+    },
+    specsTable: {
       borderTopWidth: 1,
-      borderTopColor: themeColors.cardBorder,
+      borderTopColor: theme.hairline || theme.border,
+      paddingTop: spacing.xs,
     },
-    capItem: {
+    specRow: {
       flexDirection: 'row',
-      alignItems: 'center',
-      gap: 5,
+      justifyContent: 'space-between',
+      paddingVertical: 5,
     },
-    capText: {
-      ...typography.caption,
-      color: themeColors.textMuted,
-      fontWeight: '600',
+    specDivider: {
+      borderTopWidth: 1,
+      borderTopColor: theme.hairline || theme.border,
     },
-    suggestionsHeading: {
+    specLabel: {
       ...typography.caption,
-      color: themeColors.textMuted,
-      fontWeight: '800',
+      color: theme.textSecondary,
+      fontSize: 10,
+      fontWeight: '700',
       letterSpacing: 0.8,
-      alignSelf: 'flex-start',
-      marginBottom: 12,
     },
-    suggestionsGrid: {
-      width: '100%',
-      gap: 10,
+    specVal: {
+      ...typography.caption,
+      color: theme.text,
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 0.5,
+      fontFamily: 'monospace',
     },
-    suggestionCard: {
+    emptyPromptsTitle: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 1.2,
+      marginBottom: spacing.xs,
+    },
+    promptsGrid: {
+      gap: 6,
+    },
+    promptTile: {
       flexDirection: 'row',
+      justifyContent: 'space-between',
       alignItems: 'center',
-      gap: 12,
-      backgroundColor: themeColors.surface,
-      borderRadius: 16,
-      padding: 14,
       borderWidth: 1,
-      borderColor: themeColors.cardBorder,
+      borderColor: theme.hairline || theme.border,
+      backgroundColor: theme.card || theme.surface,
+      borderRadius: 2,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm + 2,
     },
-    suggestionText: {
-      ...typography.bodySmall,
-      fontWeight: '600',
-      color: themeColors.text,
+    promptTileText: {
+      ...typography.caption,
+      color: theme.text,
+      fontWeight: '700',
+      fontSize: 11,
+      letterSpacing: 0.5,
+    },
+    messagesScroll: {
       flex: 1,
     },
-    typingContainer: {
-      paddingHorizontal: spacing.lg,
-      paddingVertical: spacing.xs,
+    messagesContent: {
+      paddingHorizontal: spacing.md,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.md,
     },
-    horizontalPills: {
-      paddingHorizontal: spacing.lg,
-      paddingBottom: 8,
-      gap: 8,
-    },
-    miniPill: {
-      backgroundColor: themeColors.surface,
-      borderRadius: borderRadius.round,
-      paddingHorizontal: 12,
+    chipsBar: {
+      borderTopWidth: 1,
+      borderTopColor: theme.hairline || theme.border,
+      backgroundColor: theme.background,
       paddingVertical: 6,
-      borderWidth: 1,
-      borderColor: themeColors.cardBorder,
     },
-    miniPillText: {
+    chipsScroll: {
+      paddingHorizontal: spacing.md,
+      gap: spacing.xs,
+    },
+    chipPill: {
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      borderRadius: 2,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 4,
+      backgroundColor: theme.card || theme.surface,
+    },
+    chipPillText: {
       ...typography.caption,
-      color: themeColors.textSecondary,
-      fontWeight: '600',
+      color: theme.text,
+      fontSize: 9,
+      fontWeight: '700',
+      letterSpacing: 0.8,
     },
   });

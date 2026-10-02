@@ -1,29 +1,12 @@
 /**
- * Purpose: Animated typing indicator showing AI is generating a response
+ * TypingIndicator — Simplizum Architectural Edition
  *
- * Inputs:
- *   - isVisible (boolean): Whether to show the indicator
- *
- * Outputs:
- *   - Returns (JSX.Element | null): Animated dots or null if not visible
- *
- * Side effects:
- *   - Animates three dots in a wave pattern using Reanimated 4 worklets
- *   - Fades in/out smoothly on the UI thread when visibility changes
+ * Minimalist indicator showing AI reasoning / dispatch cycle
  */
 
-import React, { useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withSequence,
-  withTiming,
-  withDelay,
-} from 'react-native-reanimated';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { spacing, borderRadius } from '../../theme/spacing';
+import React from 'react';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
 
@@ -33,150 +16,64 @@ interface TypingIndicatorProps {
 
 export const TypingIndicator: React.FC<TypingIndicatorProps> = ({ isVisible }) => {
   const themeColors = useThemeColors();
-  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
+  const styles = React.useMemo(() => createStyles(themeColors), [themeColors]);
 
-  const dot1 = useSharedValue(0);
-  const dot2 = useSharedValue(0);
-  const dot3 = useSharedValue(0);
-  const containerOpacity = useSharedValue(0);
-
-  useEffect(() => {
-    if (isVisible) {
-      containerOpacity.value = withTiming(1, { duration: 200 });
-
-      dot1.value = withRepeat(
-        withSequence(
-          withTiming(1, { duration: 400 }),
-          withTiming(0, { duration: 400 })
-        ),
-        -1,
-        false
-      );
-
-      dot2.value = withDelay(
-        150,
-        withRepeat(
-          withSequence(
-            withTiming(1, { duration: 400 }),
-            withTiming(0, { duration: 400 })
-          ),
-          -1,
-          false
-        )
-      );
-
-      dot3.value = withDelay(
-        300,
-        withRepeat(
-          withSequence(
-            withTiming(1, { duration: 400 }),
-            withTiming(0, { duration: 400 })
-          ),
-          -1,
-          false
-        )
-      );
-    } else {
-      containerOpacity.value = withTiming(0, { duration: 200 });
-      dot1.value = 0;
-      dot2.value = 0;
-      dot3.value = 0;
-    }
-  }, [isVisible, containerOpacity, dot1, dot2, dot3]);
-
-  const containerStyle = useAnimatedStyle(() => ({
-    opacity: containerOpacity.value,
-    transform: [{ scale: containerOpacity.value }],
-  }));
-
-  const dot1Style = useAnimatedStyle(() => ({
-    opacity: 0.3 + dot1.value * 0.7,
-    transform: [{ scale: 1 + dot1.value * 0.2 }],
-  }));
-
-  const dot2Style = useAnimatedStyle(() => ({
-    opacity: 0.3 + dot2.value * 0.7,
-    transform: [{ scale: 1 + dot2.value * 0.2 }],
-  }));
-
-  const dot3Style = useAnimatedStyle(() => ({
-    opacity: 0.3 + dot3.value * 0.7,
-    transform: [{ scale: 1 + dot3.value * 0.2 }],
-  }));
-
-  if (!isVisible) {
-    return null;
-  }
+  if (!isVisible) return null;
 
   return (
-    <Animated.View style={[styles.container, containerStyle]}>
-      <View style={styles.bubble}>
-        <View style={styles.aiIconContainer}>
-          <MaterialCommunityIcons
-            name="robot-outline"
-            size={16}
-            color={themeColors.primary}
-          />
+    <View style={styles.container}>
+      <View style={styles.cell}>
+        <View style={styles.cellHeader}>
+          <Text style={styles.superText}>LAYA SYSTEM ROUTER</Text>
         </View>
-
-        <Text style={styles.typingText}>AI is thinking</Text>
-
-        <View style={styles.dotsContainer}>
-          <Animated.View
-            style={[styles.dot, { backgroundColor: themeColors.primary }, dot1Style]}
-          />
-          <Animated.View
-            style={[styles.dot, { backgroundColor: themeColors.primary }, dot2Style]}
-          />
-          <Animated.View
-            style={[styles.dot, { backgroundColor: themeColors.primary }, dot3Style]}
-          />
+        <View style={styles.contentRow}>
+          <ActivityIndicator size="small" color={themeColors.text} style={styles.spinner} />
+          <Text style={styles.bodyText}>Synthesizing financial context & reasoning...</Text>
         </View>
       </View>
-    </Animated.View>
+    </View>
   );
 };
 
-const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
+const createStyles = (theme: any) =>
   StyleSheet.create({
     container: {
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.xs,
       alignItems: 'flex-start',
     },
-    bubble: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: themeColors.surface,
-      borderRadius: borderRadius.lg,
+    cell: {
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      borderLeftWidth: 2,
+      borderLeftColor: theme.text,
+      backgroundColor: theme.card || theme.surface,
+      borderRadius: 2,
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.sm,
-      borderWidth: 1,
-      borderColor: themeColors.border,
-      maxWidth: '80%',
     },
-    aiIconContainer: {
-      width: 24,
-      height: 24,
-      borderRadius: borderRadius.full,
-      backgroundColor: themeColors.primary + '15',
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: spacing.xs,
+    cellHeader: {
+      marginBottom: 3,
     },
-    typingText: {
-      ...typography.bodySmall,
-      color: themeColors.textSecondary,
-      marginRight: spacing.sm,
+    superText: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 9,
+      fontWeight: '700',
+      letterSpacing: 1,
+      fontFamily: 'monospace',
     },
-    dotsContainer: {
+    contentRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: spacing.xs / 2,
+      gap: spacing.xs + 2,
     },
-    dot: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
+    spinner: {
+      transform: [{ scale: 0.75 }],
+    },
+    bodyText: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 12,
     },
   });

@@ -227,7 +227,8 @@ export class DataMutationService {
       const updates: string[] = [];
 
       if (params.categoryName) {
-        const category = await this.validator.resolveCategoryName(params.categoryName, transaction.type);
+        const catType = transaction.type === 'income' ? 'income' : 'expense';
+        const category = await this.validator.resolveCategoryName(params.categoryName, catType);
         resolvedData.categoryId = category.id;
         resolvedData.categoryName = category.name;
       }

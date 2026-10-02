@@ -39,6 +39,14 @@ export const AllSectionsScreen: React.FC = () => {
 
   const sections: SectionItem[] = useMemo(() => [
     {
+      id: 'analytics',
+      title: 'Analytics',
+      description: 'Cash flow intelligence & savings rate',
+      icon: 'chart-line',
+      iconColor: themeColors.primary,
+      route: 'Analytics',
+    },
+    {
       id: 'wallets',
       title: 'Wallets',
       description: 'Add, rename and organize wallets',

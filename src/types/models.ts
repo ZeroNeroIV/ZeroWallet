@@ -48,7 +48,7 @@ export interface AccountBalance {
 // Transactions
 // ============================================
 
-export type TransactionType = 'income' | 'expense';
+export type TransactionType = 'income' | 'expense' | 'transfer';
 export type VaultType =
   | 'main'
   | 'savings'
@@ -68,6 +68,8 @@ export interface Transaction {
   description: string;
   date: number; // Unix timestamp
   vaultType: VaultType; // Which vault affected
+  walletId?: string; // Direct wallet foreign key (Unified model)
+  destinationWalletId?: string | null; // For direct wallet-to-wallet transfers
   isRecurring: boolean; // Flag for recurring transaction
   recurringExpenseId?: string; // FK to RecurringExpense (if applicable)
   subscriptionId?: string; // FK to Subscription (if applicable)
@@ -181,8 +183,44 @@ export type RecurringExpenseInput = Omit<
 >;
 
 // ============================================
+// Unified Recurring Transactions (Subscriptions + Recurring Expenses)
+// ============================================
+
+export type FrequencyUnit = 'day' | 'week' | 'month' | 'year';
+
+export interface RecurringTransaction {
+  id: string; // UUID
+  walletId: string; // FK to Wallets
+  destinationWalletId?: string | null; // For recurring transfers
+  name: string;
+  type: 'expense' | 'income' | 'transfer';
+  amount: number;
+  categoryId?: string | null; // FK to Category
+  frequencyUnit: FrequencyUnit;
+  frequencyInterval: number; // Every X days/weeks/months/years
+  billingDay?: number | null; // Optional day of month (1-31)
+  startDate: number;
+  endDate?: number | null;
+  nextRunDate: number;
+  lastRunDate?: number | null;
+  autoDeduct: boolean; // 1 = auto-logs transaction
+  reminderDaysBefore: number;
+  isSubscription: boolean; // Flag for filtering subscriptions vs recurring bills
+  isActive: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type RecurringTransactionInput = Omit<
+  RecurringTransaction,
+  'id' | 'createdAt' | 'updatedAt' | 'lastRunDate'
+>;
+
+// ============================================
 // Settings
 // ============================================
+
+export type ThemeFamily = 'swiss' | 'nordic' | 'cyber';
 
 // Auto-Salary Settings (MMKV in settingsStore)
 export interface SalarySettings {
@@ -214,6 +252,7 @@ export interface NotificationSettings {
 // App Settings
 export interface AppSettings {
   theme: 'light' | 'dark' | 'system';
+  themeFamily?: ThemeFamily;
   hapticFeedback: boolean;
   currency: string; // Default currency
 }

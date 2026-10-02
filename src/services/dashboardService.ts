@@ -7,9 +7,11 @@ import { DebtRepository } from '../database/repositories/DebtRepository';
 import { SubscriptionRepository } from '../database/repositories/SubscriptionRepository';
 import { RecurringExpenseRepository } from '../database/repositories/RecurringExpenseRepository';
 import { AccountRepository } from '../database/repositories/AccountRepository';
+import { WalletRepository } from '../database/repositories/WalletRepository';
+import { executeSql } from '../database';
 import { calculateVaultBalances, type VaultBalances } from '../utils/balanceCalculator';
 import { calculateGoalProgress } from '../utils/goalUtils';
-import { type Transaction, type Category, type Goal, type Debt } from '../types/models';
+import { type Transaction, type Category, type Goal, type Debt, type Wallet } from '../types/models';
 import { logger } from '../utils/logger';
 
 export interface TransactionWithCat extends Transaction {
@@ -18,6 +20,22 @@ export interface TransactionWithCat extends Transaction {
 
 export interface ChartDayPoint {
   day: string;
+  income: number;
+  expense: number;
+}
+
+export interface UpcomingRecurringItem {
+  id: string;
+  name: string;
+  amount: number;
+  daysUntil: number;
+  formattedDate: string;
+}
+
+export interface CashFlow30DayPoint {
+  date: string;
+  day: string;
+  value: number; // cumulative
   income: number;
   expense: number;
 }
@@ -60,6 +78,11 @@ export interface DashboardData {
   subscriptionsCount: number;
   categoriesCount: number;
   recurringCount: number;
+  upcomingRecurring?: UpcomingRecurringItem | null;
+  trend30Day?: CashFlow30DayPoint[];
+  net30DayChange?: number;
+  wallets?: Wallet[];
+  derivedBalances?: Record<string, number>;
 }
 
 export class DashboardService {
@@ -70,6 +93,7 @@ export class DashboardService {
   private subscriptionRepo: SubscriptionRepository;
   private recurringRepo: RecurringExpenseRepository;
   private accountRepo: AccountRepository;
+  private walletRepo: WalletRepository;
 
   constructor(
     private accountId: string,
@@ -82,25 +106,45 @@ export class DashboardService {
     this.subscriptionRepo = new SubscriptionRepository();
     this.recurringRepo = new RecurringExpenseRepository();
     this.accountRepo = new AccountRepository();
+    this.walletRepo = new WalletRepository();
   }
 
   async loadAll(): Promise<DashboardData> {
-    const [balance, currency, recentTransactions, chartData, monthlyData, categorySpend, activeGoals, activeDebts, goalsCount, debtsStats, subscriptionsCount, categoriesCount, recurringCount] =
-      await Promise.all([
-        this.loadBalance(),
-        this.loadCurrency(),
-        this.loadRecentTransactions(),
-        this.loadChartData(),
-        this.loadMonthlyData(),
-        this.loadCategorySpend(),
-        this.loadGoalsAndDebts(),
-        this.loadActiveDebts(),
-        this.loadGoalsCount(),
-        this.loadDebtsStats(),
-        this.loadSubscriptionsCount(),
-        this.loadCategoriesCount(),
-        this.loadRecurringCount(),
-      ]);
+    const [
+      balance,
+      currency,
+      recentTransactions,
+      chartData,
+      monthlyData,
+      categorySpend,
+      activeGoals,
+      activeDebts,
+      goalsCount,
+      debtsStats,
+      subscriptionsCount,
+      categoriesCount,
+      recurringCount,
+      upcomingRecurring,
+      trendData,
+      walletData,
+    ] = await Promise.all([
+      this.loadBalance(),
+      this.loadCurrency(),
+      this.loadRecentTransactions(),
+      this.loadChartData(),
+      this.loadMonthlyData(),
+      this.loadCategorySpend(),
+      this.loadGoalsAndDebts(),
+      this.loadActiveDebts(),
+      this.loadGoalsCount(),
+      this.loadDebtsStats(),
+      this.loadSubscriptionsCount(),
+      this.loadCategoriesCount(),
+      this.loadRecurringCount(),
+      this.loadUpcomingRecurring(),
+      this.load30DayTrend(),
+      this.loadWalletsAndBalances(),
+    ]);
 
     const totalMonthSpend = categorySpend.reduce((sum, s) => sum + s.amount, 0);
 
@@ -119,6 +163,11 @@ export class DashboardService {
       subscriptionsCount,
       categoriesCount,
       recurringCount,
+      upcomingRecurring,
+      trend30Day: trendData.points,
+      net30DayChange: trendData.netChange,
+      wallets: walletData.wallets,
+      derivedBalances: walletData.derivedBalances,
     };
   }
 
@@ -189,7 +238,7 @@ export class DashboardService {
           id: t.categoryId,
           userId: this.userId,
           name: 'Unknown',
-          type: t.type,
+          type: t.type === 'income' ? 'income' : 'expense',
           icon: 'help-circle',
           color: '#999',
           isDefault: false,
@@ -291,9 +340,11 @@ export class DashboardService {
       const goals = await this.goalRepo.getActiveGoals(this.accountId);
       const { balances: freshBalances } = (await import('../store/accountStore')).useAccountStore.getState();
       const balance = freshBalances[this.accountId] ?? {
+        accountId: this.accountId,
         mainBalance: 0, savingsBalance: 0, heldBalance: 0,
         salaryBalance: 0, emergencyBalance: 0, cardBalance: 0, physicalBalance: 0,
         totalBalance: 0, availableBalance: 0,
+        lastUpdated: Date.now(),
       };
       for (const goal of goals) {
         const newProgress = calculateGoalProgress(goal, balance);
@@ -358,6 +409,101 @@ export class DashboardService {
       return recs.length;
     } catch {
       return 0;
+    }
+  }
+
+  private async loadWalletsAndBalances(): Promise<{ wallets: Wallet[]; derivedBalances: Record<string, number> }> {
+    try {
+      const wallets = await this.walletRepo.findByAccount(this.accountId);
+      const derivedBalances = await this.walletRepo.getDerivedBalances(this.accountId);
+      return { wallets, derivedBalances };
+    } catch (err) {
+      logger.error('[DashboardService]', 'loadWalletsAndBalances error', err);
+      return { wallets: [], derivedBalances: {} };
+    }
+  }
+
+  private async loadUpcomingRecurring(): Promise<UpcomingRecurringItem | null> {
+    try {
+      const now = Date.now();
+      const rows = await executeSql<{
+        id: string;
+        name: string;
+        amount: number;
+        next_run_date: number;
+      }>(
+        `SELECT id, name, amount, next_run_date
+         FROM recurring_transactions
+         WHERE is_active = 1 AND next_run_date >= ?
+         ORDER BY next_run_date ASC LIMIT 1`,
+        [now - 86400000]
+      );
+
+      if (rows.length === 0) return null;
+      const item = rows[0];
+      const diffMs = item.next_run_date - now;
+      const daysUntil = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+      return {
+        id: item.id,
+        name: item.name,
+        amount: Number(item.amount),
+        daysUntil,
+        formattedDate: format(new Date(item.next_run_date), 'MMM d'),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private async load30DayTrend(): Promise<{ points: CashFlow30DayPoint[]; netChange: number }> {
+    try {
+      const today = endOfDay(new Date());
+      const thirtyDaysAgo = startOfDay(subDays(new Date(), 29));
+      const transactions = await this.transactionRepo.findByDateRange(
+        this.accountId,
+        thirtyDaysAgo.getTime(),
+        today.getTime()
+      );
+
+      const dayMap = new Map<string, { income: number; expense: number }>();
+      for (let i = 0; i < 30; i++) {
+        const d = startOfDay(subDays(new Date(), 29 - i));
+        const key = format(d, 'yyyy-MM-dd');
+        dayMap.set(key, { income: 0, expense: 0 });
+      }
+
+      for (const t of transactions) {
+        const key = format(new Date(t.date), 'yyyy-MM-dd');
+        const entry = dayMap.get(key);
+        if (entry) {
+          const amt = t.convertedAmount ?? t.amount;
+          if (t.type === 'income') entry.income += amt;
+          else if (t.type === 'expense') entry.expense += amt;
+        }
+      }
+
+      let cumulative = 0;
+      let totalNet = 0;
+      const points: CashFlow30DayPoint[] = [];
+
+      dayMap.forEach((values, dateStr) => {
+        const delta = values.income - values.expense;
+        cumulative += delta;
+        totalNet += delta;
+        const d = new Date(dateStr);
+        points.push({
+          date: dateStr,
+          day: format(d, 'MMM d'),
+          value: cumulative,
+          income: values.income,
+          expense: values.expense,
+        });
+      });
+
+      return { points, netChange: totalNet };
+    } catch (err) {
+      logger.error('[DashboardService]', 'load30DayTrend error', err);
+      return { points: [], netChange: 0 };
     }
   }
 }

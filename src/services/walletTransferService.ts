@@ -21,6 +21,7 @@
 
 import { TransactionRepository } from '../database/repositories/TransactionRepository';
 import { CategoryRepository } from '../database/repositories/CategoryRepository';
+import { WalletRepository } from '../database/repositories/WalletRepository';
 import { calculateVaultBalances, roundMoney } from '../utils/balanceCalculator';
 import { useAccountStore } from '../store/accountStore';
 import { walletShortName } from '../utils/wallets';
@@ -33,18 +34,22 @@ import type { VaultType } from '../types/models';
  */
 export async function syncBalancesFromDatabase(accountId: string): Promise<void> {
   const txRepo = new TransactionRepository();
-  const recalculated = calculateVaultBalances(await txRepo.findByAccount(accountId));
+  const walletRepo = new WalletRepository();
+  const txs = await txRepo.findByAccount(accountId);
+  const recalculated = calculateVaultBalances(txs);
   useAccountStore.getState().updateBalance(accountId, recalculated);
+  await walletRepo.getDerivedBalances(accountId);
 }
 
 export async function transferBetweenWallets(
   accountId: string,
   userId: string,
-  from: VaultType,
-  to: VaultType,
+  from: string,
+  to: string,
   amount: number,
   description?: string,
   currency: string = 'USD',
+  allowOverdraft: boolean = false,
 ): Promise<void> {
   if (!amount || amount <= 0) {
     throw new Error('Transfer amount must be positive');
@@ -55,21 +60,31 @@ export async function transferBetweenWallets(
 
   const txRepo = new TransactionRepository();
   const categoryRepo = new CategoryRepository();
+  const walletRepo = new WalletRepository();
 
-  // Balance check against freshly calculated (DB-truth) balances.
-  // Both sides are normalized to 3 decimals so an exact MAX amount
-  // always passes instead of tripping on float dust (499.9999999 < 500).
-  const current = calculateVaultBalances(await txRepo.findByAccount(accountId));
-  const fromKey = `${from}Balance` as keyof typeof current;
-  if (roundMoney(current[fromKey] ?? 0) < roundMoney(amount)) {
-    throw new Error(`Insufficient balance in ${walletShortName(from)} wallet`);
+  // 1. Fetch wallet names and derived balances
+  const [fromWallet, toWallet, derivedBalances] = await Promise.all([
+    walletRepo.findByAccountAndId(accountId, from),
+    walletRepo.findByAccountAndId(accountId, to),
+    walletRepo.getDerivedBalances(accountId),
+  ]);
+
+  const fromName = fromWallet?.name || walletShortName(from as VaultType) || from;
+  const toName = toWallet?.name || walletShortName(to as VaultType) || to;
+  const fromBalance = derivedBalances[from] ?? 0;
+
+  // 2. Balance check against pure derived balance (unless overdraft explicitly permitted or credit wallet)
+  const isCredit = fromWallet?.icon?.includes('credit') || fromWallet?.name?.toLowerCase().includes('credit');
+  if (!allowOverdraft && !isCredit && roundMoney(fromBalance) < roundMoney(amount)) {
+    throw new Error(`Insufficient funds in ${fromName}. Available: ${currency} ${fromBalance.toFixed(2)}`);
   }
 
-  const note = description?.trim() || `Transfer ${walletShortName(from)} → ${walletShortName(to)}`;
+  const note = description?.trim() || `Transfer ${fromName} → ${toName}`;
   const outCategory = await categoryRepo.ensureTransferCategory(userId, 'expense');
   const inCategory = await categoryRepo.ensureTransferCategory(userId, 'income');
   const now = Date.now();
 
+  // Outgoing leg
   await txRepo.create({
     accountId,
     type: 'expense',
@@ -77,11 +92,14 @@ export async function transferBetweenWallets(
     categoryId: outCategory.id,
     description: `Transfer out: ${note}`,
     date: now,
-    vaultType: from,
+    vaultType: from as VaultType,
+    walletId: from,
+    destinationWalletId: to,
     isRecurring: false,
     currency,
   });
 
+  // Incoming leg
   await txRepo.create({
     accountId,
     type: 'income',
@@ -89,11 +107,15 @@ export async function transferBetweenWallets(
     categoryId: inCategory.id,
     description: `Transfer in: ${note}`,
     date: now,
-    vaultType: to,
+    vaultType: to as VaultType,
+    walletId: to,
+    destinationWalletId: from,
     isRecurring: false,
     currency,
   });
 
-  const updated = calculateVaultBalances(await txRepo.findByAccount(accountId));
-  useAccountStore.getState().updateBalance(accountId, updated);
+  // Refresh persisted balances for legacy listeners
+  const updatedTxs = await txRepo.findByAccount(accountId);
+  const updatedVaults = calculateVaultBalances(updatedTxs);
+  useAccountStore.getState().updateBalance(accountId, updatedVaults);
 }

@@ -1,733 +1,443 @@
-/**
- * Purpose: Manage wallets — add, rename, restyle, and remove wallets
- *
- * Inputs: None (settings screen; uses current account + user)
- *
- * Outputs:
- *   - Returns (JSX.Element): Wallet list with editor modal
- *
- * Side effects:
- *   - Creates/updates/deletes wallet rows (defaults can't be deleted and
- *     custom wallets with transactions are protected)
- */
-
+// Simplizum Wallets Hub — Unified Single-Tier Architectural List & Net Worth Command Header
 import React, { useMemo, useState, useCallback } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  Modal,
-  TextInput,
-  Alert,
-  ActivityIndicator,
   ScrollView,
+  RefreshControl,
+  Alert,
 } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import type { MainStackParamList } from '../../types/navigation';
 import { useAuthStore } from '../../store/authStore';
-import { useAccountStore } from '../../store/accountStore';
 import { WalletRepository } from '../../database/repositories/WalletRepository';
-import { getWalletBalance } from '../../utils/wallets';
-import { spacing, borderRadius } from '../../theme/spacing';
-import { typography } from '../../theme/typography';
-import { useThemeColors } from '../../hooks/useThemeColors';
-import { lightHaptic, mediumHaptic } from '../../services/haptics/hapticFeedback';
+import { AccountRepository } from '../../database/repositories/AccountRepository';
+import { TransactionRepository } from '../../database/repositories/TransactionRepository';
+import { CategoryRepository } from '../../database/repositories/CategoryRepository';
 import { useWallets } from '../../hooks/useWallets';
-import { syncBalancesFromDatabase } from '../../services/walletTransferService';
+import { useThemeColors } from '../../hooks/useThemeColors';
+import { formatCurrency } from '../../utils/currencyFormatter';
+import { triggerHaptic } from '../../services/haptics/hapticFeedback';
+import { borderRadius } from '../../theme/spacing';
+import { WalletArchitecturalCard } from '../../components/wallets/WalletArchitecturalCard';
+import { WalletFormModal } from '../../components/wallets/WalletFormModal';
 import type { Wallet } from '../../types/models';
 
-const ICON_PRESETS = [
-  'wallet-outline',
-  'cash-multiple',
-  'piggy-bank-outline',
-  'credit-card-outline',
-  'bank',
-  'cash',
-  'lifebuoy',
-  'repeat',
-  'trending-up',
-  'gift',
-  'car',
-  'home',
-];
-
-const COLOR_PRESETS = [
-  '#FF6B6B',
-  '#4ECDC4',
-  '#FFE66D',
-  '#A8E6CF',
-  '#FF8B94',
-  '#B4A7D6',
-  '#89CFF0',
-  '#06D6A0',
-  '#118AB2',
-  '#FFD166',
-  '#EF476F',
-  '#3A86FF',
-];
+type NavigationProp = StackNavigationProp<MainStackParamList, 'Wallets'>;
 
 export default function WalletsScreen() {
+  const navigation = useNavigation<NavigationProp>();
   const themeColors = useThemeColors();
   const currentUser = useAuthStore((s) => s.currentUser);
   const currentAccountId = useAuthStore((s) => s.currentAccountId);
-  const balances = useAccountStore((s) => s.balances);
-  const { wallets, loading, refresh } = useWallets();
-  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
+
+  const { wallets, refresh } = useWallets();
+  const [derivedBalances, setDerivedBalances] = useState<Record<string, number>>({});
   const [currency, setCurrency] = useState('USD');
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Form modal state
+  const [formModalVisible, setFormModalVisible] = useState(false);
+  const [editingWallet, setEditingWallet] = useState<Wallet | null>(null);
+
+  const loadData = useCallback(async () => {
+    if (!currentAccountId) return;
+    try {
+      const [acc, balances] = await Promise.all([
+        new AccountRepository().findById(currentAccountId),
+        new WalletRepository().getDerivedBalances(currentAccountId),
+      ]);
+      if (acc?.currency) setCurrency(acc.currency);
+      setDerivedBalances(balances);
+    } catch (err) {
+      console.warn('[WalletsScreen] loadData error:', err);
+    }
+  }, [currentAccountId]);
 
   useFocusEffect(
     useCallback(() => {
       refresh();
-      if (currentAccountId) {
-        syncBalancesFromDatabase(currentAccountId);
-        import('../../database/repositories/AccountRepository').then(({ AccountRepository }) => {
-          new AccountRepository().findById(currentAccountId).then((acc) => {
-            if (acc?.currency) setCurrency(acc.currency);
-          });
-        });
-      }
-    }, [refresh, currentAccountId])
+      loadData();
+    }, [refresh, loadData])
   );
 
-  const [editorVisible, setEditorVisible] = useState(false);
-  const [editing, setEditing] = useState<Wallet | null>(null);
-  const [name, setName] = useState('');
-  const [icon, setIcon] = useState(ICON_PRESETS[0]);
-  const [color, setColor] = useState(COLOR_PRESETS[0]);
-  const [saving, setSaving] = useState(false);
-
-  const openAdd = () => {
-    lightHaptic();
-    setEditing(null);
-    setName('');
-    setIcon(ICON_PRESETS[0]);
-    setColor(COLOR_PRESETS[0]);
-    setEditorVisible(true);
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([refresh(), loadData()]);
+    setRefreshing(false);
   };
 
-  const openEdit = (wallet: Wallet) => {
-    lightHaptic();
-    setEditing(wallet);
-    setName(wallet.name);
-    setIcon(wallet.icon);
-    setColor(wallet.color);
-    setEditorVisible(true);
+  // Calculate Net Worth across all wallets
+  const totalNetWorth = useMemo(() => {
+    let sum = 0;
+    for (const w of wallets) {
+      sum += derivedBalances[w.id] ?? 0;
+    }
+    return sum;
+  }, [wallets, derivedBalances]);
+
+  // Sort wallets: highest balance first
+  const sortedWallets = useMemo(() => {
+    return [...wallets].sort((a, b) => {
+      const balA = derivedBalances[a.id] ?? 0;
+      const balB = derivedBalances[b.id] ?? 0;
+      return balB - balA;
+    });
+  }, [wallets, derivedBalances]);
+
+  const handleWalletPress = (wallet: Wallet) => {
+    navigation.navigate('WalletDetails', { walletId: wallet.id });
   };
 
-  const handleSave = async () => {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      Alert.alert('Name required', 'Give your wallet a name first.');
-      return;
-    }
-    if (!currentAccountId) {
-      Alert.alert('Error', 'No active account.');
-      return;
-    }
-    // Name must stay unique per account (case-insensitive)
-    const clash = wallets.find(
-      (w) => w.id !== editing?.id && w.name.toLowerCase() === trimmed.toLowerCase()
+  const handleWalletLongPress = (wallet: Wallet) => {
+    Alert.alert(
+      wallet.name,
+      `Balance: ${formatCurrency(derivedBalances[wallet.id] ?? 0, currency)}`,
+      [
+        {
+          text: wallet.isDefault ? 'Default Wallet' : 'Set as Default',
+          onPress: async () => {
+            if (wallet.isDefault || !currentAccountId) return;
+            const repo = new WalletRepository();
+            const all = await repo.findByAccount(currentAccountId);
+            for (const item of all) {
+              if (item.isDefault && item.id !== wallet.id) {
+                await repo.update(item.id, { isDefault: false }, currentAccountId);
+              }
+            }
+            await repo.update(wallet.id, { isDefault: true }, currentAccountId);
+            triggerHaptic('notificationSuccess');
+            refresh();
+          },
+        },
+        {
+          text: 'Edit Wallet',
+          onPress: () => {
+            setEditingWallet(wallet);
+            setFormModalVisible(true);
+          },
+        },
+        {
+          text: 'Delete Wallet',
+          style: 'destructive',
+          onPress: () => handleDeleteWallet(wallet),
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]
     );
-    if (clash) {
-      Alert.alert('Name taken', `You already have a wallet called “${clash.name}”.`);
-      return;
-    }
-    setSaving(true);
-    try {
-      const repo = new WalletRepository();
-      if (editing) {
-        await repo.update(editing.id, { name: trimmed, icon, color, accountId: editing.accountId || currentAccountId }, editing.accountId || currentAccountId);
-        mediumHaptic();
-      } else {
-        await repo.create({
-          accountId: currentAccountId,
-          name: trimmed,
-          icon,
-          color,
-          isDefault: false,
-        });
-        mediumHaptic();
-      }
-      setEditorVisible(false);
-      await refresh();
-    } catch (error: any) {
-      Alert.alert('Error', error?.message || 'Could not save the wallet.');
-    } finally {
-      setSaving(false);
-    }
   };
 
-  const [reassignVisible, setReassignVisible] = useState(false);
-  const [walletToDelete, setWalletToDelete] = useState<Wallet | null>(null);
-  const [targetWalletId, setTargetWalletId] = useState<string>('');
-  const [usageDetails, setUsageDetails] = useState<{
-    transactions: number;
-    subscriptions: number;
-    recurring: number;
-  }>({ transactions: 0, subscriptions: 0, recurring: 0 });
-  const [deleting, setDeleting] = useState(false);
-
-  const otherWallets = useMemo(() => {
-    if (!walletToDelete) return [];
-    return wallets.filter((w) => w.id !== walletToDelete.id);
-  }, [wallets, walletToDelete]);
-
-  const handleDelete = async (wallet: Wallet) => {
+  const handleDeleteWallet = async (wallet: Wallet) => {
     if (wallets.length <= 1) {
-      Alert.alert('Cannot Delete', 'An account must have at least one wallet.');
+      Alert.alert('Cannot Delete', 'You must have at least one active wallet.');
       return;
     }
 
-    try {
-      const repo = new WalletRepository();
-      const usage = await repo.getWalletUsage(wallet.id, wallet.accountId || currentAccountId || undefined);
-      const totalUsage = usage.transactions + usage.subscriptions + usage.recurring;
+    const otherWallets = wallets.filter((w) => w.id !== wallet.id);
+    const destination = otherWallets[0];
 
-      if (totalUsage === 0) {
-        Alert.alert(
-          'Delete Wallet',
-          `Are you sure you want to delete “${wallet.name}”?`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Delete',
-              style: 'destructive',
-              onPress: async () => {
-                try {
-                  await repo.delete(wallet.id, wallet.accountId || currentAccountId || undefined);
-                  mediumHaptic();
-                  if (currentAccountId) await syncBalancesFromDatabase(currentAccountId);
-                  await refresh();
-                } catch (error: any) {
-                  Alert.alert('Cannot Delete', error?.message || 'Could not delete the wallet.');
-                }
-              },
-            },
-          ]
-        );
-      } else {
-        const remaining = wallets.filter((w) => w.id !== wallet.id);
-        setWalletToDelete(wallet);
-        setUsageDetails(usage);
-        setTargetWalletId(remaining[0]?.id || '');
-        setReassignVisible(true);
-      }
-    } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Could not check wallet usage.');
-    }
-  };
-
-  const handleConfirmReassignAndDelete = async () => {
-    if (!walletToDelete || !targetWalletId) return;
-    setDeleting(true);
-    try {
-      const repo = new WalletRepository();
-      await repo.delete(
-        walletToDelete.id,
-        walletToDelete.accountId || currentAccountId || undefined,
-        targetWalletId
-      );
-      mediumHaptic();
-      setReassignVisible(false);
-      setWalletToDelete(null);
-      if (currentAccountId) await syncBalancesFromDatabase(currentAccountId);
-      await refresh();
-    } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to reassign and delete wallet.');
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  const handleMoveUp = async (index: number) => {
-    if (index <= 0 || !currentAccountId) return;
-    const reordered = [...wallets];
-    const temp = reordered[index - 1];
-    reordered[index - 1] = reordered[index];
-    reordered[index] = temp;
-    lightHaptic();
-    try {
-      await new WalletRepository().reorderWallets(currentAccountId, reordered.map((w) => w.id));
-      await refresh();
-    } catch (e: any) {
-      console.warn('Failed to reorder wallets:', e);
-    }
-  };
-
-  const handleMoveDown = async (index: number) => {
-    if (index >= wallets.length - 1 || !currentAccountId) return;
-    const reordered = [...wallets];
-    const temp = reordered[index + 1];
-    reordered[index + 1] = reordered[index];
-    reordered[index] = temp;
-    lightHaptic();
-    try {
-      await new WalletRepository().reorderWallets(currentAccountId, reordered.map((w) => w.id));
-      await refresh();
-    } catch (e: any) {
-      console.warn('Failed to reorder wallets:', e);
-    }
-  };
-
-  const renderItem = ({ item, index }: { item: Wallet; index: number }) => {
-    const balance = currentAccountId
-      ? getWalletBalance(balances[currentAccountId] as any, item.id)
-      : 0;
-    return (
-      <View style={styles.card}>
-        <View style={styles.reorderActions}>
-          <TouchableOpacity
-            style={[styles.miniAction, index === 0 && styles.miniActionDisabled]}
-            disabled={index === 0}
-            onPress={() => handleMoveUp(index)}
-            hitSlop={6}
-          >
-            <MaterialCommunityIcons
-              name="chevron-up"
-              size={20}
-              color={index === 0 ? themeColors.textDisabled : themeColors.textSecondary}
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.miniAction, index === wallets.length - 1 && styles.miniActionDisabled]}
-            disabled={index === wallets.length - 1}
-            onPress={() => handleMoveDown(index)}
-            hitSlop={6}
-          >
-            <MaterialCommunityIcons
-              name="chevron-down"
-              size={20}
-              color={index === wallets.length - 1 ? themeColors.textDisabled : themeColors.textSecondary}
-            />
-          </TouchableOpacity>
-        </View>
-
-        <View style={[styles.iconCircle, { backgroundColor: item.color }]}>
-          <MaterialCommunityIcons name={item.icon as any} size={22} color="#FFF" />
-        </View>
-        <View style={styles.info}>
-          <Text style={styles.name}>{item.name}</Text>
-          <Text style={styles.balance}>{balance.toFixed(3)} {currency}</Text>
-          {item.isDefault && <Text style={styles.badge}>STARTER</Text>}
-        </View>
-        <TouchableOpacity style={styles.action} onPress={() => openEdit(item)} hitSlop={8}>
-          <MaterialCommunityIcons name="pencil" size={20} color={themeColors.primary} />
-        </TouchableOpacity>
-        {wallets.length > 1 && (
-          <TouchableOpacity style={styles.action} onPress={() => handleDelete(item)} hitSlop={8}>
-            <MaterialCommunityIcons name="delete" size={20} color={themeColors.error} />
-          </TouchableOpacity>
-        )}
-      </View>
+    Alert.alert(
+      'Delete Wallet',
+      `Delete "${wallet.name}"? All its past transactions will be reallocated to "${destination.name}".`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete & Reassign',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (!currentAccountId) return;
+              const repo = new WalletRepository();
+              await repo.delete(wallet.id, currentAccountId, destination.id);
+              triggerHaptic('notificationSuccess');
+              await Promise.all([refresh(), loadData()]);
+            } catch (err: any) {
+              Alert.alert('Error', err?.message || 'Failed to delete wallet.');
+            }
+          },
+        },
+      ]
     );
+  };
+
+  const handleSaveWallet = async (data: {
+    id?: string;
+    name: string;
+    icon: string;
+    color: string;
+    isDefault: boolean;
+    initialBalance?: number;
+  }) => {
+    if (!currentAccountId || !currentUser) return;
+    const repo = new WalletRepository();
+
+    if (data.id) {
+      // Update existing
+      await repo.update(
+        data.id,
+        {
+          name: data.name,
+          icon: data.icon,
+          color: data.color,
+          isDefault: data.isDefault,
+        },
+        currentAccountId
+      );
+    } else {
+      // Create new
+      const created = await repo.create({
+        accountId: currentAccountId,
+        name: data.name,
+        icon: data.icon,
+        color: data.color,
+        isDefault: data.isDefault,
+        sortOrder: wallets.length,
+      });
+
+      // If initial starting balance was supplied, create initial deposit transaction
+      if (data.initialBalance && data.initialBalance > 0) {
+        const catRepo = new CategoryRepository();
+        const txRepo = new TransactionRepository();
+        const depositCat = await catRepo.ensureTransferCategory(currentUser.id, 'income');
+
+        await txRepo.create({
+          accountId: currentAccountId,
+          type: 'income',
+          amount: data.initialBalance,
+          categoryId: depositCat.id,
+          description: `Initial balance for ${data.name}`,
+          date: Date.now(),
+          vaultType: created.id,
+          walletId: created.id,
+          isRecurring: false,
+          currency,
+        });
+      }
+    }
+
+    // If marked default, unset others
+    if (data.isDefault) {
+      const all = await repo.findByAccount(currentAccountId);
+      for (const item of all) {
+        if (item.isDefault && item.id !== (data.id || '')) {
+          await repo.update(item.id, { isDefault: false }, currentAccountId);
+        }
+      }
+    }
+
+    await Promise.all([refresh(), loadData()]);
   };
 
   return (
-    <View style={styles.container}>
-      <FlashList
-        data={wallets}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={styles.list}
-        ListEmptyComponent={
-          loading ? (
-            <ActivityIndicator size="large" color={themeColors.primary} style={styles.loader} />
-          ) : (
-            <View style={styles.empty}>
-              <MaterialCommunityIcons name="wallet-outline" size={48} color={themeColors.textSecondary} />
-              <Text style={styles.emptyText}>No wallets yet</Text>
-            </View>
-          )
+    <View style={[styles.root, { backgroundColor: themeColors.background }]}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={themeColors.text}
+          />
         }
-      />
-
-      <View style={styles.footer}>
-        <TouchableOpacity style={styles.addButton} onPress={openAdd} activeOpacity={0.8}>
-          <MaterialCommunityIcons name="plus" size={20} color="#FFF" />
-          <Text style={styles.addText}>Add Wallet</Text>
-        </TouchableOpacity>
-      </View>
-
-      <Modal visible={editorVisible} transparent animationType="slide" onRequestClose={() => setEditorVisible(false)}>
-        <View style={styles.overlay}>
-          <View style={styles.sheet}>
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>{editing ? 'Edit Wallet' : 'New Wallet'}</Text>
-              <TouchableOpacity onPress={() => setEditorVisible(false)} hitSlop={8}>
-                <MaterialCommunityIcons name="close" size={24} color={themeColors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.fieldLabel}>Name</Text>
-            <TextInput
-              style={styles.nameInput}
-              value={name}
-              onChangeText={setName}
-              placeholder="e.g. Holiday fund"
-              placeholderTextColor={themeColors.textSecondary}
-              maxLength={30}
-              autoFocus
-            />
-
-            <Text style={styles.fieldLabel}>Icon</Text>
-            <View style={styles.optionGrid}>
-              {ICON_PRESETS.map((preset) => (
-                <TouchableOpacity
-                  key={preset}
-                  style={[styles.iconOption, icon === preset && styles.iconOptionActive]}
-                  onPress={() => setIcon(preset)}
-                >
-                  <MaterialCommunityIcons
-                    name={preset as any}
-                    size={24}
-                    color={icon === preset ? themeColors.primary : themeColors.textSecondary}
-                  />
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={styles.fieldLabel}>Color</Text>
-            <View style={styles.optionGrid}>
-              {COLOR_PRESETS.map((preset) => (
-                <TouchableOpacity
-                  key={preset}
-                  style={[styles.colorOption, { backgroundColor: preset }, color === preset && styles.colorOptionActive]}
-                  onPress={() => setColor(preset)}
-                >
-                  {color === preset && (
-                    <MaterialCommunityIcons name="check" size={18} color="#FFF" />
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <TouchableOpacity
-              style={[styles.saveButton, saving && styles.buttonDisabled]}
-              onPress={handleSave}
-              disabled={saving}
-            >
-              {saving ? (
-                <ActivityIndicator size="small" color="#FFF" />
-              ) : (
-                <Text style={styles.saveText}>{editing ? 'Save Changes' : 'Add Wallet'}</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Reassign & Delete Modal */}
-      <Modal
-        visible={reassignVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => !deleting && setReassignVisible(false)}
       >
-        <View style={styles.overlay}>
-          <View style={styles.sheet}>
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Reassign & Delete</Text>
-              {!deleting && (
-                <TouchableOpacity onPress={() => setReassignVisible(false)} hitSlop={8}>
-                  <MaterialCommunityIcons name="close" size={24} color={themeColors.textSecondary} />
-                </TouchableOpacity>
-              )}
-            </View>
+        {/* Command Net Worth Header Card */}
+        <View
+          style={[
+            styles.commandCard,
+            {
+              backgroundColor: themeColors.surface,
+              borderColor: themeColors.cardBorder,
+            },
+          ]}
+        >
+          <View style={styles.commandTopRow}>
+            <Text style={[styles.commandMicroLabel, { color: themeColors.textMuted }]}>
+              TOTAL NET WORTH
+            </Text>
+            <Text style={[styles.walletCountBadge, { color: themeColors.textMuted }]}>
+              {wallets.length} WALLETS
+            </Text>
+          </View>
 
-            <View style={styles.warningBox}>
-              <MaterialCommunityIcons name="alert-circle-outline" size={24} color={themeColors.warning} />
-              <Text style={styles.warningText}>
-                “{walletToDelete?.name}” has {usageDetails.transactions} transaction(s)
-                {usageDetails.subscriptions > 0 ? `, ${usageDetails.subscriptions} subscription(s)` : ''}
-                {usageDetails.recurring > 0 ? `, ${usageDetails.recurring} recurring item(s)` : ''}.
+          <Text style={[styles.commandAmountText, { color: themeColors.text }]}>
+            {formatCurrency(totalNetWorth, currency)}
+          </Text>
+
+          {/* Action Duo */}
+          <View style={styles.actionDuoRow}>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => {
+                triggerHaptic('selection');
+                setEditingWallet(null);
+                setFormModalVisible(true);
+              }}
+              style={[
+                styles.actionBtn,
+                {
+                  borderColor: themeColors.cardBorder,
+                  backgroundColor: themeColors.background,
+                },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name="plus"
+                size={16}
+                color={themeColors.text}
+                style={{ marginRight: 6 }}
+              />
+              <Text style={[styles.actionBtnText, { color: themeColors.text }]}>
+                NEW WALLET
               </Text>
-            </View>
-
-            <Text style={styles.fieldLabel}>Reassign records to:</Text>
-            <ScrollView style={styles.walletPickerList}>
-              {otherWallets.map((w) => (
-                <TouchableOpacity
-                  key={w.id}
-                  style={[
-                    styles.walletPickerItem,
-                    targetWalletId === w.id && styles.walletPickerItemActive,
-                  ]}
-                  onPress={() => {
-                    lightHaptic();
-                    setTargetWalletId(w.id);
-                  }}
-                >
-                  <View style={[styles.iconCircleSmall, { backgroundColor: w.color }]}>
-                    <MaterialCommunityIcons name={w.icon as any} size={18} color="#FFF" />
-                  </View>
-                  <Text style={styles.walletPickerText}>{w.name}</Text>
-                  {targetWalletId === w.id && (
-                    <MaterialCommunityIcons name="check-circle" size={20} color={themeColors.primary} />
-                  )}
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+            </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.deleteConfirmButton, deleting && styles.buttonDisabled]}
-              onPress={handleConfirmReassignAndDelete}
-              disabled={deleting}
+              activeOpacity={0.8}
+              onPress={() => {
+                triggerHaptic('selection');
+                navigation.navigate('Transfer');
+              }}
+              style={[
+                styles.actionBtn,
+                {
+                  borderColor: themeColors.cardBorder,
+                  backgroundColor: themeColors.background,
+                },
+              ]}
             >
-              {deleting ? (
-                <ActivityIndicator size="small" color="#FFF" />
-              ) : (
-                <Text style={styles.deleteConfirmText}>Reassign & Delete</Text>
-              )}
+              <MaterialCommunityIcons
+                name="swap-vertical"
+                size={16}
+                color={themeColors.text}
+                style={{ marginRight: 6 }}
+              />
+              <Text style={[styles.actionBtnText, { color: themeColors.text }]}>
+                TRANSFER
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+
+        {/* Section Title */}
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: themeColors.textMuted }]}>
+            ARCHITECTURAL LEDGER
+          </Text>
+          <Text style={[styles.sectionSub, { color: themeColors.textMuted }]}>
+            SORTED BY BALANCE
+          </Text>
+        </View>
+
+        {/* Unified Single-Tier Architectural List */}
+        <View style={styles.listContainer}>
+          {sortedWallets.map((wallet) => (
+            <WalletArchitecturalCard
+              key={wallet.id}
+              wallet={wallet}
+              balance={derivedBalances[wallet.id] ?? 0}
+              currency={currency}
+              onPress={() => handleWalletPress(wallet)}
+              onLongPress={() => handleWalletLongPress(wallet)}
+            />
+          ))}
+        </View>
+      </ScrollView>
+
+      {/* Add / Edit Wallet Modal */}
+      <WalletFormModal
+        visible={formModalVisible}
+        wallet={editingWallet}
+        currency={currency}
+        onClose={() => setFormModalVisible(false)}
+        onSave={handleSaveWallet}
+      />
     </View>
   );
 }
 
-const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
-  StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: themeColors.background,
-    },
-    list: {
-      padding: spacing.md,
-      gap: spacing.sm,
-      paddingBottom: spacing.xl,
-    },
-    loader: {
-      marginTop: spacing.xl,
-    },
-    empty: {
-      alignItems: 'center',
-      paddingTop: spacing.xxl,
-      gap: spacing.sm,
-    },
-    emptyText: {
-      ...typography.body,
-      color: themeColors.textSecondary,
-    },
-    card: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: themeColors.surface,
-      borderRadius: borderRadius.lg,
-      padding: spacing.md,
-      gap: spacing.sm,
-      borderWidth: 1,
-      borderColor: themeColors.border,
-    },
-    reorderActions: {
-      flexDirection: 'column',
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginRight: -4,
-    },
-    miniAction: {
-      padding: 2,
-    },
-    miniActionDisabled: {
-      opacity: 0.25,
-    },
-    iconCircle: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    info: {
-      flex: 1,
-      gap: 2,
-    },
-    name: {
-      ...typography.body,
-      fontWeight: '700',
-      color: themeColors.text,
-    },
-    balance: {
-      ...typography.caption,
-      color: themeColors.textSecondary,
-    },
-    badge: {
-      ...typography.caption,
-      fontSize: 10,
-      fontWeight: '700',
-      color: themeColors.primary,
-      letterSpacing: 0.5,
-    },
-    action: {
-      padding: spacing.xs,
-    },
-    footer: {
-      padding: spacing.md,
-      backgroundColor: themeColors.surface,
-      borderTopWidth: 1,
-      borderTopColor: themeColors.border,
-    },
-    addButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: themeColors.primary,
-      borderRadius: borderRadius.md,
-      paddingVertical: spacing.md,
-      gap: spacing.xs,
-    },
-    addText: {
-      ...typography.body,
-      fontWeight: '700',
-      color: '#FFF',
-    },
-    overlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      justifyContent: 'flex-end',
-    },
-    sheet: {
-      backgroundColor: themeColors.surface,
-      borderTopLeftRadius: 24,
-      borderTopRightRadius: 24,
-      padding: spacing.lg,
-      paddingBottom: spacing.xl,
-      maxHeight: '85%',
-    },
-    sheetHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: spacing.md,
-    },
-    sheetTitle: {
-      ...typography.h3,
-      color: themeColors.text,
-    },
-    fieldLabel: {
-      ...typography.body,
-      fontWeight: '600',
-      color: themeColors.text,
-      marginTop: spacing.md,
-      marginBottom: spacing.sm,
-    },
-    nameInput: {
-      ...typography.body,
-      color: themeColors.text,
-      backgroundColor: themeColors.background,
-      borderWidth: 1,
-      borderColor: themeColors.border,
-      borderRadius: 12,
-      paddingHorizontal: spacing.md,
-      paddingVertical: spacing.md,
-    },
-    optionGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: spacing.sm,
-    },
-    iconOption: {
-      width: 48,
-      height: 48,
-      borderRadius: 12,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 2,
-      borderColor: themeColors.border,
-      backgroundColor: themeColors.background,
-    },
-    iconOptionActive: {
-      borderColor: themeColors.primary,
-    },
-    colorOption: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 3,
-      borderColor: 'transparent',
-    },
-    colorOptionActive: {
-      borderColor: themeColors.text,
-    },
-    saveButton: {
-      backgroundColor: themeColors.primary,
-      borderRadius: borderRadius.md,
-      paddingVertical: spacing.md,
-      alignItems: 'center',
-      marginTop: spacing.lg,
-    },
-    buttonDisabled: {
-      opacity: 0.6,
-    },
-    saveText: {
-      ...typography.body,
-      fontWeight: '700',
-      color: '#FFF',
-    },
-    warningBox: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.sm,
-      backgroundColor: themeColors.warning + '20',
-      borderRadius: borderRadius.md,
-      padding: spacing.md,
-      marginTop: spacing.xs,
-      marginBottom: spacing.md,
-      borderWidth: 1,
-      borderColor: themeColors.warning + '40',
-    },
-    warningText: {
-      ...typography.caption,
-      color: themeColors.text,
-      flex: 1,
-      lineHeight: 18,
-    },
-    walletPickerList: {
-      maxHeight: 180,
-      marginVertical: spacing.xs,
-    },
-    walletPickerItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: spacing.sm,
-      borderRadius: borderRadius.md,
-      borderWidth: 1,
-      borderColor: themeColors.border,
-      marginBottom: spacing.xs,
-      gap: spacing.sm,
-      backgroundColor: themeColors.background,
-    },
-    walletPickerItemActive: {
-      borderColor: themeColors.primary,
-      backgroundColor: themeColors.primary + '15',
-    },
-    iconCircleSmall: {
-      width: 32,
-      height: 32,
-      borderRadius: 16,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    walletPickerText: {
-      ...typography.body,
-      flex: 1,
-      fontWeight: '600',
-      color: themeColors.text,
-    },
-    deleteConfirmButton: {
-      backgroundColor: themeColors.error,
-      borderRadius: borderRadius.md,
-      paddingVertical: spacing.md,
-      alignItems: 'center',
-      marginTop: spacing.md,
-    },
-    deleteConfirmText: {
-      ...typography.body,
-      fontWeight: '700',
-      color: '#FFF',
-    },
-  });
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 20,
+    paddingBottom: 40,
+  },
+  commandCard: {
+    borderWidth: 1,
+    borderRadius: borderRadius.xs, // 2px subtle corner
+    padding: 18,
+    marginBottom: 24,
+  },
+  commandTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  commandMicroLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  walletCountBadge: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.8,
+  },
+  commandAmountText: {
+    fontSize: 32,
+    fontWeight: '800',
+    letterSpacing: -1,
+    fontVariant: ['tabular-nums'],
+    marginBottom: 18,
+  },
+  actionDuoRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  actionBtn: {
+    flex: 1,
+    height: 42,
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    paddingHorizontal: 2,
+  },
+  sectionTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  sectionSub: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.8,
+  },
+  listContainer: {
+    marginTop: 2,
+  },
+});

@@ -1,15 +1,14 @@
 /**
- * Purpose: Configure app security settings (biometric/PIN)
+ * SecuritySettingsScreen — Simplizum Architectural Edition
  *
- * Features:
- * - Enable/disable app lock
- * - Choose biometric or PIN based on device capabilities
- * - Set up PIN
- * - Change PIN
- * - Switch between auth methods
+ * In-Place Security Hub:
+ * - Direct toggle for App Shield (Biometrics / PIN)
+ * - In-place auto-lock timeout interval chips (Immediately, 30s, 1m, 5m, 30m)
+ * - Architectural modal for PIN setup and updates
+ * - Device biometric capabilities detection
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -20,6 +19,7 @@ import {
   Alert,
   TextInput,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -33,58 +33,50 @@ import {
   validatePinFormat,
   isPinTooSimple,
 } from '../../services/biometric/pinUtils';
-import { lightHaptic, mediumHaptic } from '../../services/haptics/hapticFeedback';
+import { lightHaptic, mediumHaptic, errorHaptic } from '../../services/haptics/hapticFeedback';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 
 const AUTO_LOCK_OPTIONS = [
-  { seconds: 0, label: 'Immediately', hint: 'Lock every time you leave the app' },
-  { seconds: 30, label: 'After 30 seconds', hint: 'Brief grace period' },
-  { seconds: 60, label: 'After 1 minute', hint: 'Quick check-ins stay unlocked' },
-  { seconds: 300, label: 'After 5 minutes', hint: 'Relaxed for active use' },
-  { seconds: 1800, label: 'After 30 minutes', hint: 'Only lock after long breaks' },
+  { seconds: 0, label: 'IMMEDIATELY', sub: 'On background' },
+  { seconds: 30, label: '30 SEC', sub: 'Brief grace' },
+  { seconds: 60, label: '1 MIN', sub: 'Standard' },
+  { seconds: 300, label: '5 MIN', sub: 'Extended' },
+  { seconds: 1800, label: '30 MIN', sub: 'Relaxed' },
 ];
 
-const SecuritySettingsScreen = ({ navigation }: any) => {
+export default function SecuritySettingsScreen({ navigation }: any) {
   const themeColors = useThemeColors();
   const { securitySettings, updateSecuritySettings } = useSettingsStore();
 
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricType, setBiometricType] = useState<'fingerprint' | 'faceId' | 'iris' | 'none'>('none');
-  const [showPinSetup, setShowPinSetup] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
-  const [isSettingPin, setIsSettingPin] = useState(false);
+  const [isSavingPin, setIsSavingPin] = useState(false);
   const [enableBiometricAfterPin, setEnableBiometricAfterPin] = useState(false);
 
-  // Check biometric capabilities on mount
+  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
+
   useEffect(() => {
-    checkCapabilities();
+    (async () => {
+      const caps = await checkBiometricCapabilities();
+      setBiometricAvailable(caps.isAvailable);
+      setBiometricType(caps.biometricType);
+    })();
   }, []);
 
-  const checkCapabilities = async () => {
-    const capabilities = await checkBiometricCapabilities();
-    setBiometricAvailable(capabilities.isAvailable);
-    setBiometricType(capabilities.biometricType);
-  };
-
-  // Toggle app lock
-  const handleToggleAppLock = async () => {
+  const handleToggleAppLock = () => {
     if (securitySettings.isEnabled) {
-      // Disable app lock
       Alert.alert(
-        'Disable App Lock',
-        'Are you sure you want to disable app lock? Your wallet will be accessible without authentication.',
+        'DISABLE APP SHIELD',
+        'Your ledger and private vault will be accessible without authentication upon opening.',
         [
+          { text: 'Cancel', style: 'cancel', onPress: () => lightHaptic() },
           {
-            text: 'Cancel',
-            style: 'cancel',
-            onPress: () => lightHaptic(),
-          },
-          {
-            text: 'Disable',
+            text: 'Disable Shield',
             style: 'destructive',
             onPress: () => {
               mediumHaptic();
@@ -101,85 +93,73 @@ const SecuritySettingsScreen = ({ navigation }: any) => {
         ]
       );
     } else {
-      // Enable app lock - show setup options
       if (biometricAvailable) {
         Alert.alert(
-          'Enable App Lock',
-          'Choose your security method:',
+          'ENABLE APP SHIELD',
+          'Select your preferred primary authentication method:',
           [
-            {
-              text: 'Cancel',
-              style: 'cancel',
-              onPress: () => lightHaptic(),
-            },
+            { text: 'Cancel', style: 'cancel', onPress: () => lightHaptic() },
             {
               text: 'PIN Only',
               onPress: () => {
                 lightHaptic();
-                setShowPinSetup(true);
+                setEnableBiometricAfterPin(false);
+                setPin('');
+                setConfirmPin('');
+                setShowPinModal(true);
               },
             },
             {
-              text: `${getBiometricTypeName(biometricType)} + PIN`,
+              text: `${getBiometricTypeName(biometricType)} + PIN Backup`,
               onPress: () => {
                 mediumHaptic();
-                // Show PIN setup first, then enable biometric
-                Alert.alert(
-                  'Setup PIN Backup',
-                  `You'll need to set up a PIN as backup for ${getBiometricTypeName(biometricType)} authentication.`,
-                  [
-                    {
-                      text: 'OK',
-                      onPress: () => {
-                        lightHaptic();
-                        setEnableBiometricAfterPin(true);
-                        setShowPinSetup(true);
-                      },
-                    },
-                  ]
-                );
+                setEnableBiometricAfterPin(true);
+                setPin('');
+                setConfirmPin('');
+                setShowPinModal(true);
               },
             },
           ]
         );
       } else {
-        // No biometric, must use PIN
         lightHaptic();
-        setShowPinSetup(true);
+        setEnableBiometricAfterPin(false);
+        setPin('');
+        setConfirmPin('');
+        setShowPinModal(true);
       }
     }
   };
 
-  // Setup PIN
-  const handleSetupPin = () => {
+  const handleSavePin = () => {
     if (!pin || !confirmPin) {
-      Alert.alert('Error', 'Please enter PIN and confirm');
+      errorHaptic();
+      Alert.alert('Required', 'Please enter and confirm your PIN.');
       return;
     }
 
     const validation = validatePinFormat(pin);
     if (!validation.valid) {
+      errorHaptic();
       Alert.alert('Invalid PIN', validation.error);
       return;
     }
 
     if (isPinTooSimple(pin)) {
-      Alert.alert(
-        'Weak PIN',
-        'This PIN is too simple. Please choose a more secure PIN.'
-      );
+      errorHaptic();
+      Alert.alert('Weak PIN', 'Avoid simple sequences (like 1234) or repeated digits (like 1111).');
       return;
     }
 
     if (pin !== confirmPin) {
-      Alert.alert('Error', 'PINs do not match');
+      errorHaptic();
+      Alert.alert('Mismatch', 'PIN entries do not match.');
       return;
     }
 
-    setIsSettingPin(true);
+    setIsSavingPin(true);
     const pinHash = hashPin(pin);
 
-    // Check if we're setting up biometric with PIN backup
     if (enableBiometricAfterPin) {
       updateSecuritySettings({
         isEnabled: true,
@@ -188,12 +168,9 @@ const SecuritySettingsScreen = ({ navigation }: any) => {
         biometricEnabled: true,
       });
       mediumHaptic();
-      setShowPinSetup(false);
-      setPin('');
-      setConfirmPin('');
-      setIsSettingPin(false);
-      setEnableBiometricAfterPin(false);
-      Alert.alert('Success', `${getBiometricTypeName(biometricType)} with PIN backup has been set successfully`);
+      setShowPinModal(false);
+      setIsSavingPin(false);
+      Alert.alert('SHIELD ACTIVATED', `${getBiometricTypeName(biometricType)} and PIN backup are now active.`);
     } else {
       updateSecuritySettings({
         isEnabled: true,
@@ -202,457 +179,587 @@ const SecuritySettingsScreen = ({ navigation }: any) => {
         biometricEnabled: false,
       });
       mediumHaptic();
-      setShowPinSetup(false);
-      setPin('');
-      setConfirmPin('');
-      setIsSettingPin(false);
-      Alert.alert('Success', 'PIN has been set successfully');
+      setShowPinModal(false);
+      setIsSavingPin(false);
+      Alert.alert('SHIELD ACTIVATED', 'Master PIN protection is now active.');
     }
   };
 
-  // Change PIN
-  const handleChangePin = () => {
-    lightHaptic();
-    setShowPinSetup(true);
-  };
-
-  // Switch to biometric (if available)
   const handleSwitchToBiometric = () => {
     if (!biometricAvailable) {
-      Alert.alert('Not Available', 'Biometric authentication is not available on this device');
+      Alert.alert('Unavailable', 'Biometrics are not supported on this device.');
       return;
     }
+    mediumHaptic();
+    updateSecuritySettings({
+      authType: 'biometric',
+      biometricEnabled: true,
+    });
+  };
 
-    // PIN is already set, so we can just switch
-    Alert.alert(
-      'Switch to Biometric',
-      `Use ${getBiometricTypeName(biometricType)} with PIN backup?`,
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-          onPress: () => lightHaptic(),
-        },
-        {
-          text: 'Switch',
-          onPress: () => {
-            mediumHaptic();
-            updateSecuritySettings({
-              authType: 'biometric',
-              biometricEnabled: true,
-            });
-            Alert.alert('Success', `Switched to ${getBiometricTypeName(biometricType)} with PIN backup`);
-          },
-        },
-      ]
-    );
+  const handleSwitchToPinOnly = () => {
+    mediumHaptic();
+    updateSecuritySettings({
+      authType: 'pin',
+      biometricEnabled: false,
+    });
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: themeColors.background }]}>
-      {/* Master Toggle */}
-      <View style={[styles.section, { backgroundColor: themeColors.surface }]}>
-        <Text style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
-          App Lock
-        </Text>
-
-        <View style={styles.settingRow}>
-          <View style={styles.settingLeft}>
-            <View style={[styles.iconContainer, { backgroundColor: colors.semantic.warningLight }]}>
-              <MaterialCommunityIcons
-                name="shield-lock"
-                size={20}
-                color={colors.semantic.warning}
-              />
-            </View>
-            <View style={styles.settingInfo}>
-              <Text style={[styles.settingLabel, { color: themeColors.text }]}>
-                Secure App Open
-              </Text>
-              <Text style={[styles.settingDescription, { color: themeColors.textSecondary }]}>
-                Require authentication to open app
-              </Text>
-            </View>
-          </View>
-          <Switch
-            value={securitySettings.isEnabled}
-            onValueChange={handleToggleAppLock}
-            trackColor={{
-              false: colors.neutral.gray300,
-              true: colors.primary.light,
-            }}
-            thumbColor={
-              securitySettings.isEnabled
-                ? colors.primary.main
-                : colors.neutral.gray500
-            }
-          />
+    <View style={styles.root}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => {
+            lightHaptic();
+            navigation.goBack();
+          }}
+        >
+          <MaterialCommunityIcons name="arrow-left" size={20} color={themeColors.text} />
+        </TouchableOpacity>
+        <View style={styles.headerTitles}>
+          <Text style={styles.headerSuper}>SECURITY & ARCHITECTURE</Text>
+          <Text style={styles.headerTitle}>APP SHIELD</Text>
+        </View>
+        <View style={styles.statusPill}>
+          <Text style={[styles.statusText, securitySettings.isEnabled ? styles.statusActive : null]}>
+            {securitySettings.isEnabled ? 'ARMED' : 'DISARMED'}
+          </Text>
         </View>
       </View>
 
-      {/* Auto-lock delay (only shown if enabled) */}
-      {securitySettings.isEnabled && (
-        <View style={[styles.section, { backgroundColor: themeColors.surface }]}>
-          <Text style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
-            Auto-Lock Delay
-          </Text>
-          <Text style={[styles.sectionHint, { color: themeColors.textSecondary }]}>
-            Lock the app after being away this long
-          </Text>
-
-          {AUTO_LOCK_OPTIONS.map((option) => {
-            const isSelected = securitySettings.autoLockTimeout === option.seconds;
-            return (
-              <TouchableOpacity
-                key={option.seconds}
-                style={styles.settingRow}
-                onPress={() => {
-                  lightHaptic();
-                  updateSecuritySettings({ autoLockTimeout: option.seconds });
-                }}
-              >
-                <View style={styles.settingLeft}>
-                  <View style={[styles.iconContainer, { backgroundColor: colors.semantic.infoLight }]}>
-                    <MaterialCommunityIcons
-                      name="timer-outline"
-                      size={20}
-                      color={colors.semantic.info}
-                    />
-                  </View>
-                  <View style={styles.settingInfo}>
-                    <Text style={[styles.settingLabel, { color: themeColors.text }]}>
-                      {option.label}
-                    </Text>
-                    <Text style={[styles.settingDescription, { color: themeColors.textSecondary }]}>
-                      {option.hint}
-                    </Text>
-                  </View>
-                </View>
-                {isSelected ? (
-                  <MaterialCommunityIcons
-                    name="check-circle"
-                    size={24}
-                    color={colors.primary.main}
-                  />
-                ) : (
-                  <MaterialCommunityIcons
-                    name="circle-outline"
-                    size={24}
-                    color={themeColors.textSecondary}
-                  />
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      )}
-
-      {/* Authentication Method (only shown if enabled) */}
-      {securitySettings.isEnabled && (
-        <View style={[styles.section, { backgroundColor: themeColors.surface }]}>
-          <Text style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
-            Authentication Method
-          </Text>
-
-          {/* Current method */}
-          <View style={[styles.infoBox, { backgroundColor: colors.primary.light + '30' }]}>
-            <MaterialCommunityIcons
-              name={
-                securitySettings.authType === 'biometric'
-                  ? getBiometricIcon(biometricType)
-                  : 'lock-outline'
-              }
-              size={20}
-              color={colors.primary.main}
-            />
-            <Text style={[styles.infoText, { color: colors.primary.main }]}>
-              Currently using:{' '}
-              {securitySettings.authType === 'biometric'
-                ? `${getBiometricTypeName(biometricType)} with PIN backup`
-                : 'PIN only'}
-            </Text>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        {/* CARD 1: MASTER ACCESS SWITCH */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardHeaderTitle}>MASTER ACCESS CONTROL</Text>
           </View>
-
-          {/* Change PIN (if using PIN) */}
-          {securitySettings.authType === 'pin' && (
-            <TouchableOpacity
-              style={[styles.settingRow, { borderBottomWidth: biometricAvailable ? 1 : 0, borderBottomColor: themeColors.border }]}
-              onPress={handleChangePin}
-            >
-              <View style={styles.settingLeft}>
-                <View style={[styles.iconContainer, { backgroundColor: colors.semantic.infoLight }]}>
-                  <MaterialCommunityIcons
-                    name="lock-reset"
-                    size={20}
-                    color={colors.semantic.info}
-                  />
-                </View>
-                <View style={styles.settingInfo}>
-                  <Text style={[styles.settingLabel, { color: themeColors.text }]}>
-                    Change PIN
-                  </Text>
-                  <Text style={[styles.settingDescription, { color: themeColors.textSecondary }]}>
-                    Update your PIN code
-                  </Text>
-                </View>
-              </View>
-              <MaterialCommunityIcons
-                name="chevron-right"
-                size={24}
-                color={themeColors.textSecondary}
-              />
-            </TouchableOpacity>
-          )}
-
-          {/* Change PIN backup (if using biometric) */}
-          {securitySettings.authType === 'biometric' && (
-            <TouchableOpacity
-              style={[styles.settingRow, { borderBottomWidth: biometricAvailable ? 1 : 0, borderBottomColor: themeColors.border }]}
-              onPress={handleChangePin}
-            >
-              <View style={styles.settingLeft}>
-                <View style={[styles.iconContainer, { backgroundColor: colors.semantic.infoLight }]}>
-                  <MaterialCommunityIcons
-                    name="lock-reset"
-                    size={20}
-                    color={colors.semantic.info}
-                  />
-                </View>
-                <View style={styles.settingInfo}>
-                  <Text style={[styles.settingLabel, { color: themeColors.text }]}>
-                    Change PIN Backup
-                  </Text>
-                  <Text style={[styles.settingDescription, { color: themeColors.textSecondary }]}>
-                    Update your backup PIN code
-                  </Text>
-                </View>
-              </View>
-              <MaterialCommunityIcons
-                name="chevron-right"
-                size={24}
-                color={themeColors.textSecondary}
-              />
-            </TouchableOpacity>
-          )}
-
-          {/* Switch to biometric (if using PIN and biometric available) */}
-          {securitySettings.authType === 'pin' && biometricAvailable && (
-            <TouchableOpacity
-              style={styles.settingRow}
-              onPress={handleSwitchToBiometric}
-            >
-              <View style={styles.settingLeft}>
-                <View style={[styles.iconContainer, { backgroundColor: colors.semantic.successLight }]}>
-                  <MaterialCommunityIcons
-                    name={getBiometricIcon(biometricType)}
-                    size={20}
-                    color={colors.semantic.success}
-                  />
-                </View>
-                <View style={styles.settingInfo}>
-                  <Text style={[styles.settingLabel, { color: themeColors.text }]}>
-                    Use {getBiometricTypeName(biometricType)}
-                  </Text>
-                  <Text style={[styles.settingDescription, { color: themeColors.textSecondary }]}>
-                    Switch to biometric authentication
-                  </Text>
-                </View>
-              </View>
-              <MaterialCommunityIcons
-                name="chevron-right"
-                size={24}
-                color={themeColors.textSecondary}
-              />
-            </TouchableOpacity>
-          )}
+          <View style={styles.row}>
+            <View style={styles.rowLeft}>
+              <Text style={styles.rowLabel}>Enforce App Shield</Text>
+              <Text style={styles.rowDesc}>Require authentication each time ZeroWallet is opened</Text>
+            </View>
+            <Switch
+              value={securitySettings.isEnabled}
+              onValueChange={handleToggleAppLock}
+              trackColor={{ false: themeColors.border, true: themeColors.text }}
+              thumbColor={themeColors.background}
+            />
+          </View>
         </View>
-      )}
 
-      {/* PIN Setup Modal */}
+        {/* CARD 2: AUTHENTICATION PROTOCOL */}
+        {securitySettings.isEnabled && (
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardHeaderTitle}>AUTHENTICATION PROTOCOL</Text>
+            </View>
+
+            {biometricAvailable && (
+              <>
+                <TouchableOpacity
+                  style={styles.row}
+                  onPress={handleSwitchToBiometric}
+                >
+                  <View style={styles.rowLeft}>
+                    <Text style={styles.rowLabel}>
+                      {getBiometricTypeName(biometricType)} + PIN Backup
+                    </Text>
+                    <Text style={styles.rowDesc}>Instant biometric unlock with hardware fallback</Text>
+                  </View>
+                  <View style={styles.rowRight}>
+                    {securitySettings.authType === 'biometric' ? (
+                      <View style={styles.activeTag}>
+                        <Text style={styles.activeTagText}>ACTIVE</Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.inactiveTagText}>TAP TO USE</Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+                <View style={styles.divider} />
+              </>
+            )}
+
+            <TouchableOpacity
+              style={styles.row}
+              onPress={handleSwitchToPinOnly}
+            >
+              <View style={styles.rowLeft}>
+                <Text style={styles.rowLabel}>PIN Only</Text>
+                <Text style={styles.rowDesc}>Cryptographic 4-6 digit passcode</Text>
+              </View>
+              <View style={styles.rowRight}>
+                {securitySettings.authType === 'pin' ? (
+                  <View style={styles.activeTag}>
+                    <Text style={styles.activeTagText}>ACTIVE</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.inactiveTagText}>TAP TO USE</Text>
+                )}
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.divider} />
+
+            <TouchableOpacity
+              style={styles.row}
+              onPress={() => {
+                lightHaptic();
+                setPin('');
+                setConfirmPin('');
+                setShowPinModal(true);
+              }}
+            >
+              <View style={styles.rowLeft}>
+                <Text style={styles.rowLabel}>Change Master PIN</Text>
+                <Text style={styles.rowDesc}>Update or re-authorize your passcode</Text>
+              </View>
+              <MaterialCommunityIcons name="chevron-right" size={18} color={themeColors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* CARD 3: AUTO-LOCK TIMEOUT INTERVAL */}
+        {securitySettings.isEnabled && (
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardHeaderTitle}>AUTO-LOCK DELAY</Text>
+            </View>
+            <View style={styles.cardBody}>
+              <Text style={styles.sectionCaption}>
+                Lock the application after remaining in the background for:
+              </Text>
+              <View style={styles.intervalGrid}>
+                {AUTO_LOCK_OPTIONS.map((opt) => {
+                  const isSelected = securitySettings.autoLockTimeout === opt.seconds;
+                  return (
+                    <TouchableOpacity
+                      key={opt.seconds}
+                      style={[styles.intervalChip, isSelected ? styles.intervalChipActive : null]}
+                      onPress={() => {
+                        lightHaptic();
+                        updateSecuritySettings({ autoLockTimeout: opt.seconds });
+                      }}
+                    >
+                      <Text
+                        style={[styles.intervalChipText, isSelected ? styles.intervalChipTextActive : null]}
+                      >
+                        {opt.label}
+                      </Text>
+                      <Text
+                        style={[styles.intervalChipSub, isSelected ? styles.intervalChipSubActive : null]}
+                      >
+                        {opt.sub}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* CARD 4: CRYPTOGRAPHIC SPECS */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardHeaderTitle}>PRIVACY & SECURITY SPECS</Text>
+          </View>
+          <View style={styles.specRow}>
+            <Text style={styles.specLabel}>ENCRYPTION STANDARD</Text>
+            <Text style={styles.specVal}>PBKDF2 SHA-256 SALT</Text>
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.specRow}>
+            <Text style={styles.specLabel}>BIOMETRIC VAULT</Text>
+            <Text style={styles.specVal}>HARDWARE KEYSTORE / ENCLAVE</Text>
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.specRow}>
+            <Text style={styles.specLabel}>NETWORK EXPOSURE</Text>
+            <Text style={styles.specVal}>ZERO CLOUD / 100% LOCAL</Text>
+          </View>
+        </View>
+      </ScrollView>
+
+      {/* Architectural PIN Modal */}
       <Modal
-        visible={showPinSetup}
-        animationType="slide"
+        visible={showPinModal}
         transparent
-        onRequestClose={() => setShowPinSetup(false)}
+        animationType="fade"
+        onRequestClose={() => setShowPinModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: themeColors.surface }]}>
-            <Text style={[styles.modalTitle, { color: themeColors.text }]}>
-              {enableBiometricAfterPin
-                ? `Set Up PIN Backup`
-                : securitySettings.pinHash ? 'Change PIN' : 'Set Up PIN'}
-            </Text>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalBox}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalSuper}>SECURITY AUTHORIZATION</Text>
+              <Text style={styles.modalTitle}>
+                {securitySettings.pinHash ? 'UPDATE MASTER PIN' : 'CONFIGURE MASTER PIN'}
+              </Text>
+            </View>
 
-            <TextInput
-              style={[styles.pinInput, {
-                backgroundColor: themeColors.background,
-                borderColor: themeColors.border,
-                color: themeColors.text,
-              }]}
-              value={pin}
-              onChangeText={setPin}
-              keyboardType="numeric"
-              secureTextEntry
-              maxLength={6}
-              placeholder="Enter PIN (4-6 digits)"
-              placeholderTextColor={themeColors.textSecondary}
-            />
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>ENTER NEW PIN (4-6 DIGITS)</Text>
+              <TextInput
+                style={styles.pinTextInput}
+                value={pin}
+                onChangeText={setPin}
+                keyboardType="numeric"
+                secureTextEntry
+                maxLength={6}
+                placeholder="····"
+                placeholderTextColor={themeColors.textSecondary}
+              />
+            </View>
 
-            <TextInput
-              style={[styles.pinInput, {
-                backgroundColor: themeColors.background,
-                borderColor: themeColors.border,
-                color: themeColors.text,
-              }]}
-              value={confirmPin}
-              onChangeText={setConfirmPin}
-              keyboardType="numeric"
-              secureTextEntry
-              maxLength={6}
-              placeholder="Confirm PIN"
-              placeholderTextColor={themeColors.textSecondary}
-            />
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>CONFIRM NEW PIN</Text>
+              <TextInput
+                style={styles.pinTextInput}
+                value={confirmPin}
+                onChangeText={setConfirmPin}
+                keyboardType="numeric"
+                secureTextEntry
+                maxLength={6}
+                placeholder="····"
+                placeholderTextColor={themeColors.textSecondary}
+              />
+            </View>
 
-            <View style={styles.modalButtons}>
+            <View style={styles.modalActions}>
               <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: colors.neutral.gray300 }]}
+                style={styles.cancelBtn}
                 onPress={() => {
                   lightHaptic();
-                  setShowPinSetup(false);
-                  setPin('');
-                  setConfirmPin('');
+                  setShowPinModal(false);
                 }}
               >
-                <Text style={[styles.modalButtonText, { color: colors.neutral.gray700 }]}>
-                  Cancel
-                </Text>
+                <Text style={styles.cancelBtnText}>CANCEL</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: colors.primary.main }]}
-                onPress={handleSetupPin}
-                disabled={isSettingPin}
+                style={styles.saveBtn}
+                onPress={handleSavePin}
+                disabled={isSavingPin}
               >
-                <Text style={[styles.modalButtonText, { color: '#fff' }]}>
-                  {isSettingPin ? 'Setting...' : 'Confirm'}
-                </Text>
+                {isSavingPin ? (
+                  <ActivityIndicator size="small" color={themeColors.background} />
+                ) : (
+                  <Text style={styles.saveBtnText}>SAVE & ARM</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
-    </ScrollView>
+    </View>
   );
-};
+}
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  section: {
-    marginTop: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  sectionTitle: {
-    ...typography.caption,
-    fontWeight: '600',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  sectionHint: {
-    ...typography.caption,
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.xs,
-  },
-  settingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-  },
-  settingLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: spacing.sm,
-  },
-  settingInfo: {
-    flex: 1,
-  },
-  settingLabel: {
-    ...typography.body,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  settingDescription: {
-    ...typography.caption,
-  },
-  infoBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: spacing.md,
-    marginVertical: spacing.xs,
-    padding: spacing.sm,
-    borderRadius: 8,
-    gap: spacing.xs,
-  },
-  infoText: {
-    ...typography.caption,
-    flex: 1,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.lg,
-  },
-  modalContent: {
-    width: '100%',
-    borderRadius: 16,
-    padding: spacing.lg,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: spacing.lg,
-    textAlign: 'center',
-  },
-  pinInput: {
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    borderRadius: 12,
-    borderWidth: 1,
-    fontSize: 18,
-    textAlign: 'center',
-    letterSpacing: 4,
-    marginBottom: spacing.md,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-  modalButton: {
-    flex: 1,
-    paddingVertical: spacing.md,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  modalButtonText: {
-    ...typography.body,
-    fontWeight: '600',
-  },
-});
-
-export default SecuritySettingsScreen;
+const createStyles = (theme: any) =>
+  StyleSheet.create({
+    root: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: spacing.md,
+      paddingTop: spacing.xl,
+      paddingBottom: spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.hairline || theme.border,
+      gap: spacing.sm,
+    },
+    backButton: {
+      width: 36,
+      height: 36,
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      borderRadius: 2,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    headerTitles: {
+      flex: 1,
+    },
+    headerSuper: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 10,
+      letterSpacing: 1.5,
+      fontWeight: '700',
+    },
+    headerTitle: {
+      ...typography.h3,
+      color: theme.text,
+      letterSpacing: 0.5,
+      fontWeight: '700',
+    },
+    statusPill: {
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 4,
+      borderRadius: 2,
+    },
+    statusText: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 0.8,
+    },
+    statusActive: {
+      color: theme.text,
+    },
+    scrollView: {
+      flex: 1,
+    },
+    scrollContent: {
+      padding: spacing.md,
+      paddingBottom: spacing.xxl,
+    },
+    card: {
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      backgroundColor: theme.card || theme.surface,
+      borderRadius: 2,
+      marginBottom: spacing.md,
+      overflow: 'hidden',
+    },
+    cardHeader: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.hairline || theme.border,
+      backgroundColor: theme.background,
+    },
+    cardHeaderTitle: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 1.2,
+    },
+    cardBody: {
+      padding: spacing.md,
+    },
+    sectionCaption: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 12,
+      marginBottom: spacing.sm,
+    },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.md,
+      minHeight: 56,
+    },
+    rowLeft: {
+      flex: 1,
+      marginRight: spacing.md,
+    },
+    rowRight: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    rowLabel: {
+      ...typography.body,
+      color: theme.text,
+      fontWeight: '600',
+      fontSize: 14,
+      marginBottom: 2,
+    },
+    rowDesc: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 12,
+    },
+    divider: {
+      height: 1,
+      backgroundColor: theme.hairline || theme.border,
+      marginLeft: spacing.md,
+    },
+    activeTag: {
+      borderWidth: 1,
+      borderColor: theme.text,
+      backgroundColor: theme.text,
+      paddingHorizontal: spacing.xs + 2,
+      paddingVertical: 2,
+      borderRadius: 2,
+    },
+    activeTagText: {
+      ...typography.caption,
+      color: theme.background,
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 0.5,
+    },
+    inactiveTagText: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 0.5,
+    },
+    intervalGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.xs,
+    },
+    intervalChip: {
+      flex: 1,
+      minWidth: '30%',
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      borderRadius: 2,
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.xs,
+      alignItems: 'center',
+      backgroundColor: theme.background,
+    },
+    intervalChipActive: {
+      borderColor: theme.text,
+      backgroundColor: theme.text,
+    },
+    intervalChipText: {
+      ...typography.caption,
+      color: theme.text,
+      fontWeight: '700',
+      fontSize: 11,
+      letterSpacing: 0.5,
+    },
+    intervalChipTextActive: {
+      color: theme.background,
+    },
+    intervalChipSub: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 9,
+      marginTop: 2,
+    },
+    intervalChipSubActive: {
+      color: theme.background,
+      opacity: 0.8,
+    },
+    specRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm + 4,
+    },
+    specLabel: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 10,
+      letterSpacing: 1,
+      fontWeight: '600',
+    },
+    specVal: {
+      ...typography.caption,
+      color: theme.text,
+      fontSize: 11,
+      fontWeight: '700',
+      letterSpacing: 0.5,
+      fontFamily: 'monospace',
+    },
+    // Modal
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.75)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: spacing.lg,
+    },
+    modalBox: {
+      width: '100%',
+      backgroundColor: theme.card || theme.surface,
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      borderRadius: 2,
+      padding: spacing.lg,
+    },
+    modalHeader: {
+      marginBottom: spacing.md,
+    },
+    modalSuper: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 10,
+      letterSpacing: 1.5,
+      fontWeight: '700',
+      marginBottom: 2,
+    },
+    modalTitle: {
+      ...typography.h3,
+      color: theme.text,
+      fontWeight: '700',
+    },
+    inputGroup: {
+      marginBottom: spacing.md,
+    },
+    inputLabel: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 10,
+      letterSpacing: 1,
+      fontWeight: '700',
+      marginBottom: spacing.xs,
+    },
+    pinTextInput: {
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      backgroundColor: theme.background,
+      color: theme.text,
+      borderRadius: 2,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      fontSize: 18,
+      fontFamily: 'monospace',
+      letterSpacing: 8,
+      textAlign: 'center',
+    },
+    modalActions: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      gap: spacing.sm,
+      marginTop: spacing.sm,
+    },
+    cancelBtn: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      borderRadius: 2,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    cancelBtnText: {
+      ...typography.caption,
+      color: theme.text,
+      fontWeight: '700',
+      letterSpacing: 1,
+    },
+    saveBtn: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      backgroundColor: theme.text,
+      borderRadius: 2,
+      justifyContent: 'center',
+      alignItems: 'center',
+      minWidth: 120,
+    },
+    saveBtnText: {
+      ...typography.caption,
+      color: theme.background,
+      fontWeight: '700',
+      letterSpacing: 1,
+    },
+  });

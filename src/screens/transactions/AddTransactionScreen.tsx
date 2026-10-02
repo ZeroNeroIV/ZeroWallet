@@ -1,1084 +1,889 @@
-import React, { useState, useEffect, useMemo } from 'react';
+// Simplizum Log & Edit Transaction — Swift Minimalist Flow with Tabular Figures & Category Grid
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  TextInput,
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { format } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { AmountInput } from '../../components/forms/AmountInput';
-import { CategoryPicker } from '../../components/forms/CategoryPicker';
-import { CurrencyPicker } from '../../components/forms/CurrencyPicker';
-import { DatePicker } from '../../components/forms/DatePicker';
-import { Input } from '../../components/forms/Input';
-import { Button } from '../../components/forms/Button';
-import { CurrencyConversionModal } from '../../components/transactions/CurrencyConversionModal';
-import { spacing } from '../../theme/spacing';
-import { typography } from '../../theme/typography';
-import { MainStackParamList } from '../../types/navigation';
-import { Category, VaultType, Transaction, TransactionInput, Account } from '../../types/models';
+import type { MainStackParamList } from '../../types/navigation';
+import type { Category, Transaction, Wallet, VaultType } from '../../types/models';
 import { useAuthStore } from '../../store/authStore';
-import { useVaultStore } from '../../store/vaultStore';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { CategoryRepository } from '../../database/repositories/CategoryRepository';
 import { TransactionRepository } from '../../database/repositories/TransactionRepository';
+import { CategoryRepository } from '../../database/repositories/CategoryRepository';
 import { AccountRepository } from '../../database/repositories/AccountRepository';
-import { ImagePickerButton } from '../../components/forms/ImagePickerButton';
-import { compressAndSaveImage, deleteTransactionImage } from '../../utils/imageStorage';
+import { WalletRepository } from '../../database/repositories/WalletRepository';
+import { syncBalancesFromDatabase } from '../../services/walletTransferService';
 import { convertCurrency } from '../../services/currencyService';
-import { formatCurrency } from '../../constants/currencies';
-import { useAutoCategorize } from '../../hooks/useAutoCategorize';
-import { useWallets } from '../../hooks/useWallets';
+import { formatCurrency } from '../../utils/currencyFormatter';
+import { triggerHaptic } from '../../services/haptics/hapticFeedback';
+import { borderRadius } from '../../theme/spacing';
+import { ImagePickerButton } from '../../components/forms/ImagePickerButton';
+import { compressAndSaveImage } from '../../utils/imageStorage';
 
-type AddTransactionScreenNavigationProp = StackNavigationProp<
-  MainStackParamList,
-  'AddTransaction'
->;
+type NavProp = StackNavigationProp<MainStackParamList, 'AddTransaction'>;
+type RouteProps = RouteProp<MainStackParamList, 'AddTransaction'>;
 
-type AddTransactionScreenRouteProp = RouteProp<
-  MainStackParamList,
-  'AddTransaction'
->;
+const POPULAR_CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'JOD', 'SAR', 'AED', 'EGP'];
 
 export const AddTransactionScreen: React.FC = () => {
-  const navigation = useNavigation<AddTransactionScreenNavigationProp>();
-  const route = useRoute<AddTransactionScreenRouteProp>();
-
+  const navigation = useNavigation<NavProp>();
+  const route = useRoute<RouteProps>();
   const { currentAccountId, currentUser } = useAuthStore();
-  const { addToVault, subtractFromVault } = useVaultStore();
   const themeColors = useThemeColors();
 
   const editTransactionId = route.params?.transactionId;
   const isEditMode = !!editTransactionId;
 
-  const [type, setType] = useState<'income' | 'expense'>(
-    route.params?.type || 'expense'
-  );
+  const [type, setType] = useState<'expense' | 'income'>('expense');
   const [amount, setAmount] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<Category | undefined>();
-  const [categories, setCategories] = useState<Category[]>([]);
   const [description, setDescription] = useState('');
-  const [date, setDate] = useState(
-    route.params?.initialDate ? new Date(route.params.initialDate) : new Date()
-  );
-  const [vaultType, setVaultType] = useState<VaultType>('main');
-  const [originalTransaction, setOriginalTransaction] = useState<Transaction | null>(null);
-  const [loadingOriginal, setLoadingOriginal] = useState(isEditMode);
+  const [selectedWalletId, setSelectedWalletId] = useState<string>('');
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
+  const [date, setDate] = useState<number>(Date.now());
+  const [currency, setCurrency] = useState('USD');
+  const [baseCurrency, setBaseCurrency] = useState('USD');
+  const [exchangeRate, setExchangeRate] = useState<number>(1);
+  const [convertedAmount, setConvertedAmount] = useState<number | undefined>();
   const [selectedImageUris, setSelectedImageUris] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState({
-    amount: '',
-    category: '',
-  });
+  const [saving, setSaving] = useState(false);
 
-  // Currency state
-  const [currentAccount, setCurrentAccount] = useState<Account | null>(null);
-  const [selectedCurrency, setSelectedCurrency] = useState('USD');
-  const [conversionModalVisible, setConversionModalVisible] = useState(false);
-  const [exchangeRate, setExchangeRate] = useState<number | undefined>();
-  const [convertedAmount, setConvertedAmount] = useState<number | undefined>();
+  // Entities
+  const [wallets, setWallets] = useState<Wallet[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [walletPickerVisible, setWalletPickerVisible] = useState(false);
+  const [currencyPickerVisible, setCurrencyPickerVisible] = useState(false);
 
-  const categoryRepo = new CategoryRepository();
-  const transactionRepo = new TransactionRepository();
-  const accountRepo = new AccountRepository();
-
-  const {
-    suggestion: categorySuggestion,
-    loading: suggestLoading,
-    clear: clearCategorySuggestion,
-    resolve: resolveCategorySuggestion,
-    suggest: suggestCategoryFn,
-  } = useAutoCategorize(type);
-  const [creatingCategory, setCreatingCategory] = useState(false);
-  const [layaStatus, setLayaStatus] = useState<string | null>(null);
-  const [layaPendingName, setLayaPendingName] = useState<string | null>(null);
-  const { wallets } = useWallets();
-
-  // Keep the selected wallet valid when the wallet list loads/changes
+  // Load initial data & edit record if present
   useEffect(() => {
-    if (wallets.length === 0) return;
-    if (!wallets.some((w) => w.id === vaultType)) {
-      setVaultType(wallets[0].id);
-    }
-  }, [wallets]);
+    const init = async () => {
+      if (!currentAccountId || !currentUser) return;
+      try {
+        setLoading(true);
+        const accRepo = new AccountRepository();
+        const walletRepo = new WalletRepository();
+        const catRepo = new CategoryRepository();
+        const txRepo = new TransactionRepository();
 
-  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
-
-  // Load account and set default currency
-  useEffect(() => {
-    loadAccount();
-  }, [currentAccountId]);
-
-  useEffect(() => {
-    loadCategories();
-  }, [currentAccountId, currentUser]);
-
-  // Load original transaction in edit mode and prefill the form
-  useEffect(() => {
-    if (isEditMode && editTransactionId) {
-      loadOriginalTransaction(editTransactionId);
-    }
-  }, [editTransactionId, currentAccountId]);
-
-  const loadOriginalTransaction = async (id: string) => {
-    setLoadingOriginal(true);
-    try {
-      const txn = await transactionRepo.findById(id);
-      if (!txn) {
-        Alert.alert('Error', 'Transaction not found', [
-          { text: 'OK', onPress: () => navigation.goBack() },
+        const [acc, wList, cList] = await Promise.all([
+          accRepo.findById(currentAccountId),
+          walletRepo.findByAccount(currentAccountId),
+          catRepo.findByUser(currentUser.id),
         ]);
-        return;
-      }
-      setOriginalTransaction(txn);
-      setType(txn.type);
-      setAmount(txn.amount.toFixed(3));
-      setDescription(txn.description || '');
-      setDate(new Date(txn.date));
-      setVaultType(txn.vaultType);
-      setSelectedCurrency(txn.currency || 'USD');
-      if (txn.exchangeRate) setExchangeRate(txn.exchangeRate);
-      if (txn.convertedAmount) setConvertedAmount(txn.convertedAmount);
 
-      // Resolve category once categories are available
-      const allCategories = currentUser
-        ? await categoryRepo.findByUser(currentUser.id)
-        : categories;
-      const match = allCategories.find((c) => c.id === txn.categoryId);
-      if (match) {
-        // Transfer legs come in matched pairs across accounts — editing one
-        // side alone would unbalance the pair, so block it and point at
-        // delete + re-transfer instead
-        if (match.name === 'Transfer') {
-          Alert.alert(
-            'Cannot Edit Transfer',
-            'Transfer transactions come in linked pairs. Delete this transfer and create a new one instead.',
-            [{ text: 'OK', onPress: () => navigation.goBack() }]
-          );
-          return;
+        const accCur = acc?.currency || 'USD';
+        setBaseCurrency(accCur);
+        setCurrency(accCur);
+        setWallets(wList);
+        setCategories(cList);
+
+        // Preselect default wallet
+        const defaultWallet = wList.find((w) => w.isDefault) || wList[0];
+        if (defaultWallet) setSelectedWalletId(defaultWallet.id);
+
+        // If editing existing transaction
+        if (editTransactionId) {
+          const txn = await txRepo.findById(editTransactionId);
+          if (txn) {
+            setType(txn.type === 'income' ? 'income' : 'expense');
+            setAmount(String(txn.originalAmount ?? txn.amount));
+            setDescription(txn.description || '');
+            setSelectedWalletId(txn.walletId || txn.vaultType || defaultWallet?.id || '');
+            setSelectedCategoryId(txn.categoryId);
+            setDate(txn.date);
+            setCurrency(txn.currency || accCur);
+            if (txn.exchangeRate) setExchangeRate(txn.exchangeRate);
+            if (txn.convertedAmount) setConvertedAmount(txn.convertedAmount);
+            if (txn.images) setSelectedImageUris(txn.images);
+            else if (txn.imagePath) setSelectedImageUris([txn.imagePath]);
+          }
+        } else if (route.params?.type) {
+          setType(route.params.type);
         }
-        setSelectedCategory(match);
-      } else {
-        // Orphaned category (e.g. deleted): keep form usable, user picks anew
-        setSelectedCategory(undefined);
+      } catch (err) {
+        console.warn('[AddTransactionScreen] init error:', err);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('[AddTransaction] Failed to load transaction for edit:', error);
-      Alert.alert('Error', 'Failed to load transaction', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
-    } finally {
-      setLoadingOriginal(false);
-    }
-  };
-
-  useEffect(() => {
-    console.log('[AddTransaction] Type changed to:', type);
-    console.log('[AddTransaction] Available categories for type:', categories.filter(c => c.type === type).map(c => c.name));
-  }, [type, categories]);
-
-  const loadAccount = async () => {
-    if (!currentAccountId) return;
-
-    try {
-      const account = await accountRepo.findById(currentAccountId);
-      if (account) {
-        setCurrentAccount(account);
-        setSelectedCurrency(account.currency);
-        console.log('[AddTransaction] Loaded account currency:', account.currency);
-      }
-    } catch (error) {
-      console.error('[AddTransaction] Error loading account:', error);
-    }
-  };
-
-  const loadCategories = async () => {
-    if (!currentAccountId || !currentUser) return;
-
-    try {
-      const allCategories = await categoryRepo.findByUser(currentUser.id);
-      console.log('[AddTransaction] Total categories loaded:', allCategories.length);
-
-      // If no categories exist, create default ones
-      if (allCategories.length === 0) {
-        console.log('[AddTransaction] No categories found, creating defaults for user:', currentUser.id);
-        const { createDefaultCategories } = await import(
-          '../../database/repositories/CategoryRepository'
-        );
-        await createDefaultCategories(currentUser.id);
-
-        // Reload categories after creating defaults
-        const reloadedCategories = await categoryRepo.findByUser(currentUser.id);
-        console.log('[AddTransaction] Default categories created:', reloadedCategories.length);
-        console.log('[AddTransaction] All categories:', reloadedCategories.map(c => ({
-          id: c.id,
-          name: c.name,
-          type: c.type,
-          icon: c.icon,
-          color: c.color
-        })));
-        setCategories(reloadedCategories);
-        return;
-      }
-
-      console.log('[AddTransaction] All categories:', allCategories.map(c => ({
-        id: c.id,
-        name: c.name,
-        type: c.type,
-        icon: c.icon,
-        color: c.color
-      })));
-      console.log('[AddTransaction] Categories by type:', {
-        income: allCategories.filter(c => c.type === 'income').length,
-        expense: allCategories.filter(c => c.type === 'expense').length,
-      });
-      setCategories(allCategories);
-    } catch (error) {
-      console.error('[AddTransaction] Error loading categories:', error);
-      Alert.alert('Error', 'Failed to load categories');
-    }
-  };
-
-  const handleConversionComplete = (result: {
-    amount: number;
-    convertedAmount: number;
-    exchangeRate: number;
-  }) => {
-    setAmount(result.amount.toString());
-    setConvertedAmount(result.convertedAmount);
-    setExchangeRate(result.exchangeRate);
-    console.log('[AddTransaction] Conversion complete:', result);
-  };
-
-  /**
-   * LAYA icon tap: suggest a category for the current description.
-   * - Existing category -> applied immediately, status shows what + confidence
-   * - No match -> category set to Other and a Create button appears below
-   * All outcomes (including errors) are shown inline — nothing is silent.
-   */
-  const handleLayaSuggest = async () => {
-    if (!description.trim()) {
-      setLayaStatus('Type a description first, then tap ✨.');
-      return;
-    }
-    const numericAmount = parseFloat(amount);
-    setLayaStatus(null);
-    setLayaPendingName(null);
-    try {
-      const outcome = await suggestCategoryFn(
-        description,
-        Number.isFinite(numericAmount) ? numericAmount : undefined,
-        categories,
-      );
-      if (!outcome) {
-        setLayaStatus('Laya could not suggest a category. Pick one manually.');
-        return;
-      }
-      if (outcome.kind === 'match' && outcome.choice.categoryId) {
-        const match = categories.find((c) => c.id === outcome.choice.categoryId);
-        if (match) {
-          setSelectedCategory(match);
-          setErrors((prev) => ({ ...prev, category: '' }));
-          const pct = Math.round(outcome.choice.confidence * 100);
-          setLayaStatus(`✓ ${match.name} · ${pct}% · LAYA`);
-          clearCategorySuggestion();
-          return;
-        }
-      }
-      // No usable match: fall back to Other and offer one-tap creation
-      const other = categories.find(
-        (c) => c.type === type && c.name.toLowerCase() === 'other'
-      );
-      if (other) {
-        setSelectedCategory(other);
-        setErrors((prev) => ({ ...prev, category: '' }));
-      }
-      const proposed =
-        outcome.kind === 'create_new' ? outcome.newCategory.name : outcome.choice.categoryName;
-      setLayaPendingName(proposed);
-      setLayaStatus(`No match — set to Other. Create “${proposed}”?`);
-      clearCategorySuggestion();
-    } catch (error: any) {
-      console.error('[AddTransaction] Laya suggest failed:', error);
-      setLayaStatus(`Laya failed: ${error?.message || 'unknown error'}. Pick manually.`);
-    }
-  };
-
-  /**
-   * One-tap creation of the LAYA-proposed category. Success and failure
-   * are both reported explicitly with the real message.
-   */
-  const handleLayaCreate = async () => {
-    if (!categorySuggestion || categorySuggestion.kind !== 'create_new') {
-      setLayaStatus('Nothing to create — tap ✨ to get a suggestion first.');
-      return;
-    }
-    if (!currentUser) {
-      setLayaStatus('Sign in again to create categories.');
-      return;
-    }
-    setCreatingCategory(true);
-    try {
-      const created = await resolveCategorySuggestion(categorySuggestion, categories);
-      if (created) {
-        await loadCategories();
-        setSelectedCategory(created);
-        setErrors((prev) => ({ ...prev, category: '' }));
-        setLayaPendingName(null);
-        setLayaStatus(`✓ Created “${created.name}” and selected it.`);
-        clearCategorySuggestion();
-      } else {
-        setLayaStatus('Could not create the category. Try again.');
-      }
-    } catch (error: any) {
-      console.error('[AddTransaction] Laya create failed:', error);
-      const message = error?.userMessage || error?.message || 'Failed to create the suggested category';
-      setLayaStatus(`Create failed: ${message}`);
-      Alert.alert('Create Failed', message);
-    } finally {
-      setCreatingCategory(false);
-    }
-  };
-
-  const validate = () => {
-    const newErrors = {
-      amount: '',
-      category: '',
     };
+    init();
+  }, [currentAccountId, currentUser, editTransactionId, route.params]);
 
-    if (!amount || parseFloat(amount) <= 0) {
-      newErrors.amount = 'Please enter a valid amount';
-    }
-
-    if (!selectedCategory) {
-      newErrors.category = 'Please select a category';
-    }
-
-    setErrors(newErrors);
-    return !newErrors.amount && !newErrors.category;
-  };
-
-  /**
-   * Purpose: Resolve the balance-relevant converted amount for the form state
-   * Returns null (after alerting) when conversion fails.
-   */
-  const resolveConversion = async (
-    numAmount: number,
-    accountCurrency: string,
-    forceFresh = false
-  ): Promise<{
-    finalConvertedAmount: number;
-    finalExchangeRate: number | undefined;
-    finalOriginalAmount: number | undefined;
-  } | null> => {
-    console.log('[AddTransaction] Starting conversion check:');
-    console.log('[AddTransaction] Amount:', numAmount);
-    console.log('[AddTransaction] Selected currency:', selectedCurrency);
-    console.log('[AddTransaction] Account currency:', accountCurrency);
-
-    let finalConvertedAmount = numAmount;
-    let finalExchangeRate: number | undefined;
-    let finalOriginalAmount: number | undefined;
-
-    if (selectedCurrency !== accountCurrency) {
-      console.log('[AddTransaction] Currencies differ - conversion needed');
-      // forceFresh guards edit mode: cached rate/amount belong to the
-      // ORIGINAL amount and must not be reused after the user changes it
-      if (!convertedAmount || !exchangeRate || forceFresh) {
-        console.log('[AddTransaction] No conversion data cached - converting now...');
-        try {
-          const conversion = await convertCurrency(
-            numAmount,
-            selectedCurrency,
-            accountCurrency
-          );
-          finalConvertedAmount = conversion.convertedAmount;
-          finalExchangeRate = conversion.exchangeRate;
-          finalOriginalAmount = numAmount;
-          console.log('[AddTransaction] Auto-converted:', {
-            from: `${numAmount} ${selectedCurrency}`,
-            to: `${finalConvertedAmount} ${accountCurrency}`,
-            rate: finalExchangeRate
-          });
-        } catch (error) {
-          console.error('[AddTransaction] Conversion failed:', error);
-          Alert.alert(
-            'Error',
-            'Failed to convert currency. Please check your internet connection.'
-          );
-          return null;
-        }
-      } else {
-        console.log('[AddTransaction] Using cached conversion data');
-        finalConvertedAmount = convertedAmount;
-        finalExchangeRate = exchangeRate;
-        finalOriginalAmount = numAmount;
-        console.log('[AddTransaction] Cached conversion:', {
-          from: `${numAmount} ${selectedCurrency}`,
-          to: `${finalConvertedAmount} ${accountCurrency}`,
-          rate: finalExchangeRate
-        });
+  // Recalculate currency conversion when amount or currency changes
+  useEffect(() => {
+    const computeConversion = async () => {
+      const num = parseFloat(amount);
+      if (isNaN(num) || num <= 0 || currency === baseCurrency) {
+        setConvertedAmount(undefined);
+        setExchangeRate(1);
+        return;
       }
-    } else {
-      console.log('[AddTransaction] Same currency - no conversion needed');
-    }
-
-    console.log('[AddTransaction] Final amounts:', {
-      originalAmount: finalOriginalAmount,
-      convertedAmount: finalConvertedAmount,
-      balanceUpdateAmount: finalConvertedAmount
-    });
-
-    return { finalConvertedAmount, finalExchangeRate, finalOriginalAmount };
-  };
-
-  /** Reverse a transaction's balance effect (used by delete/edit flows) */
-  const reverseBalanceEffect = (
-    txnType: 'income' | 'expense',
-    txnVault: VaultType,
-    balanceAmount: number
-  ) => {
-    if (txnType === 'income') {
-      subtractFromVault(txnVault, balanceAmount);
-    } else {
-      addToVault(txnVault, balanceAmount);
-    }
-  };
-
-  /** Apply a transaction's balance effect (used by create/edit flows) */
-  const applyBalanceEffect = (
-    txnType: 'income' | 'expense',
-    txnVault: VaultType,
-    balanceAmount: number
-  ) => {
-    if (txnType === 'income') {
-      addToVault(txnVault, balanceAmount);
-    } else {
-      subtractFromVault(txnVault, balanceAmount);
-    }
-  };
-
-  /**
-   * Purpose: Update an existing transaction and correct the wallet balance
-   * by reversing the old effect first, then applying the new one. This stays
-   * correct when type, wallet or amount all change at once.
-   */
-  const handleUpdate = async (
-    original: Transaction,
-    numAmount: number,
-    finalConvertedAmount: number,
-    finalExchangeRate: number | undefined,
-    finalOriginalAmount: number | undefined
-  ) => {
-    try {
-      // Reverse the original balance effect
-      const oldBalanceAmount = original.convertedAmount || original.amount;
-      reverseBalanceEffect(original.type, original.vaultType, oldBalanceAmount);
-
-      // Persist the updated fields
-      await transactionRepo.update(original.id, {
-        type,
-        amount: numAmount,
-        categoryId: selectedCategory!.id,
-        description,
-        date: date.getTime(),
-        vaultType,
-        currency: selectedCurrency,
-        originalAmount: finalOriginalAmount,
-        exchangeRate: finalExchangeRate,
-        convertedAmount: finalConvertedAmount !== numAmount ? finalConvertedAmount : undefined,
-      } as Partial<Transaction>);
-
-      // Append any newly attached receipt images (offset keeps filenames unique)
-      const existingImages = await transactionRepo.getImages(original.id);
-      for (let i = 0; i < selectedImageUris.length; i++) {
-        try {
-          const { originalPath } = await compressAndSaveImage(
-            selectedImageUris[i],
-            `${original.id}_${existingImages.length + i}`
-          );
-          await transactionRepo.addImage(original.id, originalPath, existingImages.length + i);
-        } catch (error) {
-          console.error('[AddTransaction] Failed to save image:', error);
-        }
+      try {
+        const res = await convertCurrency(num, currency, baseCurrency);
+        setConvertedAmount(res.convertedAmount);
+        setExchangeRate(res.exchangeRate);
+      } catch {
+        setConvertedAmount(undefined);
       }
+    };
+    computeConversion();
+  }, [amount, currency, baseCurrency]);
 
-      // Apply the new balance effect
-      applyBalanceEffect(type, vaultType, finalConvertedAmount);
+  // Categories filtered by active type
+  const filteredCategories = useMemo(() => {
+    return categories.filter((c) => c.type === type);
+  }, [categories, type]);
 
-      Alert.alert(
-        'Success',
-        `${type === 'income' ? 'Income' : 'Expense'} updated successfully`,
-        [
-          {
-            text: 'OK',
-            onPress: () => navigation.goBack(),
-          },
-        ]
-      );
-    } catch (error) {
-      console.error('[AddTransaction] Error updating transaction:', error);
-      Alert.alert('Error', 'Failed to update transaction');
-    } finally {
-      setLoading(false);
+  // Preselect first category of that type if none selected or mismatched
+  useEffect(() => {
+    const currentCat = categories.find((c) => c.id === selectedCategoryId);
+    if (!currentCat || currentCat.type !== type) {
+      const fallback = filteredCategories[0];
+      if (fallback) setSelectedCategoryId(fallback.id);
     }
+  }, [type, filteredCategories, categories, selectedCategoryId]);
+
+  const selectedWallet = useMemo(() => {
+    return wallets.find((w) => w.id === selectedWalletId);
+  }, [wallets, selectedWalletId]);
+
+  const handleTypeSelect = (selectedType: 'expense' | 'income' | 'transfer') => {
+    triggerHaptic('selection');
+    if (selectedType === 'transfer') {
+      navigation.navigate('Transfer');
+      return;
+    }
+    setType(selectedType);
   };
 
   const handleSave = async () => {
-    if (!validate()) return;
-    if (!currentAccountId || !currentAccount) {
-      Alert.alert('Error', 'No account selected');
-      return;
-    }
-    // In edit mode the original must be loaded first — otherwise the save
-    // would fall through and create a duplicate transaction
-    if (isEditMode && !originalTransaction) {
-      Alert.alert('Please wait', 'Still loading the transaction to edit.');
+    const numAmount = parseFloat(amount);
+    if (isNaN(numAmount) || numAmount <= 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid amount.');
+      triggerHaptic('notificationError');
       return;
     }
 
-    setLoading(true);
+    if (!selectedCategoryId) {
+      Alert.alert('Category Required', 'Please pick a category.');
+      triggerHaptic('notificationError');
+      return;
+    }
+
+    if (!currentAccountId || !selectedWalletId) {
+      Alert.alert('Wallet Required', 'Please select a destination wallet.');
+      return;
+    }
 
     try {
-      const numAmount = parseFloat(amount);
-      const accountCurrency = currentAccount.currency;
+      setSaving(true);
+      const txRepo = new TransactionRepository();
+      const txId = editTransactionId || uuidv4();
 
-      // In edit mode the cached conversion belongs to the original amount:
-      // re-convert live whenever amount or currency changed since loading
-      const conversionStale =
-        isEditMode &&
-        !!originalTransaction &&
-        (numAmount !== originalTransaction.amount ||
-          selectedCurrency !== originalTransaction.currency);
-      const conversion = await resolveConversion(numAmount, accountCurrency, conversionStale);
-      if (!conversion) {
-        setLoading(false);
-        return;
-      }
-      const { finalConvertedAmount, finalExchangeRate, finalOriginalAmount } = conversion;
-
-      // Edit mode: update existing transaction + correct the balance
-      if (isEditMode && originalTransaction) {
-        await handleUpdate(
-          originalTransaction,
-          numAmount,
-          finalConvertedAmount,
-          finalExchangeRate,
-          finalOriginalAmount
-        );
-        return;
-      }
-
-      // Generate transaction ID first (needed for image storage)
-      const transactionId = uuidv4();
-      const savedImagePaths: string[] = [];
-
-      // Save all selected images
+      // Process attached images
+      let savedImagePaths: string[] = [];
       for (let i = 0; i < selectedImageUris.length; i++) {
-        try {
-          const { originalPath } = await compressAndSaveImage(
-            selectedImageUris[i],
-            `${transactionId}_${i}`
-          );
-          savedImagePaths.push(originalPath);
-        } catch (error) {
-          console.error('[AddTransaction] Failed to save image:', error);
+        const uri = selectedImageUris[i];
+        if (uri.startsWith('http') || uri.startsWith('file://') || uri.startsWith('content://')) {
+          try {
+            const saved = await compressAndSaveImage(uri, `${txId}_${i}`);
+            savedImagePaths.push(saved.originalPath);
+          } catch {
+            savedImagePaths.push(uri);
+          }
+        } else {
+          savedImagePaths.push(uri);
         }
       }
 
-      const imagePath = savedImagePaths[0];
-
-      const transactionData: TransactionInput = {
+      const txPayload = {
         accountId: currentAccountId,
         type,
         amount: numAmount,
-        categoryId: selectedCategory!.id,
-        description,
-        date: date.getTime(),
-        vaultType,
+        categoryId: selectedCategoryId,
+        description: description.trim(),
+        date,
+        vaultType: selectedWalletId as VaultType,
+        walletId: selectedWalletId,
+        currency,
+        originalAmount: currency !== baseCurrency ? numAmount : undefined,
+        exchangeRate: currency !== baseCurrency ? exchangeRate : undefined,
+        convertedAmount: currency !== baseCurrency ? convertedAmount : numAmount,
+        imagePath: savedImagePaths[0] || undefined,
+        images: savedImagePaths,
         isRecurring: false,
-        imagePath,
-        currency: selectedCurrency,
-        originalAmount: finalOriginalAmount,
-        exchangeRate: finalExchangeRate,
-        convertedAmount: finalConvertedAmount !== numAmount ? finalConvertedAmount : undefined,
       };
 
-      // Create transaction in SQLite
-      const transaction = await transactionRepo.create(transactionData);
-      // Save all images to transaction_images table
-      for (let i = 0; i < savedImagePaths.length; i++) {
-        await transactionRepo.addImage(transaction.id, savedImagePaths[i], i);
+      if (isEditMode && editTransactionId) {
+        await txRepo.update(editTransactionId, txPayload);
+      } else {
+        await txRepo.create(txPayload);
       }
-      console.log('[AddTransaction] Transaction created in database');
 
-      // Log balance before update
-      const { useAccountStore } = await import('../../store/accountStore');
-      const beforeBalance = useAccountStore.getState().balances[currentAccountId];
-      console.log('[AddTransaction] Balance before update:', beforeBalance);
+      // Synchronize derived balances
+      await syncBalancesFromDatabase(currentAccountId);
 
-      // Update vault balance in MMKV (use converted amount for balance)
-      // CRITICAL: Use converted amount if currency differs, otherwise use original amount
-      const balanceAmount = finalConvertedAmount;
-      console.log(`[AddTransaction] Updating ${vaultType} vault: ${type === 'income' ? 'Adding' : 'Subtracting'} ${balanceAmount} ${currentAccount.currency}`);
-      console.log(`[AddTransaction] Balance update - Using amount: ${balanceAmount}`);
-
-      applyBalanceEffect(type, vaultType, balanceAmount);
-
-      // Log balance after update
-      const afterBalance = useAccountStore.getState().balances[currentAccountId];
-      console.log('[AddTransaction] Balance after update:', afterBalance);
-
-      Alert.alert(
-        'Success',
-        `${type === 'income' ? 'Income' : 'Expense'} added successfully`,
-        [
-          {
-            text: 'OK',
-            onPress: () => navigation.goBack(),
-          },
-        ]
-      );
-    } catch (error) {
-      console.error('[AddTransaction] Error saving transaction:', error);
-      Alert.alert('Error', 'Failed to save transaction');
+      triggerHaptic('notificationSuccess');
+      navigation.goBack();
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to save transaction.');
+      triggerHaptic('notificationError');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
+  if (loading) {
+    return (
+      <View style={[styles.root, styles.center, { backgroundColor: themeColors.background }]}>
+        <ActivityIndicator color={themeColors.text} size="small" />
+      </View>
+    );
+  }
+
   return (
     <KeyboardAvoidingView
-      style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      style={[styles.root, { backgroundColor: themeColors.background }]}
     >
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <View style={styles.content}>
-          {/* Type Toggle */}
-          <Text style={styles.sectionTitle}>Type</Text>
-          <View style={styles.typeToggle}>
-            <TouchableOpacity
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* 1. Segmented Type Switch */}
+        <View
+          style={[
+            styles.typeSwitchContainer,
+            {
+              backgroundColor: themeColors.surface,
+              borderColor: themeColors.cardBorder,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => handleTypeSelect('expense')}
+            style={[
+              styles.typeTab,
+              type === 'expense' && {
+                backgroundColor: themeColors.text,
+              },
+            ]}
+          >
+            <Text
               style={[
-                styles.typeButton,
-                type === 'expense' && styles.typeButtonActive,
+                styles.typeTabText,
+                {
+                  color: type === 'expense' ? themeColors.background : themeColors.text,
+                },
               ]}
-              onPress={() => {
-                setType('expense');
-                setSelectedCategory(undefined);
-                clearCategorySuggestion();
-                setLayaStatus(null);
-                setLayaPendingName(null);
-              }}
             >
-              <Text
-                style={[
-                  styles.typeButtonText,
-                  type === 'expense' && styles.typeButtonTextActive,
-                ]}
-              >
-                Expense
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
+              EXPENSE
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => handleTypeSelect('income')}
+            style={[
+              styles.typeTab,
+              type === 'income' && {
+                backgroundColor: themeColors.text,
+              },
+            ]}
+          >
+            <Text
               style={[
-                styles.typeButton,
-                type === 'income' && styles.typeButtonActive,
+                styles.typeTabText,
+                {
+                  color: type === 'income' ? themeColors.background : themeColors.text,
+                },
               ]}
-              onPress={() => {
-                setType('income');
-                setSelectedCategory(undefined);
-                clearCategorySuggestion();
-                setLayaStatus(null);
-                setLayaPendingName(null);
-              }}
             >
-              <Text
-                style={[
-                  styles.typeButtonText,
-                  type === 'income' && styles.typeButtonTextActive,
-                ]}
-              >
-                Income
+              INCOME
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => handleTypeSelect('transfer')}
+            style={styles.typeTab}
+          >
+            <Text style={[styles.typeTabText, { color: themeColors.textMuted }]}>
+              TRANSFER ⇄
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* 2. Hero Tabular Amount Card */}
+        <View
+          style={[
+            styles.amountCard,
+            {
+              backgroundColor: themeColors.surface,
+              borderColor: themeColors.cardBorder,
+            },
+          ]}
+        >
+          <View style={styles.amountHeaderRow}>
+            <Text style={[styles.microLabel, { color: themeColors.textMuted }]}>
+              TRANSACTION AMOUNT
+            </Text>
+
+            {/* Currency Chip */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => {
+                triggerHaptic('selection');
+                setCurrencyPickerVisible(true);
+              }}
+              style={[
+                styles.currencyChip,
+                {
+                  borderColor: themeColors.hairline,
+                  backgroundColor: themeColors.background,
+                },
+              ]}
+            >
+              <Text style={[styles.currencyChipText, { color: themeColors.text }]}>
+                {currency} ▾
               </Text>
             </TouchableOpacity>
           </View>
 
-          {/* Amount Input */}
-          <Text style={styles.sectionTitle}>Amount</Text>
-          <AmountInput
+          <TextInput
             value={amount}
             onChangeText={setAmount}
-            label=""
-            error={errors.amount}
-            enableCalculator={true}
+            placeholder="0.00"
+            placeholderTextColor={themeColors.textMuted}
+            keyboardType="decimal-pad"
+            style={[
+              styles.amountInput,
+              {
+                color: type === 'income' ? themeColors.success : themeColors.text,
+              },
+            ]}
+            autoFocus={!isEditMode}
           />
 
-          {/* Description Input */}
-          <Text style={styles.sectionTitle}>Description</Text>
-          <Input
-            label=""
-            value={description}
-            onChangeText={setDescription}
-            placeholder="Add a note... (optional)"
-            multiline
-            numberOfLines={3}
-          />
-
-          {/* Category Picker with LAYA icon */}
-          <View style={styles.categoryLabelRow}>
-            <Text style={styles.sectionTitle}>Category</Text>
-            <TouchableOpacity
-              style={styles.layaIconButton}
-              onPress={handleLayaSuggest}
-              disabled={suggestLoading || creatingCategory}
-              activeOpacity={0.7}
-              accessibilityRole="button"
-              accessibilityLabel="Auto-categorize with Laya"
-            >
-              {suggestLoading ? (
-                <Icon name="loading" size={20} color={themeColors.primary} />
-              ) : (
-                <Icon name="sparkles" size={20} color={themeColors.primary} />
-              )}
-            </TouchableOpacity>
-          </View>
-          <CategoryPicker
-            categories={categories}
-            selectedCategory={selectedCategory}
-            onSelectCategory={(c) => {
-              setSelectedCategory(c);
-              setLayaPendingName(null);
-            }}
-            type={type}
-            label=""
-            error={errors.category}
-          />
-          {layaStatus ? <Text style={styles.layaStatus}>{layaStatus}</Text> : null}
-          {layaPendingName ? (
-            <TouchableOpacity
-              style={[styles.createCategoryButton, creatingCategory && styles.buttonDisabled]}
-              onPress={handleLayaCreate}
-              disabled={creatingCategory}
-              activeOpacity={0.8}
-            >
-              <Icon name="plus" size={18} color="#FFF" />
-              <Text style={styles.createCategoryText}>
-                {creatingCategory ? 'Creating…' : `Create “${layaPendingName}”`}
+          {/* Dual Currency Converted Preview */}
+          {convertedAmount !== undefined && currency !== baseCurrency && (
+            <View style={styles.dualCurrencyPreview}>
+              <Text style={[styles.dualCurrencyText, { color: themeColors.textMuted }]}>
+                ≈ {formatCurrency(convertedAmount, baseCurrency)} ({baseCurrency})
               </Text>
-            </TouchableOpacity>
-          ) : null}
-
-          {/* Currency Picker */}
-          <Text style={styles.sectionTitle}>Currency</Text>
-          <CurrencyPicker
-            selectedCurrency={selectedCurrency}
-            onSelectCurrency={setSelectedCurrency}
-            label=""
-          />
-
-          {/* Currency Conversion Info & Button */}
-          {currentAccount && selectedCurrency !== currentAccount.currency && (
-            <View style={styles.conversionInfo}>
-              <TouchableOpacity
-                style={styles.conversionButton}
-                onPress={() => setConversionModalVisible(true)}
-              >
-                <Icon name="swap-horizontal" size={20} color={themeColors.primary} />
-                <Text style={styles.conversionButtonText}>
-                  Convert {selectedCurrency} → {currentAccount.currency}
-                </Text>
-              </TouchableOpacity>
-              {convertedAmount && exchangeRate && (
-                <Text style={styles.conversionText}>
-                  {formatCurrency(parseFloat(amount) || 0, selectedCurrency)} ≈{' '}
-                  {formatCurrency(convertedAmount, currentAccount.currency)}
-                </Text>
-              )}
             </View>
           )}
 
-          {/* Wallet Picker */}
-          <View style={styles.fieldContainer}>
-            <Text style={styles.sectionTitle}>Wallet</Text>
-            <View style={styles.vaultOptions}>
-              {wallets.map((wallet) => (
+          {/* Quick Wallet Selector Chip */}
+          <View style={styles.walletChipRow}>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => {
+                triggerHaptic('selection');
+                setWalletPickerVisible(true);
+              }}
+              style={[
+                styles.walletChip,
+                {
+                  borderColor: themeColors.hairline,
+                  backgroundColor: themeColors.background,
+                },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name={selectedWallet?.icon || 'wallet-outline'}
+                size={14}
+                color={themeColors.text}
+                style={{ marginRight: 6 }}
+              />
+              <Text style={[styles.walletChipText, { color: themeColors.text }]}>
+                {selectedWallet?.name || 'Select Wallet'} ▾
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* 3. Category Grid */}
+        <View style={styles.categorySection}>
+          <Text style={[styles.sectionTitle, { color: themeColors.textMuted }]}>
+            SELECT CATEGORY
+          </Text>
+
+          <View style={styles.categoryGrid}>
+            {filteredCategories.map((cat) => {
+              const isSelected = selectedCategoryId === cat.id;
+              return (
                 <TouchableOpacity
-                  key={wallet.id}
+                  key={cat.id}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    triggerHaptic('selection');
+                    setSelectedCategoryId(cat.id);
+                  }}
                   style={[
-                    styles.vaultButton,
-                    styles.vaultButtonGrid,
-                    vaultType === wallet.id && styles.vaultButtonActive,
+                    styles.categoryCard,
+                    {
+                      borderColor: isSelected ? themeColors.text : themeColors.hairline,
+                      backgroundColor: isSelected ? themeColors.surfaceHighlight : themeColors.surface,
+                    },
                   ]}
-                  onPress={() => setVaultType(wallet.id)}
                 >
+                  <View
+                    style={[
+                      styles.categoryIconBadge,
+                      {
+                        backgroundColor: isSelected ? themeColors.text : themeColors.background,
+                        borderColor: isSelected ? themeColors.text : themeColors.hairline,
+                      },
+                    ]}
+                  >
+                    <MaterialCommunityIcons
+                      name={cat.icon || 'tag-outline'}
+                      size={18}
+                      color={isSelected ? themeColors.background : themeColors.text}
+                    />
+                  </View>
                   <Text
                     style={[
-                      styles.vaultButtonText,
-                      vaultType === wallet.id && styles.vaultButtonTextActive,
+                      styles.categoryName,
+                      {
+                        color: isSelected ? themeColors.text : themeColors.textMuted,
+                        fontWeight: isSelected ? '700' : '500',
+                      },
                     ]}
                     numberOfLines={1}
                   >
-                    {wallet.name}
+                    {cat.name}
                   </Text>
                 </TouchableOpacity>
-              ))}
-            </View>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* 4. Optional Details (Note & Date & Receipt) */}
+        <View
+          style={[
+            styles.detailsCard,
+            {
+              backgroundColor: themeColors.surface,
+              borderColor: themeColors.cardBorder,
+            },
+          ]}
+        >
+          <Text style={[styles.microLabel, { color: themeColors.textMuted, marginBottom: 8 }]}>
+            DETAILS & RECEIPT
+          </Text>
+
+          {/* Description input */}
+          <TextInput
+            value={description}
+            onChangeText={setDescription}
+            placeholder="Merchant or memo (optional)"
+            placeholderTextColor={themeColors.textMuted}
+            style={[
+              styles.inputField,
+              {
+                color: themeColors.text,
+                borderColor: themeColors.hairline,
+                backgroundColor: themeColors.background,
+              },
+            ]}
+          />
+
+          {/* Date row */}
+          <View style={styles.dateRow}>
+            <Text style={[styles.dateLabel, { color: themeColors.textMuted }]}>
+              DATE: {format(new Date(date), 'dd MMM yyyy')}
+            </Text>
           </View>
 
-          {/* Date Picker */}
-          <Text style={styles.sectionTitle}>Date</Text>
-          <DatePicker
-            value={date}
-            onChange={setDate}
-            label=""
-            maximumDate={new Date()}
-          />
-
-          {/* Image Picker */}
-          <Text style={styles.sectionTitle}>Receipts</Text>
-          <ImagePickerButton
-            onImagesChanged={setSelectedImageUris}
-            selectedImageUris={selectedImageUris}
-            disabled={loading}
-          />
-
-          {/* Summary */}
-          {amount && parseFloat(amount) > 0 && selectedCategory && (
-            <View style={styles.summary}>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Type</Text>
-                <Text style={styles.summaryValue}>{type === 'income' ? 'Income' : 'Expense'}</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Category</Text>
-                <Text style={styles.summaryValue}>{selectedCategory.name}</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Wallet</Text>
-                <Text style={styles.summaryValue}>{wallets.find((w) => w.id === vaultType)?.name ?? vaultType}</Text>
-              </View>
-              <View style={styles.summaryDivider} />
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Amount</Text>
-                <Text style={styles.summaryAmount}>
-                  {parseFloat(amount).toFixed(3)} {selectedCurrency}
-                </Text>
-              </View>
-            </View>
-          )}
+          {/* Receipt Attachment */}
+          <View style={styles.receiptRow}>
+            <ImagePickerButton
+              selectedImageUris={selectedImageUris}
+              onImagesChanged={setSelectedImageUris}
+            />
+          </View>
         </View>
+
+        {/* 5. Submit Button */}
+        <TouchableOpacity
+          activeOpacity={0.8}
+          disabled={saving}
+          onPress={handleSave}
+          style={[
+            styles.submitButton,
+            {
+              backgroundColor: themeColors.text,
+              borderColor: themeColors.text,
+            },
+          ]}
+        >
+          {saving ? (
+            <ActivityIndicator color={themeColors.background} size="small" />
+          ) : (
+            <Text style={[styles.submitButtonText, { color: themeColors.background }]}>
+              {isEditMode ? 'UPDATE TRANSACTION' : 'LOG TRANSACTION'}
+            </Text>
+          )}
+        </TouchableOpacity>
       </ScrollView>
 
-      {/* Save Button */}
-      <View style={styles.footer}>
-        <Button
-          title={isEditMode ? `Update ${type === 'income' ? 'Income' : 'Expense'}` : `Add ${type === 'income' ? 'Income' : 'Expense'}`}
-          onPress={handleSave}
-          loading={loading || loadingOriginal}
-        />
-      </View>
+      {/* Wallet Picker Modal */}
+      <Modal
+        visible={walletPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setWalletPickerVisible(false)}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => setWalletPickerVisible(false)}
+          style={styles.modalBackdrop}
+        >
+          <View
+            style={[
+              styles.modalSheet,
+              {
+                backgroundColor: themeColors.surface,
+                borderColor: themeColors.cardBorder,
+              },
+            ]}
+          >
+            <View style={[styles.sheetHeader, { borderBottomColor: themeColors.hairline }]}>
+              <Text style={[styles.sheetTitle, { color: themeColors.text }]}>
+                SELECT WALLET
+              </Text>
+              <TouchableOpacity onPress={() => setWalletPickerVisible(false)}>
+                <MaterialCommunityIcons name="close" size={20} color={themeColors.textMuted} />
+              </TouchableOpacity>
+            </View>
 
-      {/* Currency Conversion Modal */}
-      {currentAccount && (
-        <CurrencyConversionModal
-          visible={conversionModalVisible}
-          onClose={() => setConversionModalVisible(false)}
-          fromCurrency={selectedCurrency}
-          toCurrency={currentAccount.currency}
-          initialAmount={parseFloat(amount) || 0}
-          onConversionComplete={handleConversionComplete}
-        />
-      )}
+            <ScrollView style={{ maxHeight: 320 }}>
+              {wallets.map((w) => {
+                const isSelected = selectedWalletId === w.id;
+                return (
+                  <TouchableOpacity
+                    key={w.id}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      triggerHaptic('selection');
+                      setSelectedWalletId(w.id);
+                      setWalletPickerVisible(false);
+                    }}
+                    style={[
+                      styles.pickerRow,
+                      { borderBottomColor: themeColors.hairline },
+                    ]}
+                  >
+                    <View style={styles.pickerLeft}>
+                      <MaterialCommunityIcons
+                        name={w.icon || 'wallet-outline'}
+                        size={18}
+                        color={themeColors.text}
+                        style={{ marginRight: 10 }}
+                      />
+                      <Text style={[styles.pickerName, { color: themeColors.text }]}>
+                        {w.name}
+                      </Text>
+                    </View>
+                    {isSelected && (
+                      <MaterialCommunityIcons name="check" size={18} color={themeColors.text} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Currency Picker Modal */}
+      <Modal
+        visible={currencyPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCurrencyPickerVisible(false)}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => setCurrencyPickerVisible(false)}
+          style={styles.modalBackdrop}
+        >
+          <View
+            style={[
+              styles.modalSheet,
+              {
+                backgroundColor: themeColors.surface,
+                borderColor: themeColors.cardBorder,
+              },
+            ]}
+          >
+            <View style={[styles.sheetHeader, { borderBottomColor: themeColors.hairline }]}>
+              <Text style={[styles.sheetTitle, { color: themeColors.text }]}>
+                SELECT CURRENCY
+              </Text>
+              <TouchableOpacity onPress={() => setCurrencyPickerVisible(false)}>
+                <MaterialCommunityIcons name="close" size={20} color={themeColors.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 320 }}>
+              {POPULAR_CURRENCIES.map((code) => {
+                const isSelected = currency === code;
+                return (
+                  <TouchableOpacity
+                    key={code}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      triggerHaptic('selection');
+                      setCurrency(code);
+                      setCurrencyPickerVisible(false);
+                    }}
+                    style={[
+                      styles.pickerRow,
+                      { borderBottomColor: themeColors.hairline },
+                    ]}
+                  >
+                    <Text style={[styles.pickerName, { color: themeColors.text }]}>
+                      {code}
+                    </Text>
+                    {isSelected && (
+                      <MaterialCommunityIcons name="check" size={18} color={themeColors.text} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </KeyboardAvoidingView>
   );
 };
 
-const createStyles = (themeColors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: themeColors.background,
-  },
-  scrollView: {
+const styles = StyleSheet.create({
+  root: {
     flex: 1,
   },
-  content: {
-    padding: spacing.lg,
-  },
-  typeToggle: {
-    flexDirection: 'row',
-    backgroundColor: themeColors.border,
-    borderRadius: 12,
-    padding: spacing.xs,
-    marginBottom: spacing.lg,
-  },
-  typeButton: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    borderRadius: 10,
+  center: {
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  typeButtonActive: {
-    backgroundColor: themeColors.surface,
+  scroll: {
+    flex: 1,
   },
-  typeButtonText: {
-    ...typography.body,
-    color: themeColors.textSecondary,
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  typeSwitchContainer: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    padding: 3,
+    marginBottom: 16,
+  },
+  typeTab: {
+    flex: 1,
+    paddingVertical: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 2,
+  },
+  typeTabText: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  amountCard: {
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    padding: 18,
+    marginBottom: 16,
+  },
+  amountHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  microLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  currencyChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderRadius: 2,
+  },
+  currencyChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  amountInput: {
+    fontSize: 36,
+    fontWeight: '800',
+    letterSpacing: -1,
+    padding: 0,
+    fontVariant: ['tabular-nums'],
+    marginVertical: 4,
+  },
+  dualCurrencyPreview: {
+    marginTop: 4,
+  },
+  dualCurrencyText: {
+    fontSize: 12,
+    fontVariant: ['tabular-nums'],
+  },
+  walletChipRow: {
+    flexDirection: 'row',
+    marginTop: 12,
+  },
+  walletChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderRadius: 2,
+  },
+  walletChipText: {
+    fontSize: 12,
     fontWeight: '600',
   },
-  typeButtonTextActive: {
-    color: themeColors.primary,
-  },
-  fieldContainer: {
-    marginBottom: spacing.md,
-  },
-  label: {
-    ...typography.body,
-    fontWeight: '500',
-    color: themeColors.textSecondary,
-    marginBottom: spacing.xs,
+  categorySection: {
+    marginBottom: 16,
   },
   sectionTitle: {
-    ...typography.body,
-    fontWeight: '600',
-    color: themeColors.text,
-    marginBottom: spacing.sm,
-    marginTop: spacing.md,
-  },
-  summary: {
-    backgroundColor: themeColors.surface,
-    padding: spacing.md,
-    borderRadius: 12,
-    marginTop: spacing.lg,
-    borderWidth: 1,
-    borderColor: themeColors.border,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: spacing.xs,
-  },
-  summaryLabel: {
-    ...typography.body,
-    color: themeColors.textSecondary,
-  },
-  summaryValue: {
-    ...typography.body,
-    fontWeight: '600',
-    color: themeColors.text,
-  },
-  summaryAmount: {
-    ...typography.body,
+    fontSize: 10,
     fontWeight: '700',
-    color: themeColors.primary,
+    letterSpacing: 1,
+    marginBottom: 10,
+    paddingHorizontal: 2,
   },
-  summaryDivider: {
-    height: 1,
-    backgroundColor: themeColors.border,
-    marginVertical: spacing.sm,
-  },
-  vaultOptions: {
+  categoryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.sm,
+    gap: 8,
   },
-  vaultButton: {
-    flex: 1,
-    paddingVertical: spacing.md,
-    borderRadius: 12,
-    backgroundColor: themeColors.surface,
+  categoryCard: {
+    width: '31.5%',
     borderWidth: 1,
-    borderColor: themeColors.border,
+    borderRadius: borderRadius.xs,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
     alignItems: 'center',
   },
-  vaultButtonGrid: {
-    flexBasis: '30%',
-    flexGrow: 1,
-    paddingVertical: spacing.sm,
-  },
-  vaultButtonActive: {
-    backgroundColor: themeColors.primary + '15',
-    borderColor: themeColors.primary,
-  },
-  vaultButtonText: {
-    ...typography.body,
-    color: themeColors.textSecondary,
-    fontWeight: '600',
-  },
-  vaultButtonTextActive: {
-    color: themeColors.primary,
-  },
-  footer: {
-    padding: spacing.lg,
-    backgroundColor: themeColors.surface,
-    borderTopWidth: 1,
-    borderTopColor: themeColors.border,
-  },
-  conversionInfo: {
-    marginBottom: spacing.md,
-    padding: spacing.md,
-    backgroundColor: themeColors.primary + '10',
-    borderRadius: 12,
+  categoryIconBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 2,
     borderWidth: 1,
-    borderColor: themeColors.primary + '30',
-  },
-  conversionButton: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.xs,
+    marginBottom: 6,
   },
-  conversionButtonText: {
-    ...typography.body,
-    color: themeColors.primary,
-    fontWeight: '600',
-  },
-  conversionText: {
-    ...typography.caption,
-    color: themeColors.textSecondary,
-    marginTop: spacing.xs,
+  categoryName: {
+    fontSize: 11,
     textAlign: 'center',
   },
-  categoryLabelRow: {
+  detailsCard: {
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    padding: 16,
+    marginBottom: 20,
+  },
+  inputField: {
+    height: 42,
+    borderWidth: 1,
+    borderRadius: 2,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    marginBottom: 12,
+  },
+  dateRow: {
+    marginBottom: 12,
+  },
+  dateLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  },
+  receiptRow: {
+    marginTop: 4,
+  },
+  submitButton: {
+    height: 48,
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  submitButtonText: {
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalSheet: {
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    overflow: 'hidden',
+  },
+  sheetHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.xs,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
   },
-  layaIconButton: {
-    padding: spacing.xs,
-    borderRadius: 8,
+  sheetTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
   },
-  layaStatus: {
-    ...typography.caption,
-    color: themeColors.textSecondary,
-    marginTop: spacing.xs,
-    marginBottom: spacing.xs,
-  },
-  createCategoryButton: {
+  pickerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    backgroundColor: themeColors.primary,
-    borderRadius: 12,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.md,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
   },
-  createCategoryText: {
-    ...typography.body,
-    fontWeight: '700',
-    color: '#FFF',
+  pickerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  buttonDisabled: {
-    opacity: 0.6,
+  pickerName: {
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

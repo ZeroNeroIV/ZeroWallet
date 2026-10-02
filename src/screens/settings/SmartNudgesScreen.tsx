@@ -1,15 +1,12 @@
 /**
- * Purpose: Smart Nudges hub — every reminder in one customizable page
+ * SmartNudgesScreen — Simplizum Architectural Edition
  *
- * Inputs:
- *   - navigation: Navigation object from React Navigation
- *
- * Outputs:
- *   - Returns (JSX.Element): Nudge preferences screen
- *
- * Side effects:
- *   - Updates notification settings in store
- *   - (Re)schedules daily, periodic, due-date and salary reminders
+ * Unified notification & alert dispatch management:
+ * - Daily summary trigger time
+ * - Periodic 4-hour background nudges
+ * - Low wallet balance warning thresholds
+ * - Due subscription & recurring expense lead time steppers
+ * - Salary arrival notifications
  */
 
 import React, { useState, useMemo } from 'react';
@@ -27,10 +24,8 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { useSettingsStore } from '../../store/settingsStore';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { compatColors as colors } from '../../theme/colors';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { lightHaptic } from '../../services/haptics/hapticFeedback';
-import { AmountInput } from '../../components/forms/AmountInput';
+import { lightHaptic, mediumHaptic } from '../../services/haptics/hapticFeedback';
 import {
   scheduleDailyNudge,
   cancelDailyNudge,
@@ -51,7 +46,7 @@ function isValidTime(value: string): boolean {
   return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59;
 }
 
-const SmartNudgesScreen = () => {
+export default function SmartNudgesScreen({ navigation }: any) {
   const { notificationSettings, salarySettings, updateNotificationSettings } = useSettingsStore();
   const { currentAccountId } = useAuthStore();
   const themeColors = useThemeColors();
@@ -76,33 +71,28 @@ const SmartNudgesScreen = () => {
   const toggleDaily = (value: boolean) => {
     lightHaptic();
     updateNotificationSettings({ dailyNudgeEnabled: value });
-    if (value) {
-      scheduleDailyNudge();
-    } else {
-      cancelDailyNudge();
-    }
+    if (value) scheduleDailyNudge();
+    else cancelDailyNudge();
   };
 
   const saveTime = () => {
     if (!isValidTime(nudgeTime)) {
-      Alert.alert('Invalid time', 'Use 24-hour HH:MM format, e.g. 20:00');
+      Alert.alert('Invalid Format', 'Use 24-hour HH:MM format, e.g. 21:00');
       return;
     }
-    lightHaptic();
+    mediumHaptic();
     updateNotificationSettings({ nudgeTime: nudgeTime.trim() });
     if (notificationSettings.dailyNudgeEnabled) {
       scheduleDailyNudge();
     }
+    Alert.alert('SAVED', `Daily briefing scheduled for ${nudgeTime.trim()}`);
   };
 
   const togglePeriodic = (value: boolean) => {
     lightHaptic();
     updateNotificationSettings({ periodicNudgesEnabled: value });
-    if (value) {
-      schedulePeriodicNudges();
-    } else {
-      cancelPeriodicNudges();
-    }
+    if (value) schedulePeriodicNudges();
+    else cancelPeriodicNudges();
   };
 
   const toggleLowBalance = (value: boolean) => {
@@ -113,31 +103,26 @@ const SmartNudgesScreen = () => {
   const saveThreshold = () => {
     const amount = parseFloat(threshold);
     if (isNaN(amount) || amount < 0) {
-      Alert.alert('Invalid amount', 'Enter a valid threshold of 0 or more');
+      Alert.alert('Invalid Threshold', 'Enter a valid non-negative amount.');
       return;
     }
-    lightHaptic();
+    mediumHaptic();
     updateNotificationSettings({ lowBalanceThreshold: amount });
+    Alert.alert('SAVED', `Low balance alert threshold updated to $${amount}`);
   };
 
   const toggleSubscriptions = (value: boolean) => {
     lightHaptic();
     updateNotificationSettings({ subscriptionRemindersEnabled: value });
-    if (value) {
-      refreshDue();
-    } else {
-      clearDue('subscription');
-    }
+    if (value) refreshDue();
+    else clearDue('subscription');
   };
 
   const toggleRecurring = (value: boolean) => {
     lightHaptic();
     updateNotificationSettings({ recurringRemindersEnabled: value });
-    if (value) {
-      refreshDue();
-    } else {
-      clearDue('recurring');
-    }
+    if (value) refreshDue();
+    else clearDue('recurring');
   };
 
   const changeDays = (key: 'subscriptionDaysBefore' | 'recurringDaysBefore', delta: number) => {
@@ -155,270 +140,383 @@ const SmartNudgesScreen = () => {
   const toggleSalary = (value: boolean) => {
     lightHaptic();
     updateNotificationSettings({ salaryReminderEnabled: value });
-    if (value) {
-      scheduleSalaryReminder();
-    } else {
-      cancelSalaryReminder();
-    }
+    if (value) scheduleSalaryReminder();
+    else cancelSalaryReminder();
   };
-
-  const renderSwitch = (value: boolean, onChange: (v: boolean) => void) => (
-    <Switch
-      value={value}
-      onValueChange={onChange}
-      trackColor={{ false: colors.neutral.gray300, true: colors.primary.light }}
-      thumbColor={value ? colors.primary.main : colors.neutral.gray500}
-    />
-  );
 
   const renderStepper = (
     value: number,
     onChange: (delta: number) => void,
-    label: string,
+    label: string
   ) => (
     <View style={styles.stepperRow}>
       <Text style={styles.stepperLabel}>{label}</Text>
-      <View style={styles.stepper}>
-        <TouchableOpacity style={styles.stepperButton} onPress={() => onChange(-1)}>
-          <MaterialCommunityIcons name="minus" size={18} color={themeColors.primary} />
+      <View style={styles.stepperControl}>
+        <TouchableOpacity style={styles.stepBtn} onPress={() => onChange(-1)}>
+          <MaterialCommunityIcons name="minus" size={16} color={themeColors.text} />
         </TouchableOpacity>
-        <Text style={styles.stepperValue}>{value} {value === 1 ? 'day' : 'days'}</Text>
-        <TouchableOpacity style={styles.stepperButton} onPress={() => onChange(1)}>
-          <MaterialCommunityIcons name="plus" size={18} color={themeColors.primary} />
+        <Text style={styles.stepperText}>{value} {value === 1 ? 'DAY' : 'DAYS'} BEFORE</Text>
+        <TouchableOpacity style={styles.stepBtn} onPress={() => onChange(1)}>
+          <MaterialCommunityIcons name="plus" size={16} color={themeColors.text} />
         </TouchableOpacity>
       </View>
     </View>
   );
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Daily nudge */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Daily Nudge</Text>
-        <View style={styles.row}>
-          <View style={styles.rowInfo}>
-            <Text style={styles.rowLabel}>Daily reminder</Text>
-            <Text style={styles.rowDescription}>A friendly ping to log your spending</Text>
-          </View>
-          {renderSwitch(notificationSettings.dailyNudgeEnabled, toggleDaily)}
-        </View>
-        <View style={styles.inlineRow}>
-          <TextInput
-            style={styles.timeInput}
-            value={nudgeTime}
-            onChangeText={setNudgeTime}
-            placeholder="20:00"
-            placeholderTextColor={themeColors.textSecondary}
-            keyboardType="numbers-and-punctuation"
-            maxLength={5}
-            editable={notificationSettings.dailyNudgeEnabled}
-          />
-          <TouchableOpacity
-            style={styles.saveChip}
-            onPress={saveTime}
-            disabled={!notificationSettings.dailyNudgeEnabled}
-          >
-            <Text style={styles.saveChipText}>Set time</Text>
-          </TouchableOpacity>
+    <View style={styles.root}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => {
+            lightHaptic();
+            navigation.goBack();
+          }}
+        >
+          <MaterialCommunityIcons name="arrow-left" size={20} color={themeColors.text} />
+        </TouchableOpacity>
+        <View style={styles.headerTitles}>
+          <Text style={styles.headerSuper}>NOTIFICATIONS & ALERTS</Text>
+          <Text style={styles.headerTitle}>SMART NUDGES</Text>
         </View>
       </View>
 
-      {/* 4-hour nudges */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>4-Hour Nudges</Text>
-        <View style={[styles.row, styles.lastRow]}>
-          <View style={styles.rowInfo}>
-            <Text style={styles.rowLabel}>Remind every 4 hours</Text>
-            <Text style={styles.rowDescription}>Nudges at 0, 4, 8, 12, 16 and 20 o'clock</Text>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        {/* CARD 1: DAILY SPENDING BRIEFING */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardHeaderTitle}>DAILY SPENDING BRIEFING</Text>
           </View>
-          {renderSwitch(notificationSettings.periodicNudgesEnabled, togglePeriodic)}
-        </View>
-      </View>
+          <View style={styles.row}>
+            <View style={styles.rowLeft}>
+              <Text style={styles.rowLabel}>Evening Ledger Check-in</Text>
+              <Text style={styles.rowDesc}>Prompt to record today's unaccounted transactions</Text>
+            </View>
+            <Switch
+              value={notificationSettings.dailyNudgeEnabled}
+              onValueChange={toggleDaily}
+              trackColor={{ false: themeColors.border, true: themeColors.text }}
+              thumbColor={themeColors.background}
+            />
+          </View>
 
-      {/* Low money alert */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Low Money Alert</Text>
-        <View style={styles.row}>
-          <View style={styles.rowInfo}>
-            <Text style={styles.rowLabel}>Warn when wallets run low</Text>
-            <Text style={styles.rowDescription}>Alert when any wallet drops below the threshold</Text>
-          </View>
-          {renderSwitch(notificationSettings.lowBalanceAlertEnabled, toggleLowBalance)}
+          {notificationSettings.dailyNudgeEnabled && (
+            <View style={styles.inputRow}>
+              <TextInput
+                style={styles.timeInput}
+                value={nudgeTime}
+                onChangeText={setNudgeTime}
+                placeholder="20:00"
+                placeholderTextColor={themeColors.textSecondary}
+                keyboardType="numbers-and-punctuation"
+                maxLength={5}
+              />
+              <TouchableOpacity style={styles.saveBtn} onPress={saveTime}>
+                <Text style={styles.saveBtnText}>SET TIME (24H)</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
-        <View style={styles.inlineColumn}>
-          <AmountInput
-            value={threshold}
-            onChangeText={setThreshold}
-            placeholder="0.000"
-            editable={notificationSettings.lowBalanceAlertEnabled}
-          />
-          <TouchableOpacity
-            style={styles.saveChip}
-            onPress={saveThreshold}
-            disabled={!notificationSettings.lowBalanceAlertEnabled}
-          >
-            <Text style={styles.saveChipText}>Set threshold</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
 
-      {/* Due subscriptions */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Due Subscriptions</Text>
-        <View style={styles.row}>
-          <View style={styles.rowInfo}>
-            <Text style={styles.rowLabel}>Remind before billing</Text>
-            <Text style={styles.rowDescription}>Heads-up before a subscription charges you</Text>
+        {/* CARD 2: PERIODIC 4-HOUR CADENCE */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardHeaderTitle}>PERIODIC 4-HOUR CADENCE</Text>
           </View>
-          {renderSwitch(notificationSettings.subscriptionRemindersEnabled, toggleSubscriptions)}
+          <View style={styles.row}>
+            <View style={styles.rowLeft}>
+              <Text style={styles.rowLabel}>Active Day Reminders</Text>
+              <Text style={styles.rowDesc}>Subtle check-ins at 08:00, 12:00, 16:00, and 20:00</Text>
+            </View>
+            <Switch
+              value={notificationSettings.periodicNudgesEnabled}
+              onValueChange={togglePeriodic}
+              trackColor={{ false: themeColors.border, true: themeColors.text }}
+              thumbColor={themeColors.background}
+            />
+          </View>
         </View>
-        {renderStepper(notificationSettings.subscriptionDaysBefore, (d) => changeDays('subscriptionDaysBefore', d), 'Remind me')}
-      </View>
 
-      {/* Recurring expenses */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Recurring Expenses</Text>
-        <View style={styles.row}>
-          <View style={styles.rowInfo}>
-            <Text style={styles.rowLabel}>Remind before charge</Text>
-            <Text style={styles.rowDescription}>Heads-up before a recurring expense hits</Text>
+        {/* CARD 3: LOW BALANCE THRESHOLD */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardHeaderTitle}>LOW BALANCE THRESHOLD</Text>
           </View>
-          {renderSwitch(notificationSettings.recurringRemindersEnabled, toggleRecurring)}
-        </View>
-        {renderStepper(notificationSettings.recurringDaysBefore, (d) => changeDays('recurringDaysBefore', d), 'Remind me')}
-      </View>
+          <View style={styles.row}>
+            <View style={styles.rowLeft}>
+              <Text style={styles.rowLabel}>Depletion Warning</Text>
+              <Text style={styles.rowDesc}>Instant alert when any wallet drops below minimum</Text>
+            </View>
+            <Switch
+              value={notificationSettings.lowBalanceAlertEnabled}
+              onValueChange={toggleLowBalance}
+              trackColor={{ false: themeColors.border, true: themeColors.text }}
+              thumbColor={themeColors.background}
+            />
+          </View>
 
-      {/* Salary day */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Salary Day</Text>
-        <View style={[styles.row, styles.lastRow]}>
-          <View style={styles.rowInfo}>
-            <Text style={styles.rowLabel}>Salary day reminder</Text>
-            <Text style={styles.rowDescription}>
-              {salarySettings.isEnabled
-                ? `Remind on payday morning (${salarySettings.payDay ?? 1} of each month)`
-                : 'Enable auto-salary first to get payday reminders'}
-            </Text>
-          </View>
-          {renderSwitch(notificationSettings.salaryReminderEnabled, toggleSalary)}
+          {notificationSettings.lowBalanceAlertEnabled && (
+            <View style={styles.inputRow}>
+              <TextInput
+                style={styles.timeInput}
+                value={threshold}
+                onChangeText={setThreshold}
+                placeholder="50.00"
+                placeholderTextColor={themeColors.textSecondary}
+                keyboardType="decimal-pad"
+              />
+              <TouchableOpacity style={styles.saveBtn} onPress={saveThreshold}>
+                <Text style={styles.saveBtnText}>UPDATE THRESHOLD</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
-      </View>
-    </ScrollView>
+
+        {/* CARD 4: RECURRING DUES & SUBSCRIPTIONS */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardHeaderTitle}>RECURRING DUES & SUBSCRIPTIONS</Text>
+          </View>
+          <View style={styles.row}>
+            <View style={styles.rowLeft}>
+              <Text style={styles.rowLabel}>Subscription Billing Warnings</Text>
+              <Text style={styles.rowDesc}>Prior notification before automatic renewals</Text>
+            </View>
+            <Switch
+              value={notificationSettings.subscriptionRemindersEnabled}
+              onValueChange={toggleSubscriptions}
+              trackColor={{ false: themeColors.border, true: themeColors.text }}
+              thumbColor={themeColors.background}
+            />
+          </View>
+          {notificationSettings.subscriptionRemindersEnabled &&
+            renderStepper(
+              notificationSettings.subscriptionDaysBefore,
+              (d) => changeDays('subscriptionDaysBefore', d),
+              'DISPATCH ADVANCE WARNING'
+            )}
+
+          <View style={styles.divider} />
+
+          <View style={styles.row}>
+            <View style={styles.rowLeft}>
+              <Text style={styles.rowLabel}>Recurring Expense Alerts</Text>
+              <Text style={styles.rowDesc}>Prior notice for utility bills, rent & cadence costs</Text>
+            </View>
+            <Switch
+              value={notificationSettings.recurringRemindersEnabled}
+              onValueChange={toggleRecurring}
+              trackColor={{ false: themeColors.border, true: themeColors.text }}
+              thumbColor={themeColors.background}
+            />
+          </View>
+          {notificationSettings.recurringRemindersEnabled &&
+            renderStepper(
+              notificationSettings.recurringDaysBefore,
+              (d) => changeDays('recurringDaysBefore', d),
+              'DISPATCH ADVANCE WARNING'
+            )}
+        </View>
+
+        {/* CARD 5: SALARY DAY REMINDER */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardHeaderTitle}>PAYDAY INFLOW ALERT</Text>
+          </View>
+          <View style={styles.row}>
+            <View style={styles.rowLeft}>
+              <Text style={styles.rowLabel}>Salary Credit Confirmation</Text>
+              <Text style={styles.rowDesc}>
+                {salarySettings.isEnabled
+                  ? `Notifies on the ${salarySettings.payDay ?? 1}st of each month`
+                  : 'Configure auto-salary first in settings'}
+              </Text>
+            </View>
+            <Switch
+              value={notificationSettings.salaryReminderEnabled}
+              onValueChange={toggleSalary}
+              disabled={!salarySettings.isEnabled}
+              trackColor={{ false: themeColors.border, true: themeColors.text }}
+              thumbColor={themeColors.background}
+            />
+          </View>
+        </View>
+      </ScrollView>
+    </View>
   );
-};
+}
 
-const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
+const createStyles = (theme: any) =>
   StyleSheet.create({
-    container: {
+    root: {
       flex: 1,
-      backgroundColor: themeColors.background,
+      backgroundColor: theme.background,
     },
-    content: {
-      paddingBottom: spacing.xl,
-    },
-    section: {
-      backgroundColor: themeColors.surface,
-      marginTop: spacing.md,
-      paddingVertical: spacing.xs,
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
       paddingHorizontal: spacing.md,
+      paddingTop: spacing.xl,
+      paddingBottom: spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.hairline || theme.border,
+      gap: spacing.sm,
     },
-    sectionTitle: {
+    backButton: {
+      width: 36,
+      height: 36,
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      borderRadius: 2,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    headerTitles: {
+      flex: 1,
+    },
+    headerSuper: {
       ...typography.caption,
-      color: themeColors.textSecondary,
-      fontWeight: '600',
-      paddingVertical: spacing.xs,
-      textTransform: 'uppercase',
+      color: theme.textSecondary,
+      fontSize: 10,
+      letterSpacing: 1.5,
+      fontWeight: '700',
+    },
+    headerTitle: {
+      ...typography.h3,
+      color: theme.text,
       letterSpacing: 0.5,
+      fontWeight: '700',
+    },
+    scrollView: {
+      flex: 1,
+    },
+    scrollContent: {
+      padding: spacing.md,
+      paddingBottom: spacing.xxl + 40,
+    },
+    card: {
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      backgroundColor: theme.card || theme.surface,
+      borderRadius: 2,
+      marginBottom: spacing.md,
+      overflow: 'hidden',
+    },
+    cardHeader: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.hairline || theme.border,
+      backgroundColor: theme.background,
+    },
+    cardHeaderTitle: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 1.2,
     },
     row: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
+      paddingHorizontal: spacing.md,
       paddingVertical: spacing.md,
-      borderBottomWidth: 1,
-      borderBottomColor: themeColors.border,
     },
-    lastRow: {
-      borderBottomWidth: 0,
-    },
-    rowInfo: {
+    rowLeft: {
       flex: 1,
-      marginRight: spacing.sm,
+      marginRight: spacing.md,
     },
     rowLabel: {
       ...typography.body,
+      color: theme.text,
       fontWeight: '600',
-      color: themeColors.text,
+      fontSize: 14,
       marginBottom: 2,
     },
-    rowDescription: {
+    rowDesc: {
       ...typography.caption,
-      color: themeColors.textSecondary,
+      color: theme.textSecondary,
+      fontSize: 12,
     },
-    inlineRow: {
+    divider: {
+      height: 1,
+      backgroundColor: theme.hairline || theme.border,
+      marginLeft: spacing.md,
+    },
+    inputRow: {
       flexDirection: 'row',
-      alignItems: 'center',
+      paddingHorizontal: spacing.md,
+      paddingBottom: spacing.md,
       gap: spacing.sm,
-      paddingVertical: spacing.sm,
-    },
-    inlineColumn: {
-      gap: spacing.sm,
-      paddingVertical: spacing.sm,
     },
     timeInput: {
-      ...typography.body,
-      color: themeColors.text,
-      backgroundColor: themeColors.background,
+      flex: 1,
       borderWidth: 1,
-      borderColor: themeColors.border,
-      borderRadius: 12,
-      paddingVertical: spacing.sm,
+      borderColor: theme.hairline || theme.border,
+      backgroundColor: theme.background,
+      color: theme.text,
       paddingHorizontal: spacing.md,
-      minWidth: 110,
-      textAlign: 'center',
+      paddingVertical: spacing.sm,
+      borderRadius: 2,
+      fontFamily: 'monospace',
+      fontSize: 14,
+      fontWeight: '700',
     },
-    saveChip: {
-      backgroundColor: themeColors.primary,
-      borderRadius: 12,
-      paddingVertical: spacing.sm,
+    saveBtn: {
+      borderWidth: 1,
+      borderColor: theme.text,
+      backgroundColor: theme.text,
       paddingHorizontal: spacing.md,
+      borderRadius: 2,
+      justifyContent: 'center',
       alignItems: 'center',
     },
-    saveChipText: {
-      ...typography.body,
+    saveBtnText: {
+      ...typography.caption,
+      color: theme.background,
+      fontSize: 10,
       fontWeight: '700',
-      color: '#FFF',
+      letterSpacing: 0.8,
     },
     stepperRow: {
       flexDirection: 'row',
-      alignItems: 'center',
       justifyContent: 'space-between',
-      paddingVertical: spacing.sm,
+      alignItems: 'center',
+      paddingHorizontal: spacing.md,
+      paddingBottom: spacing.md,
     },
     stepperLabel: {
-      ...typography.body,
-      color: themeColors.textSecondary,
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 0.8,
     },
-    stepper: {
+    stepperControl: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.sm,
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      borderRadius: 2,
+      paddingHorizontal: spacing.xs,
+      paddingVertical: 2,
+      backgroundColor: theme.background,
     },
-    stepperButton: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      alignItems: 'center',
+    stepBtn: {
+      width: 28,
+      height: 28,
       justifyContent: 'center',
-      backgroundColor: themeColors.primary + '15',
+      alignItems: 'center',
     },
-    stepperValue: {
-      ...typography.body,
+    stepperText: {
+      ...typography.caption,
+      color: theme.text,
+      fontSize: 10,
       fontWeight: '700',
-      color: themeColors.text,
-      minWidth: 64,
-      textAlign: 'center',
+      fontFamily: 'monospace',
+      letterSpacing: 0.5,
     },
   });
-
-export default SmartNudgesScreen;

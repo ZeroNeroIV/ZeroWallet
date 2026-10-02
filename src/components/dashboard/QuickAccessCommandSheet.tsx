@@ -88,7 +88,7 @@ const COMMAND_ITEMS: CommandItem[] = [
     subtitle: 'Insights & queries',
     icon: 'robot-outline',
     color: '#B4A7D6',
-    onPress: (nav) => nav.navigate('Chat'),
+    onPress: (nav) => nav.navigate('ChatScreen'),
   },
   {
     id: 'settings',

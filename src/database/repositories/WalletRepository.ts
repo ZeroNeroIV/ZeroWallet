@@ -233,6 +233,48 @@ export class WalletRepository extends BaseRepository<Wallet> {
     }
     return this.findByAccount(accountId);
   }
+
+  /**
+   * Purpose: Calculate mathematically pure derived balances for all wallets
+   * directly from the transactions ledger without mutable state.
+   */
+  async getDerivedBalances(accountId: string): Promise<Record<string, number>> {
+    const rows = await executeSql<{
+      wallet_id: string;
+      inflow: number;
+      outflow: number;
+    }>(
+      `SELECT
+         w.id as wallet_id,
+         COALESCE(SUM(CASE
+           WHEN t.type = 'income' AND (t.wallet_id = w.id OR t.vault_type = w.id)
+             THEN COALESCE(t.converted_amount, t.amount)
+           WHEN t.type = 'transfer' AND t.destination_wallet_id = w.id
+             THEN COALESCE(t.converted_amount, t.amount)
+           ELSE 0
+         END), 0) as inflow,
+         COALESCE(SUM(CASE
+           WHEN t.type = 'expense' AND (t.wallet_id = w.id OR t.vault_type = w.id)
+             THEN COALESCE(t.converted_amount, t.amount)
+           WHEN t.type = 'transfer' AND (t.wallet_id = w.id OR t.vault_type = w.id)
+             THEN COALESCE(t.converted_amount, t.amount)
+           ELSE 0
+         END), 0) as outflow
+       FROM wallets w
+       LEFT JOIN transactions t ON (t.wallet_id = w.id OR t.vault_type = w.id OR t.destination_wallet_id = w.id)
+         AND t.account_id = w.account_id
+       WHERE w.account_id = ?
+       GROUP BY w.id`,
+      [accountId]
+    );
+
+    const result: Record<string, number> = {};
+    for (const r of rows) {
+      const net = (Number(r.inflow) || 0) - (Number(r.outflow) || 0);
+      result[r.wallet_id] = Math.round(net * 1000) / 1000;
+    }
+    return result;
+  }
 }
 
 /**

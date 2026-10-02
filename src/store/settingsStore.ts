@@ -35,6 +35,7 @@ const defaultNotificationSettings = {
 
 const defaultAppSettings = {
   theme: 'system' as const,
+  themeFamily: 'swiss' as const,
   hapticFeedback: true,
   currency: 'USD',
 };

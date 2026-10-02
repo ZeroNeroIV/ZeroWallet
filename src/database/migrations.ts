@@ -79,6 +79,10 @@ async function applyMigration(
       await migration_v11(database);
       break;
 
+    case 12:
+      await migration_v12(database);
+      break;
+
     default:
       console.warn(`[Migrations] No migration defined for version ${version}`);
   }
@@ -662,5 +666,125 @@ export async function migration_v11(database: SQLite.SQLiteDatabase): Promise<vo
       console.warn('[Migration v11] Warning adding sort_order to wallets:', err);
     }
   }
+}
+
+/**
+ * Migration v12: The Great Simplification (KISS)
+ * 1. Add destination_wallet_id to transactions table for direct wallet-to-wallet transfers
+ * 2. Add wallet_id to transactions table if missing and populate from vault_type
+ * 3. Create unified recurring_transactions table (merging subscriptions & recurring_expenses)
+ * 4. Migrate existing subscriptions and recurring_expenses into recurring_transactions
+ */
+export async function migration_v12(database: SQLite.SQLiteDatabase): Promise<void> {
+  console.log('[Migration] Running migration v12 (KISS: unified Wallets & Recurring)...');
+
+  // 1. Add wallet_id and destination_wallet_id to transactions
+  try {
+    await database.executeSql('ALTER TABLE transactions ADD COLUMN wallet_id TEXT;');
+  } catch (err: any) {
+    if (!err?.message?.includes('duplicate column')) {
+      console.warn('[Migration v12] transactions.wallet_id notice:', err);
+    }
+  }
+
+  try {
+    await database.executeSql('ALTER TABLE transactions ADD COLUMN destination_wallet_id TEXT;');
+  } catch (err: any) {
+    if (!err?.message?.includes('duplicate column')) {
+      console.warn('[Migration v12] transactions.destination_wallet_id notice:', err);
+    }
+  }
+
+  // Populate wallet_id from vault_type for existing records
+  try {
+    await database.executeSql('UPDATE transactions SET wallet_id = vault_type WHERE wallet_id IS NULL OR wallet_id = "";');
+  } catch (err: any) {
+    console.warn('[Migration v12] populate wallet_id warning:', err);
+  }
+
+  // 2. Create recurring_transactions table
+  await database.executeSql(`
+    CREATE TABLE IF NOT EXISTS recurring_transactions (
+      id TEXT PRIMARY KEY,
+      wallet_id TEXT NOT NULL,
+      destination_wallet_id TEXT,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL CHECK(type IN ('expense', 'income', 'transfer')),
+      amount REAL NOT NULL,
+      category_id TEXT,
+      frequency_unit TEXT NOT NULL CHECK(frequency_unit IN ('day', 'week', 'month', 'year')),
+      frequency_interval INTEGER NOT NULL DEFAULT 1,
+      billing_day INTEGER,
+      start_date INTEGER NOT NULL,
+      end_date INTEGER,
+      next_run_date INTEGER NOT NULL,
+      last_run_date INTEGER,
+      auto_deduct INTEGER NOT NULL DEFAULT 1,
+      reminder_days_before INTEGER NOT NULL DEFAULT 1,
+      is_subscription INTEGER NOT NULL DEFAULT 0,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+  `);
+
+  await database.executeSql('CREATE INDEX IF NOT EXISTS idx_recurring_tx_wallet ON recurring_transactions(wallet_id);');
+  await database.executeSql('CREATE INDEX IF NOT EXISTS idx_recurring_tx_next ON recurring_transactions(next_run_date);');
+  await database.executeSql('CREATE INDEX IF NOT EXISTS idx_recurring_tx_active ON recurring_transactions(is_active);');
+
+  // 3. Migrate subscriptions into recurring_transactions
+  try {
+    await database.executeSql(`
+      INSERT OR IGNORE INTO recurring_transactions (
+        id, wallet_id, name, type, amount, category_id,
+        frequency_unit, frequency_interval, billing_day,
+        start_date, next_run_date, last_run_date,
+        auto_deduct, reminder_days_before, is_subscription, is_active,
+        created_at, updated_at
+      )
+      SELECT
+        id, vault_type, name, 'expense', amount, category_id,
+        'month', 1, billing_day,
+        created_at, next_processing, last_processed,
+        1, 1, 1, is_active,
+        created_at, updated_at
+      FROM subscriptions;
+    `);
+    console.log('[Migration v12] Migrated subscriptions into recurring_transactions');
+  } catch (err: any) {
+    console.warn('[Migration v12] subscriptions migration notice:', err);
+  }
+
+  // 4. Migrate recurring_expenses into recurring_transactions
+  try {
+    await database.executeSql(`
+      INSERT OR IGNORE INTO recurring_transactions (
+        id, wallet_id, name, type, amount, category_id,
+        frequency_unit, frequency_interval,
+        start_date, next_run_date, last_run_date,
+        auto_deduct, reminder_days_before, is_subscription, is_active,
+        created_at, updated_at
+      )
+      SELECT
+        id, vault_type, name, 'expense', amount, category_id,
+        CASE frequency
+          WHEN 'daily' THEN 'day'
+          WHEN 'weekly' THEN 'week'
+          WHEN 'monthly' THEN 'month'
+          WHEN 'yearly' THEN 'year'
+          ELSE 'month'
+        END,
+        COALESCE(interval, 1),
+        created_at, next_occurrence, last_processed,
+        COALESCE(auto_deduct, 1), 1, 0, is_active,
+        created_at, updated_at
+      FROM recurring_expenses;
+    `);
+    console.log('[Migration v12] Migrated recurring_expenses into recurring_transactions');
+  } catch (err: any) {
+    console.warn('[Migration v12] recurring_expenses migration notice:', err);
+  }
+
+  console.log('[Migration v12] Successfully applied migration v12');
 }
 

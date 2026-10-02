@@ -17,11 +17,14 @@ import { useColorScheme } from 'react-native';
 import { useSettingsStore } from '../store/settingsStore';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
+export type ThemeFamily = 'swiss' | 'nordic' | 'cyber';
 
 interface ThemeContextType {
   theme: 'light' | 'dark';
   themeMode: ThemeMode;
+  themeFamily: ThemeFamily;
   setThemeMode: (mode: ThemeMode) => void;
+  setThemeFamily: (family: ThemeFamily) => void;
   isDark: boolean;
 }
 
@@ -46,6 +49,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return appSettings.theme;
   });
 
+  const currentFamily: ThemeFamily = appSettings.themeFamily || 'swiss';
+
   useEffect(() => {
     if (appSettings.theme === 'system') {
       setCurrentTheme(systemColorScheme === 'dark' ? 'dark' : 'light');
@@ -58,10 +63,16 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     updateAppSettings({ theme: mode });
   };
 
+  const setThemeFamily = (family: ThemeFamily) => {
+    updateAppSettings({ themeFamily: family });
+  };
+
   const value: ThemeContextType = {
     theme: currentTheme,
     themeMode: appSettings.theme,
+    themeFamily: currentFamily,
     setThemeMode,
+    setThemeFamily,
     isDark: currentTheme === 'dark',
   };
 

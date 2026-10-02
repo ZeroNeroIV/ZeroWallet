@@ -110,10 +110,10 @@ export class ChatContextManager {
           (b.mainBalance ?? 0) +
           (b.savingsBalance ?? 0) +
           (b.heldBalance ?? 0) +
-          ((b as Record<string, number>).salaryBalance ?? 0) +
-          ((b as Record<string, number>).emergencyBalance ?? 0) +
-          ((b as Record<string, number>).cardBalance ?? 0) +
-          ((b as Record<string, number>).physicalBalance ?? 0)
+          ((b as unknown as Record<string, number>).salaryBalance ?? 0) +
+          ((b as unknown as Record<string, number>).emergencyBalance ?? 0) +
+          ((b as unknown as Record<string, number>).cardBalance ?? 0) +
+          ((b as unknown as Record<string, number>).physicalBalance ?? 0)
         ))
         : 0;
 

@@ -127,3 +127,45 @@ export async function exportAllData(accountId: string, userId: string): Promise<
   // ── 7. Clean up ──────────────────────────────────────────────────────────
   try { await RNFS.unlink(zipPath); } catch {}
 }
+
+export async function exportTransactionsCSV(accountId: string, userId: string): Promise<void> {
+  const dateStr = new Date().toISOString().split('T')[0];
+  const csvPath = `${RNFS.CachesDirectoryPath}/transactions-${dateStr}.csv`;
+
+  const [transactions, categories, wallets] = await Promise.all([
+    new TransactionRepository().findByAccount(accountId),
+    new CategoryRepository().findByUser(userId),
+    new WalletRepository().findByAccount(accountId),
+  ]);
+
+  const categoryMap = new Map<string, string>();
+  categories.forEach(c => categoryMap.set(c.id, c.name));
+
+  const walletMap = new Map<string, string>();
+  wallets.forEach(w => walletMap.set(w.id, w.name));
+
+  const headers = ['Date', 'Type', 'Amount', 'Currency', 'Category', 'Wallet', 'Vault', 'Description'];
+  const rows = transactions.map(t => {
+    const date = new Date(t.date).toISOString().split('T')[0];
+    const category = categoryMap.get(t.categoryId) || 'Uncategorized';
+    const wallet = walletMap.get(t.walletId || '') || t.vaultType || 'main';
+    const desc = (t.description || '').replace(/"/g, '""');
+    return `"${date}","${t.type}","${t.amount}","${t.currency}","${category}","${wallet}","${t.vaultType}","${desc}"`;
+  });
+
+  const csvContent = [headers.join(','), ...rows].join('\n');
+
+  if (await RNFS.exists(csvPath)) await RNFS.unlink(csvPath);
+  await RNFS.writeFile(csvPath, csvContent, 'utf8');
+
+  await Share.open({
+    url: `file://${csvPath}`,
+    type: 'text/csv',
+    filename: `transactions-${dateStr}.csv`,
+    title: 'Export Transactions CSV',
+    failOnCancel: false,
+  });
+
+  try { await RNFS.unlink(csvPath); } catch {}
+}
+

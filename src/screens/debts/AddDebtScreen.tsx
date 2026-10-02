@@ -1,378 +1,583 @@
-// AddDebtScreen - Create or edit a debt
+/**
+ * Purpose: Full-screen Simplizum Add/Edit Debt Screen.
+ */
+
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-    View,
-    Text,
-    StyleSheet,
-    ScrollView,
-    Alert,
-    TouchableOpacity,
-    Platform,
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Alert,
+  TouchableOpacity,
+  TextInput,
+  SafeAreaView,
+  StatusBar,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RouteProp } from '@react-navigation/native';
 import type { MainStackParamList } from '../../types/navigation';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { Input } from '../../components/forms/Input';
-import { AmountInput } from '../../components/forms/AmountInput';
-import { Button } from '../../components/forms/Button';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+
+import { useThemeColors } from '../../hooks/useThemeColors';
 import { useAuthStore } from '../../store/authStore';
-import { DebtRepository } from '../../database/repositories/DebtRepository';
+import { useAccountStore } from '../../store/accountStore';
 import { spacing, borderRadius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
+import { getCurrencySymbol } from '../../utils/currencyFormatter';
+import { triggerHaptic } from '../../services/haptics/hapticFeedback';
+import { DebtRepository } from '../../database/repositories/DebtRepository';
+import { AccountRepository } from '../../database/repositories/AccountRepository';
 import type { DebtType } from '../../types/models';
-import { useThemeColors } from '../../hooks/useThemeColors';
-import { format } from 'date-fns';
 
-type AddDebtNavigationProp = StackNavigationProp<MainStackParamList, 'AddDebt'>;
-type AddDebtRouteProp = RouteProp<MainStackParamList, 'AddDebt' | 'EditDebt'>;
+type NavigationProp = StackNavigationProp<MainStackParamList, 'AddDebt'>;
+type ScreenRouteProp = RouteProp<MainStackParamList, 'AddDebt'>;
 
 export default function AddDebtScreen() {
-    const navigation = useNavigation<AddDebtNavigationProp>();
-    const route = useRoute<AddDebtRouteProp>();
-    const { currentAccountId } = useAuthStore();
-    const themeColors = useThemeColors();
+  const navigation = useNavigation<NavigationProp>();
+  const route = useRoute<ScreenRouteProp>();
+  const themeColors = useThemeColors();
 
-    const isEditMode = route.params && 'debtId' in route.params;
-    const debtId = route.params && 'debtId' in route.params ? route.params.debtId : undefined;
-    const initialType = route.params && 'type' in route.params ? route.params.type : 'lent';
+  const currentUser = useAuthStore((s) => s.currentUser);
+  const currentAccountId = useAuthStore((s) => s.currentAccountId) || useAccountStore((s) => s.currentAccountId);
 
-    const [debtType, setDebtType] = useState<DebtType>(initialType || 'lent');
-    const [personName, setPersonName] = useState('');
-    const [amount, setAmount] = useState('');
-    const [dueDate, setDueDate] = useState(new Date());
-    const [showDatePicker, setShowDatePicker] = useState(false);
-    const [description, setDescription] = useState('');
-    const [loading, setLoading] = useState(false);
+  const routeParams = (route.params as any) || {};
+  const debtId = routeParams.debtId;
+  const isEditMode = Boolean(debtId);
+  const initialType: DebtType = routeParams.type || 'borrowed';
 
-    const debtRepo = new DebtRepository();
-    const styles = useMemo(() => createStyles(themeColors), [themeColors]);
+  const [type, setType] = useState<DebtType>(initialType);
+  const [personName, setPersonName] = useState('');
+  const [amount, setAmount] = useState('');
+  const [description, setDescription] = useState('');
+  const [dueDaysOffset, setDueDaysOffset] = useState<number>(30); // default 30 days
+  const [currency, setCurrency] = useState('USD');
+  const [saving, setSaving] = useState(false);
 
-    useEffect(() => {
-        if (isEditMode && debtId) {
-            loadDebt();
+  const currencySymbol = useMemo(() => getCurrencySymbol(currency), [currency]);
+
+  useEffect(() => {
+    loadAccountCurrency();
+    if (debtId) {
+      loadDebt(debtId);
+    }
+  }, [debtId]);
+
+  const loadAccountCurrency = async () => {
+    if (!currentAccountId) return;
+    try {
+      const accRepo = new AccountRepository();
+      const acc = await accRepo.findById(currentAccountId);
+      if (acc?.currency) setCurrency(acc.currency);
+    } catch (err) {
+      console.warn('[AddDebt] Could not load currency:', err);
+    }
+  };
+
+  const loadDebt = async (id: string) => {
+    try {
+      const debtRepo = new DebtRepository();
+      const d = await debtRepo.findById(id);
+      if (d) {
+        setType(d.type);
+        setPersonName(d.personName);
+        setAmount(d.amount.toString());
+        setDescription(d.description || '');
+        if (d.dueDate) {
+          const diffDays = Math.round((d.dueDate - Date.now()) / (1000 * 60 * 60 * 24));
+          setDueDaysOffset(diffDays > 0 ? diffDays : 0);
         }
-    }, []);
+      }
+    } catch (err) {
+      console.error('[AddDebt] Failed to load debt:', err);
+    }
+  };
 
-    const loadDebt = async () => {
-        if (!debtId) return;
+  const handleSave = async () => {
+    if (!currentAccountId) return;
+    if (!personName.trim()) {
+      Alert.alert('Required', 'Please enter the counterparty name');
+      return;
+    }
 
-        try {
-            const debt = await debtRepo.findById(debtId);
-            if (debt) {
-                setDebtType(debt.type);
-                setPersonName(debt.personName);
-                setAmount(debt.amount.toString());
-                setDueDate(new Date(debt.dueDate));
-                setDescription(debt.description || '');
-            } else {
-                Alert.alert('Error', 'Debt not found');
-                navigation.goBack();
+    const parsedAmount = parseFloat(amount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid loan amount greater than 0');
+      return;
+    }
+
+    const dueDateTimestamp = Date.now() + dueDaysOffset * 24 * 60 * 60 * 1000;
+
+    try {
+      setSaving(true);
+      triggerHaptic('notificationSuccess');
+      const debtRepo = new DebtRepository();
+
+      if (isEditMode && debtId) {
+        await debtRepo.update(debtId, {
+          type,
+          personName: personName.trim(),
+          amount: parsedAmount,
+          dueDate: dueDateTimestamp,
+          description: description.trim(),
+        });
+      } else {
+        await debtRepo.create({
+          accountId: currentAccountId,
+          type,
+          personName: personName.trim(),
+          amount: parsedAmount,
+          amountPaid: 0,
+          dueDate: dueDateTimestamp,
+          description: description.trim(),
+        });
+      }
+
+      navigation.goBack();
+    } catch (err: any) {
+      console.error('[AddDebt] Save failed:', err);
+      Alert.alert('Error', err?.message || 'Failed to save debt record');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = () => {
+    if (!debtId) return;
+    Alert.alert(
+      'Delete Record',
+      `Are you sure you want to delete this debt record for "${personName}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              triggerHaptic('notificationWarning');
+              const debtRepo = new DebtRepository();
+              await debtRepo.delete(debtId);
+              navigation.goBack();
+            } catch (err: any) {
+              Alert.alert('Error', err?.message || 'Failed to delete debt');
             }
-        } catch (error) {
-            console.error('[AddDebt] Failed to load debt:', error);
-            Alert.alert('Error', 'Failed to load debt');
-            navigation.goBack();
-        }
-    };
-
-    const handleSave = async () => {
-        if (!currentAccountId) {
-            Alert.alert('Error', 'No account selected');
-            return;
-        }
-
-        if (!personName.trim()) {
-            Alert.alert('Validation Error', 'Please enter the person\'s name');
-            return;
-        }
-
-        const amountValue = parseFloat(amount);
-        if (!amountValue || amountValue <= 0) {
-            Alert.alert('Validation Error', 'Please enter a valid amount');
-            return;
-        }
-
-        if (dueDate < new Date()) {
-            Alert.alert(
-                'Past Due Date',
-                'The due date is in the past. Do you want to continue?',
-                [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'Continue', onPress: () => saveDebt() },
-                ]
-            );
-            return;
-        }
-
-        await saveDebt();
-    };
-
-    const saveDebt = async () => {
-        if (!currentAccountId) return;
-
-        setLoading(true);
-
-        try {
-            if (isEditMode && debtId) {
-                await debtRepo.update(debtId, {
-                    personName: personName.trim(),
-                    amount: parseFloat(amount),
-                    dueDate: dueDate.getTime(),
-                    description: description.trim(),
-                });
-
-                Alert.alert('Success', 'Debt updated successfully', [
-                    { text: 'OK', onPress: () => navigation.goBack() },
-                ]);
-            } else {
-                await debtRepo.create({
-                    accountId: currentAccountId,
-                    type: debtType,
-                    personName: personName.trim(),
-                    amount: parseFloat(amount),
-                    dueDate: dueDate.getTime(),
-                    description: description.trim(),
-                });
-
-                Alert.alert('Success', 'Debt created successfully', [
-                    { text: 'OK', onPress: () => navigation.goBack() },
-                ]);
-            }
-        } catch (error) {
-            console.error('[AddDebt] Failed to save debt:', error);
-            Alert.alert('Error', 'Failed to save debt');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const onDateChange = (event: any, selectedDate?: Date) => {
-        setShowDatePicker(Platform.OS === 'ios');
-        if (selectedDate) {
-            setDueDate(selectedDate);
-        }
-    };
-
-    return (
-        <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-            {/* Debt Type Selector */}
-            {!isEditMode && (
-                <View style={styles.section}>
-                    <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Type</Text>
-                    <View style={styles.typeGrid}>
-                        <TouchableOpacity
-                            style={[
-                                styles.typeOption,
-                                { borderColor: debtType === 'lent' ? themeColors.primary : themeColors.border },
-                                debtType === 'lent' && { backgroundColor: themeColors.primary + '10' },
-                            ]}
-                            onPress={() => setDebtType('lent')}>
-                            <MaterialCommunityIcons
-                                name="arrow-up-circle"
-                                size={32}
-                                color={debtType === 'lent' ? themeColors.primary : themeColors.textSecondary}
-                            />
-                            <Text
-                                style={[
-                                    styles.typeLabel,
-                                    { color: debtType === 'lent' ? themeColors.primary : themeColors.textSecondary },
-                                ]}>
-                                I Lent Money
-                            </Text>
-                            <Text style={[styles.typeSubtext, { color: themeColors.textSecondary }]}>
-                                They owe you
-                            </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={[
-                                styles.typeOption,
-                                { borderColor: debtType === 'borrowed' ? themeColors.primary : themeColors.border },
-                                debtType === 'borrowed' && { backgroundColor: themeColors.primary + '10' },
-                            ]}
-                            onPress={() => setDebtType('borrowed')}>
-                            <MaterialCommunityIcons
-                                name="arrow-down-circle"
-                                size={32}
-                                color={debtType === 'borrowed' ? themeColors.primary : themeColors.textSecondary}
-                            />
-                            <Text
-                                style={[
-                                    styles.typeLabel,
-                                    { color: debtType === 'borrowed' ? themeColors.primary : themeColors.textSecondary },
-                                ]}>
-                                I Borrowed Money
-                            </Text>
-                            <Text style={[styles.typeSubtext, { color: themeColors.textSecondary }]}>
-                                You owe them
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            )}
-
-            {/* Person Name */}
-            <Input
-                label="Person's Name"
-                placeholder="e.g., John Smith"
-                value={personName}
-                onChangeText={setPersonName}
-                leftIcon="account"
-                autoFocus={!isEditMode}
-            />
-
-            {/* Amount */}
-            <AmountInput
-                label="Amount"
-                value={amount}
-                onChangeText={setAmount}
-                placeholder="0.000"
-            />
-
-            {/* Due Date */}
-            <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Due Date</Text>
-                <TouchableOpacity
-                    style={[styles.dateButton, { backgroundColor: themeColors.surface, borderColor: themeColors.border }]}
-                    onPress={() => setShowDatePicker(true)}>
-                    <MaterialCommunityIcons
-                        name="calendar-clock"
-                        size={20}
-                        color={themeColors.primary}
-                    />
-                    <Text style={[styles.dateText, { color: themeColors.text }]}>
-                        {format(dueDate, 'MMMM dd, yyyy')}
-                    </Text>
-                </TouchableOpacity>
-                {showDatePicker && (
-                    <DateTimePicker
-                        value={dueDate}
-                        mode="date"
-                        display="default"
-                        onChange={onDateChange}
-                        minimumDate={new Date()}
-                    />
-                )}
-            </View>
-
-            {/* Description (Optional) */}
-            <Input
-                label="Notes (Optional)"
-                placeholder="e.g., For car repair"
-                value={description}
-                onChangeText={setDescription}
-                leftIcon="text"
-                multiline
-                numberOfLines={3}
-            />
-
-            {/* Preview */}
-            <View style={[styles.preview, { backgroundColor: themeColors.surface }]}>
-                <MaterialCommunityIcons
-                    name={debtType === 'lent' ? 'arrow-up-circle' : 'arrow-down-circle'}
-                    size={32}
-                    color={debtType === 'lent' ? '#06D6A0' : '#FF6B6B'}
-                />
-                <View style={{ flex: 1 }}>
-                    <Text style={[styles.previewLabel, { color: themeColors.textSecondary }]}>
-                        {debtType === 'lent' ? 'They owe you' : 'You owe them'}
-                    </Text>
-                    <Text style={[styles.previewAmount, { color: themeColors.text }]}>
-                        ${amount || '0.000'}
-                    </Text>
-                    <Text style={[styles.previewPerson, { color: themeColors.textSecondary }]}>
-                        {personName || 'Person Name'}
-                    </Text>
-                </View>
-            </View>
-
-            {/* Save Button */}
-            <View style={styles.footer}>
-                <Button
-                    title={isEditMode ? 'Update Debt' : 'Create Debt'}
-                    onPress={handleSave}
-                    loading={loading}
-                    leftIcon={<MaterialCommunityIcons name={isEditMode ? 'check' : 'plus'} size={20} color="#FFF" />}
-                />
-            </View>
-        </ScrollView>
+          },
+        },
+      ]
     );
+  };
+
+  return (
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]}>
+      <StatusBar
+        barStyle={themeColors.isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={themeColors.background}
+      />
+
+      {/* Header Bar */}
+      <View style={[styles.headerBar, { borderBottomColor: themeColors.borderSubtle }]}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={[styles.headerNavButton, { borderColor: themeColors.borderSubtle }]}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Icon name="close" size={18} color={themeColors.text} />
+        </TouchableOpacity>
+
+        <View style={styles.headerTitleBox}>
+          <Text style={[styles.headerSubtitle, { color: themeColors.textMuted }]}>
+            {isEditMode ? 'MODIFY OBLIGATION' : 'NEW LIABILITY RECORD'}
+          </Text>
+          <Text style={[styles.headerTitle, { color: themeColors.text }]}>
+            {isEditMode ? 'Edit Debt Record' : 'Record Debt or Loan'}
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          onPress={handleSave}
+          disabled={saving}
+          style={[styles.saveHeaderButton, { backgroundColor: themeColors.text }]}
+        >
+          <Text style={[styles.saveHeaderText, { color: themeColors.background }]}>
+            {saving ? '...' : 'SAVE'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Debt Type Selector */}
+        <View style={styles.sectionBlock}>
+          <Text style={[styles.inputLabel, { color: themeColors.textSecondary }]}>
+            RECORD TYPE
+          </Text>
+          <View
+            style={[
+              styles.segmentContainer,
+              {
+                borderColor: themeColors.border,
+                backgroundColor: themeColors.surfaceElevated,
+              },
+            ]}
+          >
+            <TouchableOpacity
+              style={[
+                styles.segmentButton,
+                type === 'borrowed' && [
+                  styles.segmentButtonActive,
+                  {
+                    backgroundColor: themeColors.surface,
+                    borderColor: themeColors.border,
+                  },
+                ],
+              ]}
+              onPress={() => {
+                triggerHaptic('selection');
+                setType('borrowed');
+              }}
+            >
+              <Text
+                style={[
+                  styles.segmentText,
+                  {
+                    color:
+                      type === 'borrowed' ? themeColors.text : themeColors.textMuted,
+                    fontWeight:
+                      type === 'borrowed'
+                        ? typography.weights.bold
+                        : typography.weights.medium,
+                  },
+                ]}
+              >
+                I BORROWED (I OWE)
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.segmentButton,
+                type === 'lent' && [
+                  styles.segmentButtonActive,
+                  {
+                    backgroundColor: themeColors.surface,
+                    borderColor: themeColors.border,
+                  },
+                ],
+              ]}
+              onPress={() => {
+                triggerHaptic('selection');
+                setType('lent');
+              }}
+            >
+              <Text
+                style={[
+                  styles.segmentText,
+                  {
+                    color:
+                      type === 'lent' ? themeColors.text : themeColors.textMuted,
+                    fontWeight:
+                      type === 'lent'
+                        ? typography.weights.bold
+                        : typography.weights.medium,
+                  },
+                ]}
+              >
+                I LENT (OWED TO ME)
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Counterparty Name */}
+        <View style={styles.sectionBlock}>
+          <Text style={[styles.inputLabel, { color: themeColors.textSecondary }]}>
+            {type === 'borrowed' ? 'LENDER / CREDITOR NAME' : 'BORROWER / RECIPIENT NAME'}
+          </Text>
+          <TextInput
+            style={[
+              styles.textInput,
+              {
+                color: themeColors.text,
+                backgroundColor: themeColors.surface,
+                borderColor: themeColors.border,
+              },
+            ]}
+            placeholder="e.g. John Doe, Bank of America, Sarah"
+            placeholderTextColor={themeColors.textMuted}
+            value={personName}
+            onChangeText={setPersonName}
+            autoCapitalize="words"
+          />
+        </View>
+
+        {/* Amount */}
+        <View style={styles.sectionBlock}>
+          <Text style={[styles.inputLabel, { color: themeColors.textSecondary }]}>
+            PRINCIPAL AMOUNT ({currency})
+          </Text>
+          <View
+            style={[
+              styles.amountInputRow,
+              {
+                backgroundColor: themeColors.surface,
+                borderColor: themeColors.border,
+              },
+            ]}
+          >
+            <Text style={[styles.currencyPrefix, { color: themeColors.textMuted }]}>
+              {currencySymbol}
+            </Text>
+            <TextInput
+              style={[styles.amountInput, { color: themeColors.text }]}
+              placeholder="0.00"
+              placeholderTextColor={themeColors.textMuted}
+              keyboardType="numeric"
+              value={amount}
+              onChangeText={setAmount}
+            />
+          </View>
+        </View>
+
+        {/* Due Date Offset Chips */}
+        <View style={styles.sectionBlock}>
+          <Text style={[styles.inputLabel, { color: themeColors.textSecondary }]}>
+            DUE DATE HORIZON
+          </Text>
+          <View style={styles.chipsRow}>
+            {[
+              { label: '7 DAYS', days: 7 },
+              { label: '14 DAYS', days: 14 },
+              { label: '30 DAYS', days: 30 },
+              { label: '60 DAYS', days: 60 },
+              { label: '90 DAYS', days: 90 },
+            ].map((chip) => {
+              const isSelected = dueDaysOffset === chip.days;
+              return (
+                <TouchableOpacity
+                  key={chip.days}
+                  style={[
+                    styles.chipItem,
+                    {
+                      borderColor: isSelected ? themeColors.text : themeColors.borderSubtle,
+                      backgroundColor: isSelected
+                        ? themeColors.surfaceElevated
+                        : 'transparent',
+                    },
+                  ]}
+                  onPress={() => {
+                    triggerHaptic('selection');
+                    setDueDaysOffset(chip.days);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.chipText,
+                      {
+                        color: isSelected ? themeColors.text : themeColors.textSecondary,
+                        fontWeight: isSelected
+                          ? typography.weights.bold
+                          : typography.weights.medium,
+                      },
+                    ]}
+                  >
+                    {chip.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Notes / Description */}
+        <View style={styles.sectionBlock}>
+          <Text style={[styles.inputLabel, { color: themeColors.textSecondary }]}>
+            OPTIONAL MEMO / NOTES
+          </Text>
+          <TextInput
+            style={[
+              styles.notesInput,
+              {
+                color: themeColors.text,
+                backgroundColor: themeColors.surface,
+                borderColor: themeColors.border,
+              },
+            ]}
+            placeholder="e.g. Loan for laptop purchase, split trip expenses..."
+            placeholderTextColor={themeColors.textMuted}
+            value={description}
+            onChangeText={setDescription}
+            multiline={true}
+            numberOfLines={3}
+          />
+        </View>
+
+        {/* Delete Record */}
+        {isEditMode && (
+          <TouchableOpacity
+            style={[
+              styles.deleteButton,
+              { borderColor: themeColors.error, backgroundColor: `${themeColors.error}10` },
+            ]}
+            onPress={handleDelete}
+          >
+            <Icon name="trash-can-outline" size={16} color={themeColors.error} />
+            <Text style={[styles.deleteButtonText, { color: themeColors.error }]}>
+              DELETE DEBT RECORD
+            </Text>
+          </TouchableOpacity>
+        )}
+      </ScrollView>
+    </SafeAreaView>
+  );
 }
 
-const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
-    StyleSheet.create({
-        container: {
-            flex: 1,
-            backgroundColor: themeColors.background,
-        },
-        content: {
-            padding: spacing.md,
-            paddingBottom: spacing.xxxl,
-        },
-        section: {
-            marginBottom: spacing.xl,
-        },
-        sectionTitle: {
-            ...typography.h3,
-            marginBottom: spacing.sm,
-        },
-        typeGrid: {
-            flexDirection: 'row',
-            gap: spacing.md,
-        },
-        typeOption: {
-            flex: 1,
-            alignItems: 'center',
-            padding: spacing.lg,
-            borderRadius: borderRadius.lg,
-            borderWidth: 2,
-            backgroundColor: themeColors.surface,
-        },
-        typeLabel: {
-            ...typography.body,
-            fontWeight: '600',
-            marginTop: spacing.sm,
-            textAlign: 'center',
-        },
-        typeSubtext: {
-            ...typography.caption,
-            marginTop: spacing.xs,
-        },
-        dateButton: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            padding: spacing.md,
-            borderRadius: borderRadius.md,
-            borderWidth: 1,
-            gap: spacing.sm,
-        },
-        dateText: {
-            ...typography.body,
-            flex: 1,
-        },
-        preview: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            padding: spacing.lg,
-            borderRadius: borderRadius.lg,
-            gap: spacing.md,
-            marginTop: spacing.md,
-        },
-        previewLabel: {
-            ...typography.caption,
-        },
-        previewAmount: {
-            ...typography.h2,
-            fontWeight: '700',
-            marginVertical: spacing.xs,
-        },
-        previewPerson: {
-            ...typography.body,
-        },
-        footer: {
-            marginTop: spacing.lg,
-        },
-    });
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+  },
+  headerNavButton: {
+    width: 32,
+    height: 32,
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitleBox: {
+    flex: 1,
+    marginLeft: spacing.md,
+  },
+  headerSubtitle: {
+    fontSize: 9,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 1,
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: typography.weights.bold,
+    letterSpacing: -0.3,
+    marginTop: 1,
+  },
+  saveHeaderButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: borderRadius.xs,
+  },
+  saveHeaderText: {
+    fontSize: 11,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 0.8,
+  },
+  scroll: {
+    flex: 1,
+    paddingHorizontal: spacing.lg,
+  },
+  scrollContent: {
+    paddingVertical: spacing.lg,
+    gap: spacing.lg,
+  },
+  sectionBlock: {
+    gap: spacing.xs,
+  },
+  inputLabel: {
+    fontSize: 10,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 0.8,
+  },
+  segmentContainer: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    padding: 2,
+  },
+  segmentButton: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    borderRadius: borderRadius.xs,
+  },
+  segmentButtonActive: {
+    borderWidth: 1,
+  },
+  segmentText: {
+    fontSize: 10,
+    letterSpacing: 0.5,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    fontSize: 14,
+  },
+  amountInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    paddingHorizontal: spacing.md,
+  },
+  currencyPrefix: {
+    fontSize: 16,
+    fontWeight: typography.weights.bold,
+    marginRight: spacing.xs,
+  },
+  amountInput: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: typography.weights.bold,
+    fontVariant: ['tabular-nums'],
+    paddingVertical: spacing.sm,
+  },
+  chipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  chipItem: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+  },
+  chipText: {
+    fontSize: 10,
+    letterSpacing: 0.5,
+  },
+  notesInput: {
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    fontSize: 13,
+    textAlignVertical: 'top',
+    minHeight: 64,
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.md,
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    marginTop: spacing.md,
+  },
+  deleteButtonText: {
+    fontSize: 11,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 0.8,
+  },
+});

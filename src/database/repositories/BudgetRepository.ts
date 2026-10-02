@@ -45,6 +45,39 @@ export class BudgetRepository extends BaseRepository<Budget, BudgetInput> {
     return rows[0] || null;
   }
 
+  async upsertBudget(
+    accountId: string,
+    categoryId: string,
+    amount: number,
+    rollover: boolean = false,
+    period: Budget['period'] = 'monthly'
+  ): Promise<Budget> {
+    const existing = await this.findByCategory(accountId, categoryId);
+    if (existing) {
+      await this.update(existing.id, {
+        amount,
+        rollover,
+        period,
+      });
+      const updated = await this.findById(existing.id);
+      return updated!;
+    }
+    return this.create({
+      accountId,
+      categoryId,
+      amount,
+      rollover,
+      period,
+    });
+  }
+
+  async deleteByCategory(accountId: string, categoryId: string): Promise<void> {
+    await executeSql(
+      'DELETE FROM budgets WHERE account_id = ? AND category_id = ?',
+      [accountId, categoryId]
+    );
+  }
+
   async getCategorySpending(
     accountId: string,
     categoryId: string,

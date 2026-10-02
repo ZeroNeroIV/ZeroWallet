@@ -59,9 +59,12 @@ export type MainStackParamList = {
   SalarySettings: undefined;
   SmartNudges: undefined;
   Wallets: undefined;
+  WalletDetails: {
+    walletId: string;
+  };
   SecuritySettings: undefined;
   GoalsScreen: undefined;
-  CreateGoal: Record<string, never>;
+  CreateGoal: { goalId?: string } | undefined;
   EditGoal: {
     goalId: string;
   };
@@ -81,7 +84,13 @@ export type MainStackParamList = {
   AISettings: undefined;
   ChatScreen: undefined;
   AllSectionsScreen: undefined;
-  Transfer: undefined;
+  Analytics: undefined;
+  Transfer:
+    | {
+        fromWalletId?: string;
+        toWalletId?: string;
+      }
+    | undefined;
   AccountsList: undefined;
   CreateAccount: undefined;
 };

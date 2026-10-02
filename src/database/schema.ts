@@ -1,6 +1,6 @@
 // SQLite Database Schema Definitions
 
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 12;
 
 // All wallet keys allowed in vault_type columns (v6+)
 export const VAULT_TYPE_CHECK = `('main', 'savings', 'held', 'salary', 'emergency', 'card', 'physical')`;
@@ -112,6 +112,31 @@ export const CREATE_RECURRING_EXPENSES_TABLE = `
     updated_at INTEGER NOT NULL,
     FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
     FOREIGN KEY (category_id) REFERENCES categories(id)
+  );
+`;
+
+export const CREATE_RECURRING_TRANSACTIONS_TABLE = `
+  CREATE TABLE IF NOT EXISTS recurring_transactions (
+    id TEXT PRIMARY KEY,
+    wallet_id TEXT NOT NULL,
+    destination_wallet_id TEXT,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL CHECK(type IN ('expense', 'income', 'transfer')),
+    amount REAL NOT NULL,
+    category_id TEXT,
+    frequency_unit TEXT NOT NULL CHECK(frequency_unit IN ('day', 'week', 'month', 'year')),
+    frequency_interval INTEGER NOT NULL DEFAULT 1,
+    billing_day INTEGER,
+    start_date INTEGER NOT NULL,
+    end_date INTEGER,
+    next_run_date INTEGER NOT NULL,
+    last_run_date INTEGER,
+    auto_deduct INTEGER NOT NULL DEFAULT 1,
+    reminder_days_before INTEGER NOT NULL DEFAULT 1,
+    is_subscription INTEGER NOT NULL DEFAULT 0,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
   );
 `;
 
@@ -240,6 +265,11 @@ export const CREATE_INDEXES = [
   // Budgets indexes
   'CREATE INDEX IF NOT EXISTS idx_budgets_account ON budgets(account_id);',
   'CREATE INDEX IF NOT EXISTS idx_budgets_category ON budgets(category_id);',
+
+  // Unified Recurring Transactions indexes
+  'CREATE INDEX IF NOT EXISTS idx_recurring_tx_wallet ON recurring_transactions(wallet_id);',
+  'CREATE INDEX IF NOT EXISTS idx_recurring_tx_next ON recurring_transactions(next_run_date);',
+  'CREATE INDEX IF NOT EXISTS idx_recurring_tx_active ON recurring_transactions(is_active);',
 ];
 
 // ============================================
@@ -254,6 +284,7 @@ export const ALL_TABLES = [
   CREATE_TRANSACTION_IMAGES_TABLE,
   CREATE_SUBSCRIPTIONS_TABLE,
   CREATE_RECURRING_EXPENSES_TABLE,
+  CREATE_RECURRING_TRANSACTIONS_TABLE,
   CREATE_GOALS_TABLE,
   CREATE_DEBTS_TABLE,
   CREATE_WALLETS_TABLE,

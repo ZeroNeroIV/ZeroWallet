@@ -33,11 +33,11 @@ interface TabConfig {
 }
 
 const tabs: TabConfig[] = [
-  { id: 'dashboard', icon: 'view-dashboard', route: 'Dashboard' },
-  { id: 'transactions', icon: 'wallet', route: 'TransactionHistory' },
+  { id: 'dashboard', icon: 'view-dashboard-outline', route: 'Dashboard' },
+  { id: 'wallets', icon: 'wallet-outline', route: 'Wallets' },
   { id: 'add', icon: 'plus', route: 'AddTransaction', isCenter: true },
-  { id: 'ai', icon: 'robot-outline', route: 'ChatScreen' },
-  { id: 'settings', icon: 'cog', route: 'Settings' },
+  { id: 'recurring', icon: 'calendar-clock-outline', route: 'Recurring' },
+  { id: 'settings', icon: 'cog-outline', route: 'Settings' },
 ];
 
 export const BottomNavigation: React.FC = React.memo(() => {
@@ -60,26 +60,7 @@ export const BottomNavigation: React.FC = React.memo(() => {
 
   const handleTabPress = useCallback((tab: TabConfig) => {
     if (tab.isCenter) {
-      // Center button - open the quick-add sheet (expense / income / transfer)
       setShowQuickAdd(true);
-      return;
-    }
-
-    if (tab.id === 'ai') {
-      // Check if AI is configured
-      const aiSettings = useSettingsStore.getState().aiSettings;
-      if (aiSettings?.isConfigured) {
-        navigation.navigate('ChatScreen');
-      } else {
-        Alert.alert(
-          'Get Free AI Assistant',
-          "Get personalized insights about your spending, goals, and more!\n\nIt's 100% FREE - no credit card needed. Setup takes less than 30 seconds.",
-          [
-            { text: 'Maybe Later', style: 'cancel' },
-            { text: 'Get Free Key →', onPress: () => navigation.navigate('AISettings') }
-          ]
-        );
-      }
       return;
     }
 
@@ -110,8 +91,8 @@ export const BottomNavigation: React.FC = React.memo(() => {
             >
               <MaterialCommunityIcons
                 name={tab.icon}
-                size={24}
-                color={themeColors.isDark ? themeColors.background : '#1f201f'}
+                size={20}
+                color={themeColors.onPrimary}
               />
             </TouchableOpacity>
           );
@@ -126,8 +107,8 @@ export const BottomNavigation: React.FC = React.memo(() => {
           >
             <MaterialCommunityIcons
               name={tab.icon}
-              size={24}
-              color={active ? themeColors.primary : themeColors.isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.4)'}
+              size={22}
+              color={active ? themeColors.primary : themeColors.textMuted}
             />
           </TouchableOpacity>
         );
@@ -141,50 +122,44 @@ BottomNavigation.displayName = 'BottomNavigation';
 const createStyles = (themeColors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
   container: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+    bottom: Platform.OS === 'ios' ? 24 : 16,
+    left: 20,
+    right: 20,
+    height: 54,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: themeColors.hairline,
+    backgroundColor: themeColors.railBackground,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    paddingHorizontal: spacing.lg,
-    paddingBottom: Platform.OS === 'ios' ? spacing.lg : spacing.md,
-    paddingTop: spacing.md,
-    backgroundColor: themeColors.isDark
-      ? 'rgba(31, 32, 31, 0.9)'
-      : 'rgba(255, 255, 255, 0.9)',
-    borderTopWidth: 1,
-    borderTopColor: themeColors.glass.border,
+    paddingHorizontal: 12,
     ...Platform.select({
       ios: {
-        shadowColor: themeColors.shadow,
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.1,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
         shadowRadius: 8,
       },
       android: {
-        elevation: 8,
+        elevation: 6,
       },
     }),
   },
   tab: {
     alignItems: 'center',
     justifyContent: 'center',
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
   },
   centerButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 36,
+    height: 36,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: themeColors.primary,
     backgroundColor: themeColors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -32,
-    shadowColor: themeColors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
   },
 });

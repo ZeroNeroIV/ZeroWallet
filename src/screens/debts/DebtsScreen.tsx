@@ -1,360 +1,583 @@
-// DebtsScreen - Main screen for managing debts with tabs for lent/borrowed
-import React, { useState, useCallback, useMemo } from 'react';
+/**
+ * Purpose: Liabilities & Receivables (Debts) Screen.
+ * 
+ * Aesthetic: Simplizum
+ * - 1px razor hairline outlines
+ * - 2-4px subtle corners
+ * - Micro-KPI architecture card with Net Debt Position (Lent - Borrowed)
+ * - Two-sided ledger switcher ('BORROWED (I OWE)' vs 'LENT (OWED TO ME)')
+ * - One-tap payment logging modal with direct wallet ledger tracking
+ */
+
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-    View,
-    Text,
-    StyleSheet,
-    TouchableOpacity,
-    RefreshControl,
-    Alert,
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  RefreshControl,
+  SafeAreaView,
+  StatusBar,
+  Alert,
 } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { MainStackParamList } from '../../types/navigation';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+
+import { useThemeColors } from '../../hooks/useThemeColors';
 import { useAuthStore } from '../../store/authStore';
-import { DebtRepository } from '../../database/repositories/DebtRepository';
-import type { Debt, DebtStats } from '../../types/models';
+import { useAccountStore } from '../../store/accountStore';
 import { spacing, borderRadius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { Button } from '../../components/forms/Button';
-import { useThemeColors } from '../../hooks/useThemeColors';
-import { DebtCard } from '../../components/debts/DebtCard';
-import { formatCurrency } from '../../constants/currencies';
+import { formatCurrency } from '../../utils/currencyFormatter';
+import { triggerHaptic } from '../../services/haptics/hapticFeedback';
+import {
+  GoalsDebtsService,
+  type DebtsSummary,
+} from '../../services/goalsDebtsService';
+import { DebtArchitecturalCard } from '../../components/debts/DebtArchitecturalCard';
+import { DebtPaymentModal } from '../../components/debts/DebtPaymentModal';
+import type { Debt } from '../../types/models';
 
-type DebtsNavigationProp = StackNavigationProp<MainStackParamList, 'DebtsScreen'>;
+type NavigationProp = StackNavigationProp<MainStackParamList>;
 
 export default function DebtsScreen() {
-    const navigation = useNavigation<DebtsNavigationProp>();
-    const { currentAccountId } = useAuthStore();
-    const themeColors = useThemeColors();
+  const navigation = useNavigation<NavigationProp>();
+  const themeColors = useThemeColors();
 
-    const [activeTab, setActiveTab] = useState<'lent' | 'borrowed'>('lent');
-    const [debts, setDebts] = useState<Debt[]>([]);
-    const [accountCurrency, setAccountCurrency] = useState<string>('USD');
-    const [stats, setStats] = useState<DebtStats>({
-        totalLent: 0,
-        totalBorrowed: 0,
-        totalLentPaid: 0,
-        totalBorrowedPaid: 0,
-        overdueCount: 0,
-        pendingLentCount: 0,
-        pendingBorrowedCount: 0,
+  const currentUser = useAuthStore((s) => s.currentUser);
+  const currentAccountId = useAuthStore((s) => s.currentAccountId) || useAccountStore((s) => s.currentAccountId);
+
+  const [activeTab, setActiveTab] = useState<'borrowed' | 'lent'>('borrowed');
+  const [borrowedDebts, setBorrowedDebts] = useState<Debt[]>([]);
+  const [lentDebts, setLentDebts] = useState<Debt[]>([]);
+  const [summary, setSummary] = useState<DebtsSummary>({
+    totalLentOutstanding: 0,
+    totalBorrowedOutstanding: 0,
+    netPosition: 0,
+    overdueCount: 0,
+    pendingLentCount: 0,
+    pendingBorrowedCount: 0,
+    currency: 'USD',
+  });
+
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [payingDebt, setPayingDebt] = useState<Debt | null>(null);
+
+  const service = useMemo(() => new GoalsDebtsService(), []);
+
+  const loadData = useCallback(async () => {
+    if (!currentAccountId) return;
+    try {
+      const data = await service.getDebtsData(currentAccountId);
+      setBorrowedDebts(data.borrowedDebts);
+      setLentDebts(data.lentDebts);
+      setSummary(data.summary);
+    } catch (err) {
+      console.error('[DebtsScreen] Failed to load debts:', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [currentAccountId, service]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    triggerHaptic('impactLight');
+    loadData();
+  };
+
+  const handleOpenAdd = () => {
+    triggerHaptic('selection');
+    navigation.navigate('AddDebt', { type: activeTab });
+  };
+
+  const handleOpenPayment = (debt: Debt) => {
+    setPayingDebt(debt);
+  };
+
+  const handleConfirmPayment = async (params: {
+    debtId: string;
+    walletId?: string;
+    amount: number;
+  }) => {
+    if (!currentUser || !currentAccountId) return;
+    await service.recordDebtPayment({
+      ...params,
+      accountId: currentAccountId,
+      userId: currentUser.id,
     });
-    const [loading, setLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false);
+    await loadData();
+  };
 
-    const debtRepo = new DebtRepository();
-    const styles = useMemo(() => createStyles(themeColors), [themeColors]);
+  const handleDebtPress = (debt: Debt) => {
+    navigation.navigate('DebtDetails', { debtId: debt.id });
+  };
 
-    const loadDebts = async () => {
-        if (!currentAccountId) return;
+  const displayedDebts = activeTab === 'borrowed' ? borrowedDebts : lentDebts;
 
-        try {
-            try {
-                const { AccountRepository } = await import('../../database/repositories/AccountRepository');
-                const acc = await new AccountRepository().findById(currentAccountId);
-                if (acc?.currency) {
-                    setAccountCurrency(acc.currency);
-                }
-            } catch (err) {
-                console.warn('[DebtsScreen] Could not load account currency:', err);
-            }
+  return (
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]}>
+      <StatusBar
+        barStyle={themeColors.isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={themeColors.background}
+      />
 
-            const allDebts = await debtRepo.findByAccount(currentAccountId);
-            const debtStats = await debtRepo.getDebtStats(currentAccountId);
+      {/* Header Bar */}
+      <View style={[styles.headerBar, { borderBottomColor: themeColors.borderSubtle }]}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={[styles.headerNavButton, { borderColor: themeColors.borderSubtle }]}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Icon name="arrow-left" size={18} color={themeColors.text} />
+        </TouchableOpacity>
 
-            setDebts(allDebts);
-            setStats(debtStats);
-        } catch (error) {
-            console.error('[DebtsScreen] Failed to load debts:', error);
-            Alert.alert('Error', 'Failed to load debts');
-        } finally {
-            setLoading(false);
-            setRefreshing(false);
+        <View style={styles.headerTitleBox}>
+          <Text style={[styles.headerSubtitle, { color: themeColors.textMuted }]}>
+            LIABILITIES & RECEIVABLES
+          </Text>
+          <Text style={[styles.headerTitle, { color: themeColors.text }]}>
+            Debts & Loans
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          onPress={handleOpenAdd}
+          style={[
+            styles.createButton,
+            {
+              backgroundColor: themeColors.surfaceElevated,
+              borderColor: themeColors.border,
+            },
+          ]}
+          activeOpacity={0.7}
+        >
+          <Icon name="plus" size={14} color={themeColors.text} />
+          <Text style={[styles.createButtonText, { color: themeColors.text }]}>
+            NEW
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={themeColors.text}
+          />
         }
-    };
-
-    useFocusEffect(
-        useCallback(() => {
-            loadDebts();
-        }, [currentAccountId])
-    );
-
-    const handleRefresh = () => {
-        setRefreshing(true);
-        loadDebts();
-    };
-
-    const handleAddDebt = () => {
-        navigation.navigate('AddDebt', { type: activeTab });
-    };
-
-    const handleDebtPress = (debt: Debt) => {
-        navigation.navigate('DebtDetails', { debtId: debt.id });
-    };
-
-    const handleDebtLongPress = (debt: Debt) => {
-        Alert.alert(
-            debt.personName,
-            'What would you like to do?',
-            [
-                {
-                    text: 'View Details',
-                    onPress: () => handleDebtPress(debt),
-                },
-                {
-                    text: 'Edit',
-                    onPress: () => navigation.navigate('EditDebt', { debtId: debt.id }),
-                },
-                {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: () => handleDeleteDebt(debt),
-                },
-                {
-                    text: 'Cancel',
-                    style: 'cancel',
-                },
-            ]
-        );
-    };
-
-    const handleDeleteDebt = (debt: Debt) => {
-        Alert.alert(
-            'Delete Debt',
-            `Are you sure you want to delete this debt with ${debt.personName}? This action cannot be undone.`,
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            await debtRepo.delete(debt.id);
-                            Alert.alert('Success', 'Debt deleted successfully');
-                            loadDebts();
-                        } catch (error) {
-                            console.error('[DebtsScreen] Failed to delete debt:', error);
-                            Alert.alert('Error', 'Failed to delete debt');
-                        }
-                    },
-                },
-            ]
-        );
-    };
-
-    const filteredDebts = debts.filter((debt) => debt.type === activeTab);
-    const activeDebts = filteredDebts.filter((d) => d.status !== 'paid');
-
-    const currentTabStats = activeTab === 'lent' ? stats.totalLent : stats.totalBorrowed;
-    const currentTabCount = activeTab === 'lent' ? stats.pendingLentCount : stats.pendingBorrowedCount;
-
-    const renderDebtItem = ({ item }: { item: Debt }) => (
-        <DebtCard
-            debt={item}
-            onPress={() => handleDebtPress(item)}
-            accountCurrency={accountCurrency}
-        />
-    );
-
-    return (
-        <View style={styles.container}>
-            {/* Tab Switcher */}
-            <View style={styles.tabContainer}>
-                <TouchableOpacity
-                    style={[styles.tab, activeTab === 'lent' && styles.tabActive]}
-                    onPress={() => setActiveTab('lent')}>
-                    <MaterialCommunityIcons
-                        name="arrow-up-circle"
-                        size={20}
-                        color={activeTab === 'lent' ? '#FFFFFF' : themeColors.textSecondary}
-                    />
-                    <Text
-                        style={[
-                            styles.tabText,
-                            activeTab === 'lent' && styles.tabTextActive,
-                        ]}>
-                        Owed to Me
-                    </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={[styles.tab, activeTab === 'borrowed' && styles.tabActive]}
-                    onPress={() => setActiveTab('borrowed')}>
-                    <MaterialCommunityIcons
-                        name="arrow-down-circle"
-                        size={20}
-                        color={activeTab === 'borrowed' ? '#FFFFFF' : themeColors.textSecondary}
-                    />
-                    <Text
-                        style={[
-                            styles.tabText,
-                            activeTab === 'borrowed' && styles.tabTextActive,
-                        ]}>
-                        I Owe
-                    </Text>
-                </TouchableOpacity>
+      >
+        {/* Net Debt Position Micro-KPI Card */}
+        <View
+          style={[
+            styles.kpiCard,
+            {
+              backgroundColor: themeColors.surface,
+              borderColor: themeColors.border,
+            },
+          ]}
+        >
+          <View style={styles.netPositionHeader}>
+            <View>
+              <Text style={[styles.kpiLabel, { color: themeColors.textMuted }]}>
+                NET DEBT POSITION (LENT - BORROWED)
+              </Text>
+              <Text
+                style={[
+                  styles.netPositionValue,
+                  {
+                    color:
+                      summary.netPosition > 0
+                        ? themeColors.success
+                        : summary.netPosition < 0
+                        ? themeColors.error
+                        : themeColors.text,
+                  },
+                ]}
+              >
+                {summary.netPosition >= 0 ? '+' : ''}
+                {formatCurrency(summary.netPosition, summary.currency)}
+              </Text>
             </View>
 
-            {/* Summary Card */}
-            {activeDebts.length > 0 && (
-                <View style={styles.summaryCard}>
-                    <View style={styles.summaryRow}>
-                        <Text style={[styles.summaryLabel, { color: themeColors.textSecondary }]}>
-                            Total {activeTab === 'lent' ? 'owed to you' : 'you owe'}
-                        </Text>
-                        <Text style={[styles.summaryAmount, { color: themeColors.text }]}>
-                            {formatCurrency(currentTabStats, accountCurrency)}
-                        </Text>
-                    </View>
-                    <View style={styles.summaryRow}>
-                        <Text style={[styles.summarySubtext, { color: themeColors.textSecondary }]}>
-                            {currentTabCount} active debt{currentTabCount !== 1 ? 's' : ''}
-                        </Text>
-                        {stats.overdueCount > 0 && (
-                            <Text style={styles.overdueText}>
-                                {stats.overdueCount} overdue
-                            </Text>
-                        )}
-                    </View>
-                </View>
+            {summary.overdueCount > 0 && (
+              <View
+                style={[
+                  styles.overdueBadge,
+                  {
+                    borderColor: themeColors.error,
+                    backgroundColor: `${themeColors.error}15`,
+                  },
+                ]}
+              >
+                <Icon name="alert-circle-outline" size={12} color={themeColors.error} />
+                <Text style={[styles.overdueBadgeText, { color: themeColors.error }]}>
+                  {summary.overdueCount} OVERDUE
+                </Text>
+              </View>
             )}
+          </View>
 
-            {/* Debts List */}
-            <FlashList
-                data={filteredDebts}
-                keyExtractor={(item) => item.id}
-                renderItem={renderDebtItem}
-                contentContainerStyle={styles.listContent}
-                estimatedItemSize={120}
-                refreshControl={
-                    <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-                }
-                ListEmptyComponent={
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyIcon}>
-                            {activeTab === 'lent' ? '💸' : '💰'}
-                        </Text>
-                        <Text style={[styles.emptyTitle, { color: themeColors.text }]}>
-                            {activeTab === 'lent' ? 'No Money Lent' : 'No Money Borrowed'}
-                        </Text>
-                        <Text style={[styles.emptySubtitle, { color: themeColors.textSecondary }]}>
-                            {activeTab === 'lent'
-                                ? 'Track money you lent to others'
-                                : 'Track money you borrowed'}
-                        </Text>
-                    </View>
-                }
+          <View style={[styles.kpiDividerHorizontal, { backgroundColor: themeColors.borderSubtle }]} />
+
+          <View style={styles.kpiGrid}>
+            <View style={styles.kpiCol}>
+              <Text style={[styles.kpiLabel, { color: themeColors.textMuted }]}>
+                I OWE (BORROWED)
+              </Text>
+              <Text style={[styles.kpiValue, { color: themeColors.error }]}>
+                {formatCurrency(summary.totalBorrowedOutstanding, summary.currency)}
+              </Text>
+              <Text style={[styles.kpiSubmeta, { color: themeColors.textMuted }]}>
+                {summary.pendingBorrowedCount} active obligations
+              </Text>
+            </View>
+
+            <View
+              style={[
+                styles.kpiDividerVertical,
+                { backgroundColor: themeColors.borderSubtle },
+              ]}
             />
 
-            {/* Add Debt Button */}
-            <View style={[styles.footer, { backgroundColor: themeColors.surface, borderTopColor: themeColors.border }]}>
-                <Button
-                    title={activeTab === 'lent' ? 'I Lent Money' : 'I Borrowed Money'}
-                    onPress={handleAddDebt}
-                    leftIcon={<MaterialCommunityIcons name="plus" size={20} color="#FFF" />}
-                />
+            <View style={styles.kpiCol}>
+              <Text style={[styles.kpiLabel, { color: themeColors.textMuted }]}>
+                OWED TO ME (LENT)
+              </Text>
+              <Text style={[styles.kpiValue, { color: themeColors.success }]}>
+                {formatCurrency(summary.totalLentOutstanding, summary.currency)}
+              </Text>
+              <Text style={[styles.kpiSubmeta, { color: themeColors.textMuted }]}>
+                {summary.pendingLentCount} active receivables
+              </Text>
             </View>
+          </View>
         </View>
-    );
+
+        {/* 2-Way Segment Tab Switcher */}
+        <View
+          style={[
+            styles.segmentContainer,
+            {
+              borderColor: themeColors.border,
+              backgroundColor: themeColors.surfaceElevated,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            style={[
+              styles.segmentTab,
+              activeTab === 'borrowed' && [
+                styles.segmentTabActive,
+                {
+                  backgroundColor: themeColors.surface,
+                  borderColor: themeColors.border,
+                },
+              ],
+            ]}
+            onPress={() => {
+              triggerHaptic('selection');
+              setActiveTab('borrowed');
+            }}
+          >
+            <Text
+              style={[
+                styles.segmentTabText,
+                {
+                  color:
+                    activeTab === 'borrowed'
+                      ? themeColors.text
+                      : themeColors.textMuted,
+                  fontWeight:
+                    activeTab === 'borrowed'
+                      ? typography.weights.bold
+                      : typography.weights.medium,
+                },
+              ]}
+            >
+              BORROWED / I OWE ({borrowedDebts.length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.segmentTab,
+              activeTab === 'lent' && [
+                styles.segmentTabActive,
+                {
+                  backgroundColor: themeColors.surface,
+                  borderColor: themeColors.border,
+                },
+              ],
+            ]}
+            onPress={() => {
+              triggerHaptic('selection');
+              setActiveTab('lent');
+            }}
+          >
+            <Text
+              style={[
+                styles.segmentTabText,
+                {
+                  color:
+                    activeTab === 'lent'
+                      ? themeColors.text
+                      : themeColors.textMuted,
+                  fontWeight:
+                    activeTab === 'lent'
+                      ? typography.weights.bold
+                      : typography.weights.medium,
+                },
+              ]}
+            >
+              LENT / OWED TO ME ({lentDebts.length})
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Debts List */}
+        {displayedDebts.length > 0 ? (
+          displayedDebts.map((d) => (
+            <DebtArchitecturalCard
+              key={d.id}
+              debt={d}
+              currency={summary.currency}
+              onPaymentPress={handleOpenPayment}
+              onPress={handleDebtPress}
+            />
+          ))
+        ) : (
+          <View style={styles.emptyContainer}>
+            <Icon
+              name="handshake-outline"
+              size={36}
+              color={themeColors.textMuted}
+              style={{ opacity: 0.5 }}
+            />
+            <Text style={[styles.emptyTitle, { color: themeColors.text }]}>
+              {loading
+                ? 'Loading records...'
+                : activeTab === 'borrowed'
+                ? 'No money borrowed'
+                : 'No money lent out'}
+            </Text>
+            <Text style={[styles.emptySubtitle, { color: themeColors.textMuted }]}>
+              {activeTab === 'borrowed'
+                ? 'Log liabilities and loans you owe to others with due dates and payment tracking.'
+                : 'Record money you have lent to friends, family, or clients.'}
+            </Text>
+
+            <TouchableOpacity
+              style={[
+                styles.emptyAddButton,
+                {
+                  borderColor: themeColors.border,
+                  backgroundColor: themeColors.surfaceElevated,
+                },
+              ]}
+              onPress={handleOpenAdd}
+            >
+              <Text style={[styles.emptyAddButtonText, { color: themeColors.text }]}>
+                + RECORD {activeTab === 'borrowed' ? 'BORROWED MONEY' : 'LENT MONEY'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Payment Logging Modal */}
+      <DebtPaymentModal
+        visible={Boolean(payingDebt)}
+        debt={payingDebt}
+        currency={summary.currency}
+        accountId={currentAccountId || ''}
+        onClose={() => setPayingDebt(null)}
+        onConfirmPayment={handleConfirmPayment}
+      />
+    </SafeAreaView>
+  );
 }
 
-const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
-    StyleSheet.create({
-        container: {
-            flex: 1,
-            backgroundColor: themeColors.background,
-        },
-        tabContainer: {
-            flexDirection: 'row',
-            padding: spacing.md,
-            gap: spacing.sm,
-            backgroundColor: themeColors.surface,
-            borderBottomWidth: 1,
-            borderBottomColor: themeColors.border,
-        },
-        tab: {
-            flex: 1,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            paddingVertical: spacing.sm,
-            paddingHorizontal: spacing.md,
-            borderRadius: borderRadius.md,
-            backgroundColor: themeColors.background,
-            gap: spacing.xs,
-        },
-        tabActive: {
-            backgroundColor: themeColors.primary,
-        },
-        tabText: {
-            ...typography.body,
-            fontWeight: '600',
-            color: themeColors.textSecondary,
-        },
-        tabTextActive: {
-            color: '#FFFFFF',
-        },
-        summaryCard: {
-            backgroundColor: themeColors.surface,
-            marginHorizontal: spacing.md,
-            marginTop: spacing.md,
-            padding: spacing.md,
-            borderRadius: borderRadius.lg,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.1,
-            shadowRadius: 4,
-            elevation: 2,
-        },
-        summaryRow: {
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: spacing.xs,
-        },
-        summaryLabel: {
-            ...typography.body,
-            fontSize: 14,
-        },
-        summaryAmount: {
-            ...typography.h2,
-            fontWeight: '700',
-        },
-        summarySubtext: {
-            ...typography.caption,
-        },
-        overdueText: {
-            ...typography.caption,
-            color: '#EF476F',
-            fontWeight: '600',
-        },
-        listContent: {
-            padding: spacing.md,
-            flexGrow: 1,
-        },
-        emptyState: {
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
-            paddingVertical: spacing.xxxl,
-        },
-        emptyIcon: {
-            fontSize: 64,
-            marginBottom: spacing.md,
-        },
-        emptyTitle: {
-            ...typography.h3,
-            marginBottom: spacing.xs,
-        },
-        emptySubtitle: {
-            ...typography.body,
-            textAlign: 'center',
-        },
-        footer: {
-            padding: spacing.md,
-            borderTopWidth: 1,
-        },
-    });
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+  },
+  headerNavButton: {
+    width: 32,
+    height: 32,
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitleBox: {
+    flex: 1,
+    marginLeft: spacing.md,
+  },
+  headerSubtitle: {
+    fontSize: 9,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 1,
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: typography.weights.bold,
+    letterSpacing: -0.3,
+    marginTop: 1,
+  },
+  createButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+  },
+  createButtonText: {
+    fontSize: 10,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 0.8,
+  },
+  scrollContent: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xxxl,
+    gap: spacing.md,
+  },
+  kpiCard: {
+    borderWidth: 1,
+    borderRadius: borderRadius.sm,
+    padding: spacing.md,
+  },
+  netPositionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  kpiLabel: {
+    fontSize: 8,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  netPositionValue: {
+    fontSize: 20,
+    fontWeight: typography.weights.bold,
+    fontVariant: ['tabular-nums'],
+    letterSpacing: -0.4,
+  },
+  overdueBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderRadius: borderRadius.none,
+  },
+  overdueBadgeText: {
+    fontSize: 8,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 0.8,
+  },
+  kpiDividerHorizontal: {
+    height: 1,
+    marginVertical: spacing.md,
+  },
+  kpiGrid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  kpiCol: {
+    flex: 1,
+  },
+  kpiDividerVertical: {
+    width: 1,
+    height: 36,
+    marginHorizontal: spacing.md,
+  },
+  kpiValue: {
+    fontSize: 14,
+    fontWeight: typography.weights.bold,
+    fontVariant: ['tabular-nums'],
+  },
+  kpiSubmeta: {
+    fontSize: 10,
+    marginTop: 2,
+    fontVariant: ['tabular-nums'],
+  },
+  segmentContainer: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    padding: 2,
+  },
+  segmentTab: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    borderRadius: borderRadius.xs,
+  },
+  segmentTabActive: {
+    borderWidth: 1,
+  },
+  segmentTabText: {
+    fontSize: 11,
+    letterSpacing: 0.5,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 48,
+    gap: spacing.xs,
+  },
+  emptyTitle: {
+    fontSize: 14,
+    fontWeight: typography.weights.bold,
+    marginTop: spacing.sm,
+  },
+  emptySubtitle: {
+    fontSize: 12,
+    textAlign: 'center',
+    paddingHorizontal: spacing.lg,
+    lineHeight: 18,
+  },
+  emptyAddButton: {
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+  },
+  emptyAddButtonText: {
+    fontSize: 11,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 0.8,
+  },
+});

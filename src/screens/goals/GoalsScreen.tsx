@@ -1,362 +1,592 @@
-import React, { useState, useCallback, useMemo } from 'react';
+/**
+ * Purpose: Financial Horizons & Savings Targets Screen.
+ * 
+ * Aesthetic: Simplizum
+ * - 1px razor hairline outlines
+ * - 2-4px subtle corners
+ * - Micro-KPI architecture card with master hairline savings burn gauge
+ * - Direct Wallet Funding drawer with derived ledger tracking
+ */
+
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-    View,
-    Text,
-    StyleSheet,
-    TouchableOpacity,
-    RefreshControl,
-    Alert,
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  RefreshControl,
+  SafeAreaView,
+  StatusBar,
+  Alert,
 } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { MainStackParamList } from '../../types/navigation';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+
+import { useThemeColors } from '../../hooks/useThemeColors';
 import { useAuthStore } from '../../store/authStore';
 import { useAccountStore } from '../../store/accountStore';
-import { GoalRepository } from '../../database/repositories/GoalRepository';
-import type { Goal } from '../../types/models';
 import { spacing, borderRadius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { Button } from '../../components/forms/Button';
-import { useThemeColors } from '../../hooks/useThemeColors';
-import { GoalCard } from '../../components/goals/GoalCard';
+import { formatCurrency } from '../../utils/currencyFormatter';
+import { triggerHaptic } from '../../services/haptics/hapticFeedback';
+import {
+  GoalsDebtsService,
+  type GoalsSummary,
+} from '../../services/goalsDebtsService';
+import { GoalArchitecturalCard } from '../../components/goals/GoalArchitecturalCard';
+import { GoalFundModal } from '../../components/goals/GoalFundModal';
 import { GoalCompletionModal } from '../../components/goals/GoalCompletionModal';
-import { calculateGoalProgress, isGoalReached } from '../../utils/goalUtils';
+import type { Goal } from '../../types/models';
 
-type GoalsNavigationProp = StackNavigationProp<MainStackParamList, 'GoalsScreen'>;
+type NavigationProp = StackNavigationProp<MainStackParamList, 'GoalsScreen'>;
 
 export default function GoalsScreen() {
-    const navigation = useNavigation<GoalsNavigationProp>();
-    const { currentAccountId } = useAuthStore();
-    const { balances } = useAccountStore();
-    const themeColors = useThemeColors();
+  const navigation = useNavigation<NavigationProp>();
+  const themeColors = useThemeColors();
 
-    const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
-    const [goals, setGoals] = useState<Goal[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false);
-    const [accountCurrency, setAccountCurrency] = useState<string>('USD');
-    const [completionModalVisible, setCompletionModalVisible] = useState(false);
-    const [selectedGoalForCompletion, setSelectedGoalForCompletion] = useState<Goal | null>(null);
+  const currentUser = useAuthStore((s) => s.currentUser);
+  const currentAccountId = useAuthStore((s) => s.currentAccountId) || useAccountStore((s) => s.currentAccountId);
 
-    const goalRepo = new GoalRepository();
-    const styles = useMemo(() => createStyles(themeColors), [themeColors]);
+  const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
+  const [activeGoals, setActiveGoals] = useState<Goal[]>([]);
+  const [completedGoals, setCompletedGoals] = useState<Goal[]>([]);
+  const [summary, setSummary] = useState<GoalsSummary>({
+    totalTarget: 0,
+    totalSaved: 0,
+    totalRemaining: 0,
+    overallPercentage: 0,
+    activeCount: 0,
+    completedCount: 0,
+    currency: 'USD',
+  });
 
-    const loadGoals = async () => {
-        if (!currentAccountId) return;
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-        try {
-            try {
-                const { AccountRepository } = await import('../../database/repositories/AccountRepository');
-                const acc = await new AccountRepository().findById(currentAccountId);
-                if (acc?.currency) {
-                    setAccountCurrency(acc.currency);
-                }
-            } catch (err) {
-                console.warn('[GoalsScreen] Could not load account currency:', err);
-            }
+  // Modals
+  const [fundingGoal, setFundingGoal] = useState<Goal | null>(null);
+  const [celebrationGoal, setCelebrationGoal] = useState<Goal | null>(null);
 
-            const allGoals = await goalRepo.findByAccount(currentAccountId);
+  const service = useMemo(() => new GoalsDebtsService(), []);
 
-            // Update progress for all goals based on current vault balances
-            const balance = balances[currentAccountId] || {
-                mainBalance: 0,
-                savingsBalance: 0,
-                heldBalance: 0,
-                salaryBalance: 0,
-                emergencyBalance: 0,
-                cardBalance: 0,
-                physicalBalance: 0,
-                totalBalance: 0,
-                availableBalance: 0,
-                accountId: currentAccountId,
-                lastUpdated: Date.now(),
-            };
+  const loadData = useCallback(async () => {
+    if (!currentAccountId) return;
+    try {
+      const data = await service.getGoalsData(currentAccountId);
+      setActiveGoals(data.activeGoals);
+      setCompletedGoals(data.completedGoals);
+      setSummary(data.summary);
+    } catch (err) {
+      console.error('[GoalsScreen] Failed to load goals:', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [currentAccountId, service]);
 
-            // Update each goal's progress
-            for (const goal of allGoals) {
-                const newProgress = calculateGoalProgress(goal, balance);
-                if (newProgress !== goal.currentAmount) {
-                    await goalRepo.updateProgress(goal.id, newProgress);
-                    goal.currentAmount = newProgress;
-                }
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
-                // Check if goal was just reached
-                if (!goal.isCompleted && isGoalReached(goal)) {
-                    setSelectedGoalForCompletion(goal);
-                    setCompletionModalVisible(true);
-                }
-            }
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
 
-            setGoals(allGoals);
-        } catch (error) {
-            console.error('[GoalsScreen] Failed to load goals:', error);
-            Alert.alert('Error', 'Failed to load goals');
-        } finally {
-            setLoading(false);
-            setRefreshing(false);
-        }
-    };
+  const handleRefresh = () => {
+    setRefreshing(true);
+    triggerHaptic('impactLight');
+    loadData();
+  };
 
-    useFocusEffect(
-        useCallback(() => {
-            loadGoals();
-        }, [currentAccountId])
-    );
+  const handleOpenFund = (goal: Goal) => {
+    setFundingGoal(goal);
+  };
 
-    const handleRefresh = () => {
-        setRefreshing(true);
-        loadGoals();
-    };
+  const handleOpenEdit = (goal: Goal) => {
+    navigation.navigate('EditGoal', { goalId: goal.id });
+  };
 
-    const handleCreateGoal = () => {
-        navigation.navigate('CreateGoal', {});
-    };
+  const handleConfirmFund = async (params: {
+    goalId: string;
+    walletId?: string;
+    amount: number;
+  }) => {
+    if (!currentUser || !currentAccountId) return;
+    const res = await service.allocateFundsToGoal({
+      ...params,
+      accountId: currentAccountId,
+      userId: currentUser.id,
+    });
 
-    const handleGoalPress = (goal: Goal) => {
-        navigation.navigate('GoalDetails', { goalId: goal.id });
-    };
+    await loadData();
 
-    const handleGoalLongPress = (goal: Goal) => {
-        Alert.alert(
-            goal.name,
-            'What would you like to do?',
-            [
-                {
-                    text: 'View Details',
-                    onPress: () => handleGoalPress(goal),
-                },
-                {
-                    text: 'Edit',
-                    onPress: () => navigation.navigate('EditGoal', { goalId: goal.id }),
-                },
-                {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: () => handleDeleteGoal(goal),
-                },
-                {
-                    text: 'Cancel',
-                    style: 'cancel',
-                },
-            ]
-        );
-    };
+    if (res.isReached) {
+      setCelebrationGoal(res.goal);
+    }
+  };
 
-    const handleDeleteGoal = (goal: Goal) => {
-        Alert.alert(
-            'Delete Goal',
-            `Are you sure you want to delete "${goal.name}"? This action cannot be undone.`,
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            await goalRepo.delete(goal.id);
-                            Alert.alert('Success', 'Goal deleted successfully');
-                            loadGoals();
-                        } catch (error) {
-                            console.error('[GoalsScreen] Failed to delete goal:', error);
-                            Alert.alert('Error', 'Failed to delete goal');
-                        }
-                    },
-                },
-            ]
-        );
-    };
+  const displayedGoals = activeTab === 'active' ? activeGoals : completedGoals;
 
-    const handleMarkComplete = async () => {
-        if (!selectedGoalForCompletion) return;
+  // Master Hairline Gauge color
+  let masterGaugeColor = themeColors.accent;
+  if (summary.overallPercentage >= 100) {
+    masterGaugeColor = themeColors.success;
+  } else if (summary.overallPercentage >= 80) {
+    masterGaugeColor = themeColors.warning;
+  }
 
-        try {
-            await goalRepo.markCompleted(selectedGoalForCompletion.id);
-            setCompletionModalVisible(false);
-            setSelectedGoalForCompletion(null);
-            loadGoals();
-        } catch (error) {
-            console.error('[GoalsScreen] Failed to mark goal as complete:', error);
-            Alert.alert('Error', 'Failed to mark goal as complete');
-        }
-    };
+  const cappedPercentage = Math.min(100, Math.max(0, summary.overallPercentage));
 
-    const handleCreateNewAfterCompletion = () => {
-        setCompletionModalVisible(false);
-        setSelectedGoalForCompletion(null);
-        handleCreateGoal();
-    };
+  return (
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]}>
+      <StatusBar
+        barStyle={themeColors.isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={themeColors.background}
+      />
 
-    const filteredGoals = goals.filter((goal) =>
-        activeTab === 'active' ? !goal.isCompleted : goal.isCompleted
-    );
+      {/* Header Bar */}
+      <View style={[styles.headerBar, { borderBottomColor: themeColors.borderSubtle }]}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={[styles.headerNavButton, { borderColor: themeColors.borderSubtle }]}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Icon name="arrow-left" size={18} color={themeColors.text} />
+        </TouchableOpacity>
 
-    const renderGoalItem = ({ item }: { item: Goal }) => (
-        <GoalCard
-            goal={item}
-            onPress={() => handleGoalLongPress(item)}
-            accountCurrency={accountCurrency}
-        />
-    );
-
-    return (
-        <View style={styles.container}>
-            {/* Tab Switcher */}
-            <View style={styles.tabContainer}>
-                <TouchableOpacity
-                    style={[styles.tab, activeTab === 'active' && styles.tabActive]}
-                    onPress={() => setActiveTab('active')}
-                >
-                    <MaterialCommunityIcons
-                        name="target"
-                        size={20}
-                        color={activeTab === 'active' ? '#FFFFFF' : themeColors.textSecondary}
-                    />
-                    <Text
-                        style={[
-                            styles.tabText,
-                            activeTab === 'active' && styles.tabTextActive,
-                        ]}
-                    >
-                        Active
-                    </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={[styles.tab, activeTab === 'completed' && styles.tabActive]}
-                    onPress={() => setActiveTab('completed')}
-                >
-                    <MaterialCommunityIcons
-                        name="check-circle"
-                        size={20}
-                        color={activeTab === 'completed' ? '#FFFFFF' : themeColors.textSecondary}
-                    />
-                    <Text
-                        style={[
-                            styles.tabText,
-                            activeTab === 'completed' && styles.tabTextActive,
-                        ]}
-                    >
-                        Completed
-                    </Text>
-                </TouchableOpacity>
-            </View>
-
-            {/* Goals List */}
-            <FlashList
-                data={filteredGoals}
-                keyExtractor={(item) => item.id}
-                renderItem={renderGoalItem}
-                contentContainerStyle={styles.listContent}
-                estimatedItemSize={140}
-                refreshControl={
-                    <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-                }
-                ListEmptyComponent={
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyIcon}>
-                            {activeTab === 'active' ? '🎯' : '🏆'}
-                        </Text>
-                        <Text style={styles.emptyTitle}>
-                            {activeTab === 'active' ? 'No Active Goals' : 'No Completed Goals'}
-                        </Text>
-                        <Text style={styles.emptySubtitle}>
-                            {activeTab === 'active'
-                                ? 'Create your first savings goal!'
-                                : 'Complete goals will appear here'}
-                        </Text>
-                    </View>
-                }
-            />
-
-            {/* Add Goal Button */}
-            <View style={styles.footer}>
-                <Button
-                    title="Create New Goal"
-                    onPress={handleCreateGoal}
-                    leftIcon={<MaterialCommunityIcons name="plus" size={20} color="#FFF" />}
-                />
-            </View>
-
-            {/* Completion Modal */}
-            <GoalCompletionModal
-                goal={selectedGoalForCompletion}
-                visible={completionModalVisible}
-                onMarkComplete={handleMarkComplete}
-                onCreateNew={handleCreateNewAfterCompletion}
-                onClose={() => {
-                    setCompletionModalVisible(false);
-                    setSelectedGoalForCompletion(null);
-                }}
-            />
+        <View style={styles.headerTitleBox}>
+          <Text style={[styles.headerSubtitle, { color: themeColors.textMuted }]}>
+            FINANCIAL HORIZONS
+          </Text>
+          <Text style={[styles.headerTitle, { color: themeColors.text }]}>
+            Savings & Targets
+          </Text>
         </View>
-    );
+
+        <TouchableOpacity
+          onPress={() => navigation.navigate('CreateGoal')}
+          style={[
+            styles.createButton,
+            {
+              backgroundColor: themeColors.surfaceElevated,
+              borderColor: themeColors.border,
+            },
+          ]}
+          activeOpacity={0.7}
+        >
+          <Icon name="plus" size={14} color={themeColors.text} />
+          <Text style={[styles.createButtonText, { color: themeColors.text }]}>
+            NEW
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={themeColors.text}
+          />
+        }
+      >
+        {/* Micro-KPI Architecture Card */}
+        <View
+          style={[
+            styles.kpiCard,
+            {
+              backgroundColor: themeColors.surface,
+              borderColor: themeColors.border,
+            },
+          ]}
+        >
+          <View style={styles.kpiGrid}>
+            <View style={styles.kpiCol}>
+              <Text style={[styles.kpiLabel, { color: themeColors.textMuted }]}>
+                TOTAL TARGET
+              </Text>
+              <Text style={[styles.kpiValue, { color: themeColors.text }]}>
+                {formatCurrency(summary.totalTarget, summary.currency)}
+              </Text>
+            </View>
+
+            <View
+              style={[
+                styles.kpiDivider,
+                { backgroundColor: themeColors.borderSubtle },
+              ]}
+            />
+
+            <View style={styles.kpiCol}>
+              <Text style={[styles.kpiLabel, { color: themeColors.textMuted }]}>
+                TOTAL SAVED
+              </Text>
+              <Text style={[styles.kpiValue, { color: themeColors.success }]}>
+                {formatCurrency(summary.totalSaved, summary.currency)}
+              </Text>
+            </View>
+
+            <View
+              style={[
+                styles.kpiDivider,
+                { backgroundColor: themeColors.borderSubtle },
+              ]}
+            />
+
+            <View style={styles.kpiCol}>
+              <Text style={[styles.kpiLabel, { color: themeColors.textMuted }]}>
+                REMAINING
+              </Text>
+              <Text style={[styles.kpiValue, { color: themeColors.accent }]}>
+                {formatCurrency(summary.totalRemaining, summary.currency)}
+              </Text>
+            </View>
+          </View>
+
+          {/* Master 2px Hairline Progress Gauge */}
+          {summary.totalTarget > 0 && (
+            <View style={styles.masterGaugeBlock}>
+              <View
+                style={[
+                  styles.masterGaugeTrack,
+                  { backgroundColor: themeColors.borderSubtle },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.masterGaugeFill,
+                    {
+                      backgroundColor: masterGaugeColor,
+                      width: `${cappedPercentage}%`,
+                    },
+                  ]}
+                />
+              </View>
+
+              <View style={styles.gaugeMetaRow}>
+                <Text style={[styles.gaugeMetaText, { color: themeColors.textMuted }]}>
+                  {summary.activeCount} active targets
+                </Text>
+                <Text style={[styles.gaugeMetaText, { color: masterGaugeColor, fontWeight: typography.weights.bold }]}>
+                  {Math.round(summary.overallPercentage)}% SAVED
+                </Text>
+              </View>
+            </View>
+          )}
+        </View>
+
+        {/* 2-Way Segment Tab Switcher */}
+        <View
+          style={[
+            styles.segmentContainer,
+            {
+              borderColor: themeColors.border,
+              backgroundColor: themeColors.surfaceElevated,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            style={[
+              styles.segmentTab,
+              activeTab === 'active' && [
+                styles.segmentTabActive,
+                {
+                  backgroundColor: themeColors.surface,
+                  borderColor: themeColors.border,
+                },
+              ],
+            ]}
+            onPress={() => {
+              triggerHaptic('selection');
+              setActiveTab('active');
+            }}
+          >
+            <Text
+              style={[
+                styles.segmentTabText,
+                {
+                  color:
+                    activeTab === 'active' ? themeColors.text : themeColors.textMuted,
+                  fontWeight:
+                    activeTab === 'active'
+                      ? typography.weights.bold
+                      : typography.weights.medium,
+                },
+              ]}
+            >
+              ACTIVE TARGETS ({activeGoals.length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.segmentTab,
+              activeTab === 'completed' && [
+                styles.segmentTabActive,
+                {
+                  backgroundColor: themeColors.surface,
+                  borderColor: themeColors.border,
+                },
+              ],
+            ]}
+            onPress={() => {
+              triggerHaptic('selection');
+              setActiveTab('completed');
+            }}
+          >
+            <Text
+              style={[
+                styles.segmentTabText,
+                {
+                  color:
+                    activeTab === 'completed' ? themeColors.text : themeColors.textMuted,
+                  fontWeight:
+                    activeTab === 'completed'
+                      ? typography.weights.bold
+                      : typography.weights.medium,
+                },
+              ]}
+            >
+              ACHIEVED ({completedGoals.length})
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Goals List */}
+        {displayedGoals.length > 0 ? (
+          displayedGoals.map((g) => (
+            <GoalArchitecturalCard
+              key={g.id}
+              goal={g}
+              currency={summary.currency}
+              onFundPress={handleOpenFund}
+              onEditPress={handleOpenEdit}
+            />
+          ))
+        ) : (
+          <View style={styles.emptyContainer}>
+            <Icon
+              name="flag-outline"
+              size={36}
+              color={themeColors.textMuted}
+              style={{ opacity: 0.5 }}
+            />
+            <Text style={[styles.emptyTitle, { color: themeColors.text }]}>
+              {loading
+                ? 'Loading targets...'
+                : activeTab === 'active'
+                ? 'No active savings targets'
+                : 'No completed targets yet'}
+            </Text>
+            <Text style={[styles.emptySubtitle, { color: themeColors.textMuted }]}>
+              {activeTab === 'active'
+                ? 'Set a financial horizon like buying a vehicle, travel, or an emergency fund.'
+                : 'Targets will appear here once you reach 100% of your target savings.'}
+            </Text>
+
+            {activeTab === 'active' && (
+              <TouchableOpacity
+                style={[
+                  styles.emptyAddButton,
+                  {
+                    borderColor: themeColors.border,
+                    backgroundColor: themeColors.surfaceElevated,
+                  },
+                ]}
+                onPress={() => navigation.navigate('CreateGoal')}
+              >
+                <Text style={[styles.emptyAddButtonText, { color: themeColors.text }]}>
+                  + SET NEW GOAL
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Direct Wallet Funding Modal */}
+      <GoalFundModal
+        visible={Boolean(fundingGoal)}
+        goal={fundingGoal}
+        currency={summary.currency}
+        accountId={currentAccountId || ''}
+        onClose={() => setFundingGoal(null)}
+        onConfirmFund={handleConfirmFund}
+      />
+
+      {/* Goal Reached Celebration Modal */}
+      <GoalCompletionModal
+        visible={Boolean(celebrationGoal)}
+        goal={celebrationGoal}
+        onClose={() => setCelebrationGoal(null)}
+        onMarkComplete={() => setCelebrationGoal(null)}
+        onCreateNew={() => {
+          setCelebrationGoal(null);
+          navigation.navigate('CreateGoal');
+        }}
+      />
+    </SafeAreaView>
+  );
 }
 
-const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
-    StyleSheet.create({
-        container: {
-            flex: 1,
-            backgroundColor: themeColors.background,
-        },
-        tabContainer: {
-            flexDirection: 'row',
-            padding: spacing.md,
-            gap: spacing.sm,
-            backgroundColor: themeColors.surface,
-            borderBottomWidth: 1,
-            borderBottomColor: themeColors.border,
-        },
-        tab: {
-            flex: 1,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            paddingVertical: spacing.sm,
-            paddingHorizontal: spacing.md,
-            borderRadius: borderRadius.md,
-            backgroundColor: themeColors.background,
-            gap: spacing.xs,
-        },
-        tabActive: {
-            backgroundColor: themeColors.primary,
-        },
-        tabText: {
-            ...typography.body,
-            fontWeight: '600',
-            color: themeColors.textSecondary,
-        },
-        tabTextActive: {
-            color: '#FFFFFF',
-        },
-        listContent: {
-            padding: spacing.md,
-            flexGrow: 1,
-        },
-        emptyState: {
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
-            paddingVertical: spacing.xxxl,
-        },
-        emptyIcon: {
-            fontSize: 64,
-            marginBottom: spacing.md,
-        },
-        emptyTitle: {
-            ...typography.h3,
-            color: themeColors.text,
-            marginBottom: spacing.xs,
-        },
-        emptySubtitle: {
-            ...typography.body,
-            color: themeColors.textSecondary,
-        },
-        footer: {
-            padding: spacing.md,
-            backgroundColor: themeColors.surface,
-            borderTopWidth: 1,
-            borderTopColor: themeColors.border,
-        },
-    });
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+  },
+  headerNavButton: {
+    width: 32,
+    height: 32,
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitleBox: {
+    flex: 1,
+    marginLeft: spacing.md,
+  },
+  headerSubtitle: {
+    fontSize: 9,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 1,
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: typography.weights.bold,
+    letterSpacing: -0.3,
+    marginTop: 1,
+  },
+  createButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+  },
+  createButtonText: {
+    fontSize: 10,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 0.8,
+  },
+  scrollContent: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xxxl,
+    gap: spacing.md,
+  },
+  kpiCard: {
+    borderWidth: 1,
+    borderRadius: borderRadius.sm,
+    padding: spacing.md,
+  },
+  kpiGrid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  kpiCol: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  kpiDivider: {
+    width: 1,
+    height: 28,
+  },
+  kpiLabel: {
+    fontSize: 8,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  kpiValue: {
+    fontSize: 13,
+    fontWeight: typography.weights.bold,
+    fontVariant: ['tabular-nums'],
+  },
+  masterGaugeBlock: {
+    marginTop: spacing.md,
+    gap: 6,
+  },
+  masterGaugeTrack: {
+    height: 2,
+    borderRadius: 1,
+    overflow: 'hidden',
+  },
+  masterGaugeFill: {
+    height: 2,
+    borderRadius: 1,
+  },
+  gaugeMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  gaugeMetaText: {
+    fontSize: 10,
+    fontVariant: ['tabular-nums'],
+  },
+  segmentContainer: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    padding: 2,
+  },
+  segmentTab: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    borderRadius: borderRadius.xs,
+  },
+  segmentTabActive: {
+    borderWidth: 1,
+  },
+  segmentTabText: {
+    fontSize: 11,
+    letterSpacing: 0.6,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 48,
+    gap: spacing.xs,
+  },
+  emptyTitle: {
+    fontSize: 14,
+    fontWeight: typography.weights.bold,
+    marginTop: spacing.sm,
+  },
+  emptySubtitle: {
+    fontSize: 12,
+    textAlign: 'center',
+    paddingHorizontal: spacing.lg,
+    lineHeight: 18,
+  },
+  emptyAddButton: {
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+  },
+  emptyAddButtonText: {
+    fontSize: 11,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 0.8,
+  },
+});

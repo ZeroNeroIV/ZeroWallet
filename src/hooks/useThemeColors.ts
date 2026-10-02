@@ -10,10 +10,11 @@
  */
 
 import { useTheme } from '../contexts/ThemeContext';
-import { colors, lightTheme, darkTheme, brand } from '../theme/colors';
+import { colors, lightTheme, darkTheme, brand, getSimplizumTheme } from '../theme/colors';
 
 export const useThemeColors = () => {
-  const { isDark } = useTheme();
+  const { isDark, themeFamily } = useTheme();
+  const activeTheme = getSimplizumTheme(themeFamily, isDark);
 
   return {
     // Brand tokens
@@ -23,49 +24,58 @@ export const useThemeColors = () => {
     gilded: brand.gilded,
     gold: brand.gilded,
 
+    // Simplizum Active Theme Tokens
+    simplizum: activeTheme,
+    hairline: activeTheme.hairline,
+    railBackground: activeTheme.railBackground,
+    railBorder: activeTheme.railBorder,
+    transfer: activeTheme.transfer,
+
     // Background & Surface colors
-    background: isDark ? brand.espresso : brand.creamAlabaster,
-    surface: isDark ? brand.espressoSurface : brand.pureWhite,
-    surfaceHighlight: isDark ? 'rgba(254, 239, 182, 0.08)' : 'rgba(67, 47, 46, 0.05)',
-    card: isDark ? brand.espressoSurface : brand.pureWhite,
-    cardBorder: isDark ? brand.espressoBorder : 'rgba(67, 47, 46, 0.12)',
+    background: activeTheme.background,
+    surface: activeTheme.surface,
+    surfaceElevated: activeTheme.card,
+    surfaceHighlight: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
+    card: activeTheme.card,
+    cardBorder: activeTheme.hairline,
 
     // Text & Content colors
-    text: isDark ? '#FDFBFA' : brand.chestnut,
-    textSecondary: isDark ? brand.arctic : '#6B5857',
-    textMuted: isDark ? '#9EBECF' : '#8A7776',
-    textDisabled: isDark ? '#7A6B6A' : colors.textDisabled,
+    text: activeTheme.text,
+    textSecondary: activeTheme.textSecondary,
+    textMuted: activeTheme.textMuted,
+    textDisabled: isDark ? '#52525B' : '#A1A1AA',
 
     // Border colors
-    border: isDark ? brand.espressoBorder : 'rgba(195, 218, 232, 0.6)',
+    border: activeTheme.border,
+    borderSubtle: activeTheme.hairline,
 
     // Primary colors & contrast onPrimary
-    primary: isDark ? brand.gilded : brand.chestnut,
-    primaryDark: isDark ? '#E5D69F' : '#2D1E1D',
-    primaryLight: isDark ? '#FFF7D6' : '#5E4341',
-    onPrimary: isDark ? '#150F0E' : '#FFFFFF',
+    primary: activeTheme.primary,
+    primaryDark: activeTheme.primary,
+    primaryLight: activeTheme.primary,
+    onPrimary: activeTheme.onPrimary,
 
     // Secondary colors & contrast onSecondary
-    secondary: isDark ? brand.arctic : brand.gilded,
-    secondaryDark: isDark ? '#A2C2D4' : '#E5D69F',
-    secondaryLight: isDark ? '#E0EEF7' : '#FFF9DE',
-    onSecondary: isDark ? '#150F0E' : '#432F2E',
+    secondary: activeTheme.secondary,
+    secondaryDark: activeTheme.secondary,
+    secondaryLight: activeTheme.secondary,
+    onSecondary: activeTheme.onSecondary,
 
     // Surface / Background contrast
-    onSurface: isDark ? '#FDFBFA' : brand.chestnut,
-    onBackground: isDark ? '#FDFBFA' : brand.chestnut,
+    onSurface: activeTheme.text,
+    onBackground: activeTheme.text,
 
     // Accent colors
-    accent: isDark ? brand.gilded : brand.arctic,
-    accentDark: isDark ? '#E5D69F' : '#9EBECF',
-    accentLight: isDark ? '#FFF7D6' : '#E0EFF7',
+    accent: activeTheme.accent,
+    accentDark: activeTheme.accent,
+    accentLight: activeTheme.accent,
 
     // Semantic colors
-    success: colors.semantic.success,
-    error: colors.semantic.error,
-    errorDark: colors.semantic.errorDark,
-    warning: colors.semantic.warning,
-    info: colors.semantic.info,
+    success: activeTheme.success,
+    error: activeTheme.error,
+    errorDark: activeTheme.error,
+    warning: activeTheme.warning,
+    info: activeTheme.info,
 
     // Vault colors
     vault: colors.vault,
@@ -83,20 +93,25 @@ export const useThemeColors = () => {
     shadowDark: colors.shadowDark,
 
     // Glass morphism colors
-    glass: colors.glass,
+    glass: {
+      background: isDark ? 'rgba(0, 0, 0, 0.6)' : 'rgba(255, 255, 255, 0.7)',
+      border: activeTheme.hairline,
+      borderLight: activeTheme.hairline,
+    },
 
     // Goal/Debt colors
-    goalGreen: colors.semantic.goalGreen,
-    debtRed: colors.semantic.debtRed,
+    goalGreen: activeTheme.success,
+    debtRed: activeTheme.error,
 
     // Income/Expense colors (for transaction amounts)
-    incomeGreen: colors.semantic.success, // Bright green that works in both light and dark
-    expenseRed: colors.semantic.error, // Bright red that works in both light and dark
+    incomeGreen: activeTheme.success,
+    expenseRed: activeTheme.error,
 
     // Theme object (for compatibility)
     theme: isDark ? darkTheme : lightTheme,
 
     // Helper flag
     isDark,
+    themeFamily,
   };
 };

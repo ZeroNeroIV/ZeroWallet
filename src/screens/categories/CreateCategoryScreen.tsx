@@ -1,18 +1,11 @@
 /**
- * Purpose: Create or edit custom income/expense categories with icon and color selection
+ * Purpose: Full-screen Simplizum Category & Budget creation/editing screen.
  * 
- * Inputs:
- *   - route.params.type ('income' | 'expense'): Category type when creating new
- *   - route.params.mode ('edit'): Edit mode flag
- *   - route.params.categoryId (string): Category ID when editing
- * 
- * Outputs:
- *   - Returns (JSX.Element): Category creation/edit form
- * 
- * Side effects:
- *   - Creates new category in database
- *   - Updates existing category in database
- *   - Navigates back on success
+ * Supports:
+ * - Route params (type, mode, categoryId)
+ * - Category classification (icon, name, architectural color palette)
+ * - Monthly budget ceiling with rollover toggle
+ * - Fast validation and haptic feedback
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -23,81 +16,71 @@ import {
   ScrollView,
   Alert,
   TouchableOpacity,
+  TextInput,
+  Switch,
+  SafeAreaView,
+  StatusBar,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RouteProp } from '@react-navigation/native';
 import type { MainStackParamList } from '../../types/navigation';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { Input } from '../../components/forms/Input';
-import { Button } from '../../components/forms/Button';
+
+import { useThemeColors } from '../../hooks/useThemeColors';
 import { useAuthStore } from '../../store/authStore';
-import { CategoryRepository } from '../../database/repositories/CategoryRepository';
-import { validateRequired } from '../../utils/validators';
-import { colors } from '../../theme/colors';
+import { useAccountStore } from '../../store/accountStore';
 import { spacing, borderRadius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import type { Category, CategoryType } from '../../types/models';
-import { useThemeColors } from '../../hooks/useThemeColors';
+import { getCurrencySymbol } from '../../utils/currencyFormatter';
+import { triggerHaptic } from '../../services/haptics/hapticFeedback';
+import { CategoryRepository } from '../../database/repositories/CategoryRepository';
+import { BudgetRepository } from '../../database/repositories/BudgetRepository';
+import { CategoryBudgetService } from '../../services/categoryBudgetService';
+import type { CategoryType } from '../../types/models';
 
-type CreateCategoryNavigationProp = StackNavigationProp<
-  MainStackParamList,
-  'CreateCategory'
->;
+type NavigationProp = StackNavigationProp<MainStackParamList, 'CreateCategory'>;
+type ScreenRouteProp = RouteProp<MainStackParamList, 'CreateCategory'>;
 
-type CreateCategoryRouteProp = RouteProp<MainStackParamList, 'CreateCategory'>;
-
-// Available category icons (MaterialCommunityIcons)
 const EXPENSE_ICONS = [
   'food',
-  'food-fork-drink',
   'silverware-fork-knife',
   'coffee',
   'cart',
   'shopping',
   'car',
   'bus',
-  'train',
   'airplane',
   'gas-station',
   'movie',
   'music',
   'gamepad-variant',
-  'controller',
   'receipt',
   'file-document',
   'home',
   'lightning-bolt',
   'water',
   'medical-bag',
-  'hospital-box',
   'pill',
-  'heart-pulse',
-  'school',
-  'book-open',
-  'pencil',
   'dumbbell',
-  'run',
   'tshirt-crew',
   'shoe-sneaker',
   'phone',
   'laptop',
   'television',
   'gift',
+  'school',
+  'book-open',
   'paw',
-  'flower',
   'hammer',
   'wrench',
-  'brush',
-  'palette',
+  'dots-horizontal',
 ];
 
 const INCOME_ICONS = [
   'briefcase',
   'account-tie',
-  'office-building',
   'laptop',
-  'desktop-mac',
   'code-tags',
   'cash',
   'cash-multiple',
@@ -106,370 +89,753 @@ const INCOME_ICONS = [
   'chart-line',
   'trending-up',
   'finance',
-  'chart-areaspline',
   'gift',
-  'gift-outline',
   'hand-coin',
   'piggy-bank',
   'wallet',
   'sale',
+  'office-building',
+  'desktop-mac',
 ];
 
-// Available colors (expanded palette)
-const CATEGORY_COLORS = [
-  colors.category.red,
-  colors.category.blue,
-  colors.category.yellow,
-  colors.category.green,
-  colors.category.pink,
-  colors.category.purple,
-  colors.category.skyBlue,
-  colors.category.lavender,
-  colors.category.teal,
-  colors.category.navy,
-  colors.category.orange,
-  colors.category.fuchsia,
-  colors.category.indigo,
-  '#E63946',
-  '#F77F00',
-  '#06FFA5',
-  '#8338EC',
-  '#FB5607',
-  '#FF006E',
-  '#3A86FF',
-  '#FFB703',
-  '#8AC926',
-  '#D00000',
-  '#6A4C93',
+const ARCHITECTURAL_COLORS = [
+  '#EF4444',
+  '#F97316',
+  '#F59E0B',
+  '#10B981',
+  '#06B6D4',
+  '#3B82F6',
+  '#6366F1',
+  '#8B5CF6',
+  '#EC4899',
+  '#64748B',
+  '#78716C',
+  '#0EA5E9',
 ];
 
 export default function CreateCategoryScreen() {
-  const navigation = useNavigation<CreateCategoryNavigationProp>();
-  const route = useRoute<CreateCategoryRouteProp>();
-  const currentUser = useAuthStore((state) => state.currentUser);
+  const navigation = useNavigation<NavigationProp>();
+  const route = useRoute<ScreenRouteProp>();
   const themeColors = useThemeColors();
 
-  const isEditMode = 'mode' in route.params && route.params.mode === 'edit';
-  const categoryType: CategoryType = 'type' in route.params ? route.params.type : 'expense';
-  const categoryId = 'categoryId' in route.params ? route.params.categoryId : undefined;
+  const currentUser = useAuthStore((s) => s.currentUser);
+  const currentAccountId = useAuthStore((s) => s.currentAccountId) || useAccountStore((s) => s.currentAccountId);
+
+  const routeParams = route.params || {};
+  const isEditMode = 'mode' in routeParams && routeParams.mode === 'edit';
+  const categoryId = 'categoryId' in routeParams ? routeParams.categoryId : undefined;
+  const initialType: CategoryType = 'type' in routeParams && routeParams.type ? routeParams.type : 'expense';
 
   const [name, setName] = useState('');
-  const [selectedIcon, setSelectedIcon] = useState('');
-  const [selectedColor, setSelectedColor] = useState('');
+  const [type, setType] = useState<CategoryType>(initialType);
+  const [selectedIcon, setSelectedIcon] = useState(initialType === 'expense' ? EXPENSE_ICONS[0] : INCOME_ICONS[0]);
+  const [selectedColor, setSelectedColor] = useState(ARCHITECTURAL_COLORS[3]);
+  const [isDefault, setIsDefault] = useState(false);
+
+  // Budget
+  const [hasBudget, setHasBudget] = useState(false);
+  const [budgetAmount, setBudgetAmount] = useState('');
+  const [rollover, setRollover] = useState(false);
+  const [existingBudgetId, setExistingBudgetId] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<{ name?: string }>({});
+  const [saving, setSaving] = useState(false);
 
-  const availableIcons = categoryType === 'expense' ? EXPENSE_ICONS : INCOME_ICONS;
-  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
+  const currencySymbol = useMemo(() => getCurrencySymbol('USD'), []);
 
-  // Load category data if editing
   useEffect(() => {
     if (isEditMode && categoryId) {
-      loadCategory();
-    } else {
-      // Set defaults for new category
-      setSelectedIcon(availableIcons[0]);
-      setSelectedColor(CATEGORY_COLORS[0]);
+      loadCategoryDetails(categoryId);
     }
-  }, []);
+  }, [isEditMode, categoryId]);
 
-  const loadCategory = async () => {
-    if (!categoryId) return;
-
+  const loadCategoryDetails = async (id: string) => {
     try {
-      const categoryRepo = new CategoryRepository();
-      const category = await categoryRepo.findById(categoryId);
+      setLoading(true);
+      const catRepo = new CategoryRepository();
+      const cat = await catRepo.findById(id);
+      if (cat) {
+        setName(cat.name);
+        setType(cat.type);
+        setSelectedIcon(cat.icon || (cat.type === 'expense' ? EXPENSE_ICONS[0] : INCOME_ICONS[0]));
+        setSelectedColor(cat.color || ARCHITECTURAL_COLORS[0]);
+        setIsDefault(cat.isDefault);
 
-      if (category) {
-        setName(category.name);
-        setSelectedIcon(category.icon);
-        setSelectedColor(category.color);
-      } else {
-        Alert.alert('Error', 'Category not found');
-        navigation.goBack();
+        if (cat.type === 'expense' && currentAccountId) {
+          const budgetRepo = new BudgetRepository();
+          const budget = await budgetRepo.findByCategory(currentAccountId, cat.id);
+          if (budget && budget.amount > 0) {
+            setHasBudget(true);
+            setBudgetAmount(budget.amount.toString());
+            setRollover(Boolean(budget.rollover));
+            setExistingBudgetId(budget.id);
+          }
+        }
       }
-    } catch (error) {
-      console.error('[CreateCategory] Failed to load category:', error);
-      Alert.alert('Error', 'Failed to load category');
-      navigation.goBack();
-    }
-  };
-
-  const handleSave = async () => {
-    if (!currentUser) {
-      Alert.alert('Error', 'User not found');
-      return;
-    }
-
-    // Validate
-    const nameError = validateRequired(name, 'Category name');
-    if (nameError) {
-      setErrors({ name: nameError });
-      return;
-    }
-
-    if (!selectedIcon) {
-      Alert.alert('Error', 'Please select an icon');
-      return;
-    }
-
-    if (!selectedColor) {
-      Alert.alert('Error', 'Please select a color');
-      return;
-    }
-
-    setErrors({});
-    setLoading(true);
-
-    try {
-      const categoryRepo = new CategoryRepository();
-
-      if (isEditMode && categoryId) {
-        // Update existing category
-        await categoryRepo.update(categoryId, {
-          name: name.trim(),
-          icon: selectedIcon,
-          color: selectedColor,
-        });
-
-        Alert.alert('Success', 'Category updated successfully', [
-          {
-            text: 'OK',
-            onPress: () => navigation.goBack(),
-          },
-        ]);
-      } else {
-        // Create new category
-        await categoryRepo.create({
-          userId: currentUser.id,
-          name: name.trim(),
-          type: categoryType,
-          icon: selectedIcon,
-          color: selectedColor,
-          isDefault: false,
-        });
-
-        Alert.alert('Success', 'Category created successfully', [
-          {
-            text: 'OK',
-            onPress: () => navigation.goBack(),
-          },
-        ]);
-      }
-    } catch (error) {
-      console.error('[CreateCategory] Failed to save category:', error);
-      Alert.alert('Error', 'Failed to save category');
+    } catch (err) {
+      console.error('[CreateCategoryScreen] Failed to load category:', err);
     } finally {
       setLoading(false);
     }
   };
 
+  const availableIcons = type === 'expense' ? EXPENSE_ICONS : INCOME_ICONS;
+
+  const handleTypeChange = (newType: CategoryType) => {
+    triggerHaptic('selection');
+    setType(newType);
+    if (!availableIcons.includes(selectedIcon)) {
+      setSelectedIcon(newType === 'expense' ? EXPENSE_ICONS[0] : INCOME_ICONS[0]);
+    }
+  };
+
+  const handleSelectIcon = (iconName: string) => {
+    triggerHaptic('selection');
+    setSelectedIcon(iconName);
+  };
+
+  const handleSelectColor = (hex: string) => {
+    triggerHaptic('selection');
+    setSelectedColor(hex);
+  };
+
+  const handleSave = async () => {
+    if (!currentUser) return;
+    if (!name.trim()) {
+      Alert.alert('Required', 'Please enter a category name');
+      return;
+    }
+
+    let parsedBudget: number | null | undefined = undefined;
+    if (type === 'expense') {
+      if (hasBudget) {
+        const num = parseFloat(budgetAmount);
+        if (isNaN(num) || num <= 0) {
+          Alert.alert('Invalid Budget', 'Please enter a valid monthly spending limit greater than 0');
+          return;
+        }
+        parsedBudget = num;
+      } else if (existingBudgetId) {
+        parsedBudget = null;
+      }
+    }
+
+    try {
+      setSaving(true);
+      triggerHaptic('notificationSuccess');
+      const service = new CategoryBudgetService();
+      await service.saveCategoryAndBudget({
+        id: isEditMode ? categoryId : undefined,
+        userId: currentUser.id,
+        accountId: currentAccountId || '',
+        name: name.trim(),
+        type,
+        icon: selectedIcon,
+        color: selectedColor,
+        budgetAmount: parsedBudget,
+        rollover,
+      });
+
+      navigation.goBack();
+    } catch (err: any) {
+      console.error('[CreateCategoryScreen] Save failed:', err);
+      Alert.alert('Error', err?.message || 'Failed to save category');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = () => {
+    if (!categoryId || isDefault) return;
+    Alert.alert(
+      'Delete Category',
+      `Are you sure you want to delete "${name}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              triggerHaptic('notificationWarning');
+              const service = new CategoryBudgetService();
+              await service.deleteCategory(categoryId, currentAccountId || '');
+              navigation.goBack();
+            } catch (err: any) {
+              Alert.alert('Error', err?.message || 'Failed to delete category');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Category Name */}
-      <Input
-        label="Category Name"
-        placeholder="e.g., Groceries, Rent, Bonus"
-        value={name}
-        onChangeText={(text) => {
-          setName(text);
-          setErrors({});
-        }}
-        error={errors.name}
-        leftIcon={categoryType === 'expense' ? 'minus-circle' : 'plus-circle'}
-        autoFocus={!isEditMode}
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]}>
+      <StatusBar
+        barStyle={themeColors.isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={themeColors.background}
       />
 
-      {/* Category Type Badge */}
-      <View style={styles.typeBadge}>
-        <Icon
-          name={categoryType === 'expense' ? 'minus-circle' : 'plus-circle'}
-          size={16}
-          color={categoryType === 'expense' ? colors.semantic.error : colors.semantic.success}
-        />
-        <Text
+      {/* Header Bar */}
+      <View style={[styles.headerBar, { borderBottomColor: themeColors.borderSubtle }]}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={[styles.headerNavButton, { borderColor: themeColors.borderSubtle }]}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Icon name="close" size={18} color={themeColors.text} />
+        </TouchableOpacity>
+
+        <View style={styles.headerTitleBox}>
+          <Text style={[styles.headerSubtitle, { color: themeColors.textMuted }]}>
+            {isEditMode ? 'MODIFY ATTRIBUTES' : 'NEW CLASSIFICATION'}
+          </Text>
+          <Text style={[styles.headerTitle, { color: themeColors.text }]}>
+            {isEditMode ? 'Edit Category' : 'Create Category'}
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          onPress={handleSave}
+          disabled={saving}
           style={[
-            styles.typeBadgeText,
-            {
-              color:
-                categoryType === 'expense'
-                  ? colors.semantic.error
-                  : colors.semantic.success,
-            },
+            styles.saveHeaderButton,
+            { backgroundColor: themeColors.text },
           ]}
         >
-          {categoryType === 'expense' ? 'Expense Category' : 'Income Category'}
-        </Text>
+          <Text style={[styles.saveHeaderText, { color: themeColors.background }]}>
+            {saving ? '...' : 'SAVE'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Icon Picker */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Choose Icon</Text>
-        <View style={styles.iconGrid}>
-          {availableIcons.map((icon) => (
-            <TouchableOpacity
-              key={icon}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Type Selector (New Category Only) */}
+        {!isEditMode && (
+          <View style={styles.sectionBlock}>
+            <Text style={[styles.inputLabel, { color: themeColors.textSecondary }]}>
+              TRANSACTION TYPE
+            </Text>
+            <View
               style={[
-                styles.iconOption,
-                selectedIcon === icon && styles.iconOptionSelected,
-                { borderColor: selectedColor },
+                styles.segmentContainer,
+                {
+                  borderColor: themeColors.border,
+                  backgroundColor: themeColors.surfaceElevated,
+                },
               ]}
-              onPress={() => setSelectedIcon(icon)}
             >
-              <Icon
-                name={icon}
-                size={28}
-                color={selectedIcon === icon ? selectedColor : themeColors.textSecondary}
-              />
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
+              <TouchableOpacity
+                style={[
+                  styles.segmentButton,
+                  type === 'expense' && [
+                    styles.segmentButtonActive,
+                    {
+                      backgroundColor: themeColors.surface,
+                      borderColor: themeColors.border,
+                    },
+                  ],
+                ]}
+                onPress={() => handleTypeChange('expense')}
+              >
+                <Text
+                  style={[
+                    styles.segmentText,
+                    {
+                      color:
+                        type === 'expense' ? themeColors.text : themeColors.textMuted,
+                      fontWeight:
+                        type === 'expense'
+                          ? typography.weights.bold
+                          : typography.weights.medium,
+                    },
+                  ]}
+                >
+                  EXPENSE
+                </Text>
+              </TouchableOpacity>
 
-      {/* Color Picker */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Choose Color</Text>
-        <View style={styles.colorGrid}>
-          {CATEGORY_COLORS.map((color) => (
-            <TouchableOpacity
-              key={color}
-              style={[
-                styles.colorOption,
-                { backgroundColor: color },
-                selectedColor === color && styles.colorOptionSelected,
-              ]}
-              onPress={() => setSelectedColor(color)}
-            >
-              {selectedColor === color && (
-                <Icon name="check" size={20} color={themeColors.surface} />
-              )}
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      {/* Preview */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Preview</Text>
-        <View style={styles.preview}>
-          <View style={[styles.previewCircle, { backgroundColor: selectedColor }]}>
-            <Icon name={selectedIcon} size={32} color={themeColors.surface} />
+              <TouchableOpacity
+                style={[
+                  styles.segmentButton,
+                  type === 'income' && [
+                    styles.segmentButtonActive,
+                    {
+                      backgroundColor: themeColors.surface,
+                      borderColor: themeColors.border,
+                    },
+                  ],
+                ]}
+                onPress={() => handleTypeChange('income')}
+              >
+                <Text
+                  style={[
+                    styles.segmentText,
+                    {
+                      color:
+                        type === 'income' ? themeColors.text : themeColors.textMuted,
+                      fontWeight:
+                        type === 'income'
+                          ? typography.weights.bold
+                          : typography.weights.medium,
+                    },
+                  ]}
+                >
+                  INCOME
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
-          <Text style={styles.previewText}>{name || 'Category Name'}</Text>
-        </View>
-      </View>
+        )}
 
-      {/* Save Button */}
-      <View style={styles.footer}>
-        <Button
-          title={isEditMode ? 'Update Category' : 'Create Category'}
-          onPress={handleSave}
-          loading={loading}
-          leftIcon={<Icon name={isEditMode ? 'check' : 'plus'} size={20} color="#FFF" />}
-        />
-      </View>
-    </ScrollView>
+        {/* Category Name */}
+        <View style={styles.sectionBlock}>
+          <Text style={[styles.inputLabel, { color: themeColors.textSecondary }]}>
+            CATEGORY NAME
+          </Text>
+          <TextInput
+            style={[
+              styles.textInput,
+              {
+                color: themeColors.text,
+                backgroundColor: themeColors.surface,
+                borderColor: themeColors.border,
+              },
+            ]}
+            placeholder="e.g. Groceries, Restaurants, Cloud Services"
+            placeholderTextColor={themeColors.textMuted}
+            value={name}
+            onChangeText={setName}
+            autoCapitalize="words"
+          />
+        </View>
+
+        {/* Icon Grid */}
+        <View style={styles.sectionBlock}>
+          <View style={styles.labelWithPreview}>
+            <Text style={[styles.inputLabel, { color: themeColors.textSecondary }]}>
+              SELECT ICON
+            </Text>
+            <View
+              style={[
+                styles.previewPill,
+                {
+                  borderColor: themeColors.borderSubtle,
+                  backgroundColor: `${selectedColor}15`,
+                },
+              ]}
+            >
+              <Icon name={selectedIcon} size={14} color={selectedColor} />
+              <Text style={[styles.previewPillText, { color: selectedColor }]}>
+                {selectedIcon}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.iconGrid}>
+            {availableIcons.map((ic) => {
+              const isSelected = ic === selectedIcon;
+              return (
+                <TouchableOpacity
+                  key={ic}
+                  style={[
+                    styles.iconGridItem,
+                    {
+                      borderColor: isSelected ? themeColors.text : themeColors.borderSubtle,
+                      backgroundColor: isSelected
+                        ? themeColors.surfaceElevated
+                        : 'transparent',
+                    },
+                  ]}
+                  onPress={() => handleSelectIcon(ic)}
+                >
+                  <Icon
+                    name={ic}
+                    size={18}
+                    color={isSelected ? selectedColor : themeColors.textMuted}
+                  />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Architectural Palette */}
+        <View style={styles.sectionBlock}>
+          <Text style={[styles.inputLabel, { color: themeColors.textSecondary }]}>
+            ARCHITECTURAL COLOR PALETTE
+          </Text>
+          <View style={styles.colorRow}>
+            {ARCHITECTURAL_COLORS.map((c) => {
+              const isSelected = c === selectedColor;
+              return (
+                <TouchableOpacity
+                  key={c}
+                  style={[
+                    styles.colorSwatch,
+                    {
+                      backgroundColor: c,
+                      borderColor: isSelected ? themeColors.text : 'transparent',
+                    },
+                  ]}
+                  onPress={() => handleSelectColor(c)}
+                >
+                  {isSelected && <Icon name="check" size={12} color="#FFFFFF" />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Monthly Budget Target Section (Expense only) */}
+        {type === 'expense' && (
+          <View
+            style={[
+              styles.budgetCard,
+              {
+                backgroundColor: themeColors.surface,
+                borderColor: themeColors.border,
+              },
+            ]}
+          >
+            <View style={styles.budgetCardHeader}>
+              <View style={styles.budgetHeaderLeft}>
+                <Icon
+                  name="chart-arc"
+                  size={18}
+                  color={hasBudget ? themeColors.accent : themeColors.textMuted}
+                />
+                <View style={styles.budgetTitleBlock}>
+                  <Text style={[styles.budgetHeading, { color: themeColors.text }]}>
+                    MONTHLY SPENDING LIMIT
+                  </Text>
+                  <Text style={[styles.budgetSubheading, { color: themeColors.textMuted }]}>
+                    Hairline tracking for spending thresholds
+                  </Text>
+                </View>
+              </View>
+
+              <Switch
+                value={hasBudget}
+                onValueChange={(val) => {
+                  triggerHaptic('selection');
+                  setHasBudget(val);
+                  if (val && !budgetAmount) setBudgetAmount('500');
+                }}
+                trackColor={{
+                  false: themeColors.border,
+                  true: themeColors.accent,
+                }}
+                thumbColor={themeColors.surface}
+              />
+            </View>
+
+            {hasBudget && (
+              <View style={styles.budgetInputsBlock}>
+                <Text style={[styles.microLabel, { color: themeColors.textSecondary }]}>
+                  BUDGET CEILING
+                </Text>
+                <View
+                  style={[
+                    styles.amountInputRow,
+                    {
+                      backgroundColor: themeColors.surfaceElevated,
+                      borderColor: themeColors.border,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.currencyPrefix, { color: themeColors.textMuted }]}>
+                    {currencySymbol}
+                  </Text>
+                  <TextInput
+                    style={[styles.budgetAmountInput, { color: themeColors.text }]}
+                    placeholder="0.00"
+                    placeholderTextColor={themeColors.textMuted}
+                    keyboardType="numeric"
+                    value={budgetAmount}
+                    onChangeText={setBudgetAmount}
+                  />
+                </View>
+
+                {/* Rollover Toggle */}
+                <View
+                  style={[
+                    styles.rolloverRow,
+                    { borderTopColor: themeColors.borderSubtle },
+                  ]}
+                >
+                  <View style={styles.rolloverLeft}>
+                    <Text style={[styles.rolloverLabel, { color: themeColors.text }]}>
+                      Rollover Unspent
+                    </Text>
+                    <Text style={[styles.rolloverSubtext, { color: themeColors.textMuted }]}>
+                      Add leftover limit to next month automatically
+                    </Text>
+                  </View>
+                  <Switch
+                    value={rollover}
+                    onValueChange={(val) => {
+                      triggerHaptic('selection');
+                      setRollover(val);
+                    }}
+                    trackColor={{
+                      false: themeColors.border,
+                      true: themeColors.accent,
+                    }}
+                    thumbColor={themeColors.surface}
+                  />
+                </View>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Delete Category Button (Custom only) */}
+        {isEditMode && !isDefault && (
+          <TouchableOpacity
+            style={[
+              styles.deleteButton,
+              { borderColor: themeColors.error, backgroundColor: `${themeColors.error}10` },
+            ]}
+            onPress={handleDelete}
+          >
+            <Icon name="trash-can-outline" size={16} color={themeColors.error} />
+            <Text style={[styles.deleteButtonText, { color: themeColors.error }]}>
+              DELETE CATEGORY
+            </Text>
+          </TouchableOpacity>
+        )}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
-const createStyles = (themeColors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
-  container: {
+const styles = StyleSheet.create({
+  safeArea: {
     flex: 1,
-    backgroundColor: themeColors.background,
   },
-  content: {
-    padding: spacing.md,
-    paddingBottom: spacing.xxxl,
-  },
-  typeBadge: {
+  headerBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+  },
+  headerNavButton: {
+    width: 32,
+    height: 32,
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitleBox: {
+    flex: 1,
+    marginLeft: spacing.md,
+  },
+  headerSubtitle: {
+    fontSize: 9,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 1,
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: typography.weights.bold,
+    letterSpacing: -0.3,
+    marginTop: 1,
+  },
+  saveHeaderButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: borderRadius.xs,
+  },
+  saveHeaderText: {
+    fontSize: 11,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 0.8,
+  },
+  scroll: {
+    flex: 1,
+    paddingHorizontal: spacing.lg,
+  },
+  scrollContent: {
+    paddingVertical: spacing.lg,
+    gap: spacing.lg,
+  },
+  sectionBlock: {
+    gap: spacing.xs,
+  },
+  inputLabel: {
+    fontSize: 10,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 0.8,
+  },
+  segmentContainer: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    padding: 2,
+  },
+  segmentButton: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    borderRadius: borderRadius.xs,
+  },
+  segmentButtonActive: {
+    borderWidth: 1,
+  },
+  segmentText: {
+    fontSize: 11,
+    letterSpacing: 0.5,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    backgroundColor: themeColors.surface,
-    borderRadius: borderRadius.round,
-    gap: spacing.xs,
-    marginBottom: spacing.lg,
+    fontSize: 14,
+  },
+  labelWithPreview: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  previewPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     borderWidth: 1,
-    borderColor: themeColors.border,
+    borderRadius: borderRadius.none,
   },
-  typeBadgeText: {
-    ...typography.body,
-    fontWeight: '600',
-    fontSize: 13,
-  },
-  section: {
-    marginBottom: spacing.xl,
-  },
-  sectionTitle: {
-    ...typography.h3,
-    marginBottom: spacing.md,
-    color: themeColors.text,
+  previewPillText: {
+    fontSize: 9,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 0.5,
   },
   iconGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
-  iconOption: {
-    width: 56,
-    height: 56,
-    alignItems: 'center',
+  iconGridItem: {
+    width: 36,
+    height: 36,
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
     justifyContent: 'center',
-    borderRadius: borderRadius.md,
-    borderWidth: 2,
-    borderColor: themeColors.border,
-    backgroundColor: themeColors.surface,
+    alignItems: 'center',
   },
-  iconOptionSelected: {
-    borderWidth: 3,
-    backgroundColor: themeColors.background,
-  },
-  colorGrid: {
+  colorRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
-  colorOption: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
+  colorSwatch: {
+    width: 28,
+    height: 28,
+    borderRadius: borderRadius.xs,
+    borderWidth: 2,
     justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: 'transparent',
+    alignItems: 'center',
   },
-  colorOptionSelected: {
-    borderColor: themeColors.text,
+  budgetCard: {
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    padding: spacing.md,
   },
-  preview: {
+  budgetCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  budgetHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: spacing.lg,
-    backgroundColor: themeColors.surface,
-    borderRadius: borderRadius.lg,
-    gap: spacing.md,
-    ...{
-      shadowColor: themeColors.shadow,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-      elevation: 2,
-    },
+    gap: spacing.sm,
+    flex: 1,
   },
-  previewCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+  budgetTitleBlock: {
+    flex: 1,
+  },
+  budgetHeading: {
+    fontSize: 12,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 0.5,
+  },
+  budgetSubheading: {
+    fontSize: 10,
+    marginTop: 1,
+  },
+  budgetInputsBlock: {
+    marginTop: spacing.md,
+    gap: spacing.xs,
+  },
+  microLabel: {
+    fontSize: 9,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 0.8,
+  },
+  amountInputRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    paddingHorizontal: spacing.md,
+  },
+  currencyPrefix: {
+    fontSize: 16,
+    fontWeight: typography.weights.bold,
+    marginRight: spacing.xs,
+  },
+  budgetAmountInput: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: typography.weights.bold,
+    fontVariant: ['tabular-nums'],
+    paddingVertical: spacing.sm,
+  },
+  rolloverRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: spacing.md,
+    marginTop: spacing.md,
+    borderTopWidth: 1,
+  },
+  rolloverLeft: {
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  rolloverLabel: {
+    fontSize: 12,
+    fontWeight: typography.weights.medium,
+  },
+  rolloverSubtext: {
+    fontSize: 10,
+    marginTop: 2,
+  },
+  deleteButton: {
+    flexDirection: 'row',
     justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.md,
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    marginTop: spacing.sm,
   },
-  previewText: {
-    ...typography.h3,
-    color: themeColors.text,
-  },
-  footer: {
-    marginTop: spacing.lg,
+  deleteButtonText: {
+    fontSize: 11,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 0.8,
   },
 });

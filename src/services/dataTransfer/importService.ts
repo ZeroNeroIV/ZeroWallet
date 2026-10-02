@@ -526,6 +526,33 @@ export async function importPayload(
         nextProcessing, createdAt, updatedAt,
       ]
     );
+
+    // Also populate unified recurring_transactions table
+    try {
+      await executeSql(
+        `INSERT INTO recurring_transactions
+         (id, wallet_id, name, type, amount, category_id, frequency_unit, frequency_interval,
+          billing_day, start_date, next_run_date, last_run_date, auto_deduct, is_subscription, is_active, created_at, updated_at)
+         VALUES (?, ?, ?, 'expense', ?, ?, 'month', 1, ?, ?, ?, ?, 1, 1, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           wallet_id = excluded.wallet_id,
+           name = excluded.name,
+           amount = excluded.amount,
+           category_id = excluded.category_id,
+           billing_day = excluded.billing_day,
+           next_run_date = excluded.next_run_date,
+           last_run_date = excluded.last_run_date,
+           is_active = excluded.is_active,
+           updated_at = excluded.updated_at`,
+        [
+          sId, normalizedVaultType, name, amount, categoryId, billingDay,
+          createdAt, nextProcessing, lastProcessed, isActive, createdAt, updatedAt
+        ]
+      );
+    } catch (e) {
+      console.warn('[Import] failed to sync subscription to recurring_transactions', e);
+    }
+
     counts.subscriptions += 1;
   }
 
@@ -580,6 +607,36 @@ export async function importPayload(
         autoDeduct, lastProcessed, createdAt, updatedAt,
       ]
     );
+
+    // Also populate unified recurring_transactions table
+    try {
+      const freqUnit = frequency === 'daily' ? 'day' : frequency === 'weekly' ? 'week' : frequency === 'yearly' ? 'year' : 'month';
+      await executeSql(
+        `INSERT INTO recurring_transactions
+         (id, wallet_id, name, type, amount, category_id, frequency_unit, frequency_interval,
+          start_date, next_run_date, last_run_date, auto_deduct, is_subscription, is_active, created_at, updated_at)
+         VALUES (?, ?, ?, 'expense', ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           wallet_id = excluded.wallet_id,
+           name = excluded.name,
+           amount = excluded.amount,
+           category_id = excluded.category_id,
+           frequency_unit = excluded.frequency_unit,
+           frequency_interval = excluded.frequency_interval,
+           next_run_date = excluded.next_run_date,
+           last_run_date = excluded.last_run_date,
+           auto_deduct = excluded.auto_deduct,
+           is_active = excluded.is_active,
+           updated_at = excluded.updated_at`,
+        [
+          rId, normalizedVaultType, name, amount, categoryId, freqUnit, interval,
+          createdAt, nextOccurrence, lastProcessed, autoDeduct, isActive, createdAt, updatedAt
+        ]
+      );
+    } catch (e) {
+      console.warn('[Import] failed to sync recurring to recurring_transactions', e);
+    }
+
     counts.recurringExpenses += 1;
   }
 

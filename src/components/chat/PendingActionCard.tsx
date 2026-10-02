@@ -1,17 +1,8 @@
 /**
- * Purpose: Display pending AI action with details and confirmation buttons
+ * PendingActionCard — Simplizum Inline Architectural Action Ticket
  *
- * Inputs:
- *   - action (PendingAction): Pending action to display
- *   - onConfirm (function): Callback when user confirms action
- *   - onCancel (function): Callback when user cancels action
- *
- * Outputs:
- *   - Returns (JSX.Element): Confirmation card with action details
- *
- * Side effects:
- *   - Triggers haptic feedback on button press
- *   - Calls onConfirm/onCancel callbacks
+ * Razor-thin hairline spec ticket within the message feed showing
+ * exact mutation parameters with high-contrast instantaneous CONFIRM and CANCEL buttons.
  */
 
 import React, { useMemo, useState, useEffect } from 'react';
@@ -24,10 +15,10 @@ import {
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import type { PendingAction } from '../../types/aiMutations';
-import { spacing, borderRadius } from '../../theme/spacing';
+import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { mediumHaptic } from '../../services/haptics/hapticFeedback';
+import { mediumHaptic, heavyHaptic, lightHaptic } from '../../services/haptics/hapticFeedback';
 
 interface PendingActionCardProps {
   action: PendingAction;
@@ -47,7 +38,6 @@ export const PendingActionCard: React.FC<PendingActionCardProps> = ({
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [timeRemaining, setTimeRemaining] = useState(0);
 
-  // Calculate time remaining
   useEffect(() => {
     const updateTime = () => {
       const remaining = Math.max(0, action.expiresAt - Date.now());
@@ -56,535 +46,286 @@ export const PendingActionCard: React.FC<PendingActionCardProps> = ({
 
     updateTime();
     const interval = setInterval(updateTime, 1000);
-
     return () => clearInterval(interval);
   }, [action.expiresAt]);
 
   const handleConfirm = async () => {
     if (isConfirming) return;
-
-    mediumHaptic();
+    heavyHaptic();
     setIsConfirming(true);
-
     try {
       setConfirmError(null);
       await onConfirm(action.id);
     } catch (error: any) {
       console.error('[PendingActionCard] Confirm error:', error);
-      setConfirmError(error?.message ?? 'Failed to execute action. Please try again.');
+      setConfirmError(error?.message ?? 'Failed to execute action.');
     } finally {
       setIsConfirming(false);
     }
   };
 
   const handleCancel = () => {
-    mediumHaptic();
+    lightHaptic();
     onCancel(action.id);
   };
 
-  // Get icon and color based on action type
-  const actionIcon = useMemo(() => {
-    switch (action.type) {
-      case 'create':
-        return 'plus-circle';
-      case 'update':
-        return 'pencil-circle';
-      case 'delete':
-        return 'delete-circle';
-      default:
-        return 'help-circle';
-    }
-  }, [action.type]);
-
-  const actionColor = useMemo(() => {
-    switch (action.type) {
-      case 'create':
-        return themeColors.success;
-      case 'update':
-        return themeColors.primary;
-      case 'delete':
-        return themeColors.error;
-      default:
-        return themeColors.textSecondary;
-    }
-  }, [action.type, themeColors]);
-
-  // Format time remaining
-  const timeRemainingText = useMemo(() => {
-    if (timeRemaining <= 0) return 'Expired';
-
-    const seconds = Math.floor(timeRemaining / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-
-    if (minutes > 0) {
-      return `${minutes}:${remainingSeconds.toString().padStart(2, '0')} left`;
-    }
-    return `${seconds}s left`;
-  }, [timeRemaining]);
-
   const isExpired = timeRemaining <= 0;
 
-  // Render action details based on entity type
-  const renderActionDetails = () => {
-    const data = action.resolvedData;
+  const timeRemainingText = useMemo(() => {
+    if (isExpired) return 'EXPIRED';
+    const seconds = Math.floor(timeRemaining / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const remSec = seconds % 60;
+    return `${minutes}:${remSec.toString().padStart(2, '0')}`;
+  }, [timeRemaining, isExpired]);
 
-    switch (action.entityType) {
-      case 'transaction':
-        return (
-          <>
-            {data.amount && (
-              <DetailRow
-                label="Amount"
-                value={`${data.amount.toFixed(3)}`}
-                icon="cash"
-              />
-            )}
-            {data.categoryName && (
-              <DetailRow
-                label="Category"
-                value={data.categoryName}
-                icon="folder"
-              />
-            )}
-            {data.description && (
-              <DetailRow
-                label="Description"
-                value={data.description}
-                icon="text"
-              />
-            )}
-            {data.vaultType && (
-              <DetailRow
-                label="Vault"
-                value={data.vaultType}
-                icon="wallet"
-              />
-            )}
-          </>
-        );
+  const renderSpecs = () => {
+    const data = action.resolvedData || {};
+    const rows: { label: string; value: string; isMono?: boolean }[] = [];
 
-      case 'goal':
-        return (
-          <>
-            {data.name && (
-              <DetailRow
-                label="Name"
-                value={data.name}
-                icon="target"
-              />
-            )}
-            {data.targetAmount && (
-              <DetailRow
-                label="Target"
-                value={`${data.targetAmount.toFixed(3)}`}
-                icon="cash"
-              />
-            )}
-            {data.fundingSource && (
-              <DetailRow
-                label="Funding"
-                value={data.fundingSource}
-                icon="bank"
-              />
-            )}
-          </>
-        );
-
-      case 'debt':
-        return (
-          <>
-            {data.personName && (
-              <DetailRow
-                label="Person"
-                value={data.personName}
-                icon="account"
-              />
-            )}
-            {data.amount && (
-              <DetailRow
-                label="Amount"
-                value={`${data.amount.toFixed(3)}`}
-                icon="cash"
-              />
-            )}
-            {data.dueDate && (
-              <DetailRow
-                label="Due Date"
-                value={new Date(data.dueDate).toLocaleDateString()}
-                icon="calendar"
-              />
-            )}
-          </>
-        );
-
-      case 'subscription':
-        return (
-          <>
-            {data.name && (
-              <DetailRow
-                label="Name"
-                value={data.name}
-                icon="repeat"
-              />
-            )}
-            {data.amount && (
-              <DetailRow
-                label="Amount"
-                value={`${data.amount.toFixed(3)}`}
-                icon="cash"
-              />
-            )}
-            {data.billingDay && (
-              <DetailRow
-                label="Billing Day"
-                value={`${data.billingDay}`}
-                icon="calendar"
-              />
-            )}
-          </>
-        );
-
-      case 'recurringExpense':
-        return (
-          <>
-            {data.name && (
-              <DetailRow
-                label="Name"
-                value={data.name}
-                icon="refresh"
-              />
-            )}
-            {data.amount && (
-              <DetailRow
-                label="Amount"
-                value={`${data.amount.toFixed(3)}`}
-                icon="cash"
-              />
-            )}
-            {data.frequency && (
-              <DetailRow
-                label="Frequency"
-                value={`Every ${data.interval || 1} ${data.frequency}`}
-                icon="clock"
-              />
-            )}
-          </>
-        );
-
-      case 'category':
-        return (
-          <>
-            {data.name && (
-              <DetailRow
-                label="Name"
-                value={data.name}
-                icon="folder"
-              />
-            )}
-            {data.type && (
-              <DetailRow
-                label="Type"
-                value={data.type}
-                icon="tag"
-              />
-            )}
-          </>
-        );
-
-      default:
-        return null;
+    if (action.entityType === 'transaction') {
+      if (data.amount !== undefined) rows.push({ label: 'AMOUNT', value: `$${Number(data.amount).toFixed(2)}`, isMono: true });
+      if (data.categoryName) rows.push({ label: 'CATEGORY', value: data.categoryName });
+      if (data.vaultType) rows.push({ label: 'DESTINATION', value: String(data.vaultType).toUpperCase() });
+      if (data.description) rows.push({ label: 'NOTE', value: data.description });
+    } else if (action.entityType === 'goal') {
+      if (data.name) rows.push({ label: 'GOAL NAME', value: data.name });
+      if (data.targetAmount) rows.push({ label: 'TARGET', value: `$${Number(data.targetAmount).toFixed(2)}`, isMono: true });
+      if (data.fundingSource) rows.push({ label: 'FUNDING', value: data.fundingSource });
+    } else if (action.entityType === 'debt') {
+      if (data.personName) rows.push({ label: 'COUNTERPARTY', value: data.personName });
+      if (data.amount) rows.push({ label: 'AMOUNT', value: `$${Number(data.amount).toFixed(2)}`, isMono: true });
+      if (data.dueDate) rows.push({ label: 'DUE DATE', value: new Date(data.dueDate).toISOString().split('T')[0] });
+    } else if (action.entityType === 'subscription' || action.entityType === 'recurringExpense') {
+      if (data.name) rows.push({ label: 'SERVICE', value: data.name });
+      if (data.amount) rows.push({ label: 'AMOUNT', value: `$${Number(data.amount).toFixed(2)}`, isMono: true });
+      if (data.frequency) rows.push({ label: 'INTERVAL', value: `Every ${data.interval || 1} ${data.frequency}` });
+    } else if (action.entityType === 'category') {
+      if (data.name) rows.push({ label: 'CATEGORY', value: data.name });
+      if (data.type) rows.push({ label: 'TYPE', value: String(data.type).toUpperCase() });
     }
+
+    return (
+      <View style={styles.specsTable}>
+        {rows.map((r, idx) => (
+          <View key={idx} style={[styles.specRow, idx > 0 && styles.specDivider]}>
+            <Text style={styles.specLabel}>{r.label}</Text>
+            <Text style={[styles.specValue, r.isMono ? styles.monoVal : null]} numberOfLines={1}>
+              {r.value}
+            </Text>
+          </View>
+        ))}
+      </View>
+    );
   };
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <MaterialCommunityIcons
-            name={actionIcon}
-            size={24}
-            color={actionColor}
-          />
-          <View style={styles.headerText}>
-            <Text style={styles.actionType}>
-              {action.type.charAt(0).toUpperCase() + action.type.slice(1)} {action.entityType}
-            </Text>
-            <Text style={styles.actionSummary}>{action.summary}</Text>
-          </View>
+    <View style={styles.ticketCard}>
+      {/* Ticket Header */}
+      <View style={styles.ticketHeader}>
+        <View>
+          <Text style={styles.ticketSuper}>MUTATION SPECIFICATION</Text>
+          <Text style={styles.ticketAction}>
+            {action.type.toUpperCase()} · {action.entityType.toUpperCase()}
+          </Text>
         </View>
-
-        {/* Time Remaining Badge */}
-        <View style={[styles.timeBadge, isExpired && styles.expiredBadge]}>
-          <MaterialCommunityIcons
-            name="clock-outline"
-            size={12}
-            color={isExpired ? themeColors.error : themeColors.textSecondary}
-          />
-          <Text style={[styles.timeText, isExpired && styles.expiredText]}>
+        <View style={[styles.timeBadge, isExpired ? styles.timeBadgeExpired : null]}>
+          <Text style={[styles.timeText, isExpired ? styles.timeTextExpired : null]}>
             {timeRemainingText}
           </Text>
         </View>
       </View>
 
-      {/* Details */}
-      <View style={styles.details}>
-        {renderActionDetails()}
-      </View>
+      {/* Summary Note */}
+      {action.summary && (
+        <View style={styles.summaryBar}>
+          <Text style={styles.summaryText}>{action.summary}</Text>
+        </View>
+      )}
 
-      {/* Action Buttons */}
-      <View style={styles.actions}>
-        <TouchableOpacity
-          style={[styles.button, styles.cancelButton]}
-          onPress={handleCancel}
-          disabled={isConfirming}
-          activeOpacity={0.7}
-        >
-          <MaterialCommunityIcons
-            name="close-circle"
-            size={20}
-            color={themeColors.error}
-          />
-          <Text style={[styles.buttonText, styles.cancelText]}>Cancel</Text>
-        </TouchableOpacity>
+      {/* Specs Matrix */}
+      {renderSpecs()}
 
-        <TouchableOpacity
-          style={[
-            styles.button,
-            styles.confirmButton,
-            (isConfirming || isExpired) && styles.disabledButton,
-          ]}
-          onPress={handleConfirm}
-          disabled={isConfirming || isExpired}
-          activeOpacity={0.7}
-        >
-          {isConfirming ? (
-            <ActivityIndicator size="small" color={themeColors.neutral.white} />
-          ) : (
-            <>
-              <MaterialCommunityIcons
-                name="check-circle"
-                size={20}
-                color={themeColors.neutral.white}
-              />
-              <Text style={[styles.buttonText, styles.confirmText]}>
-                Confirm
-              </Text>
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      {/* Confirm error */}
+      {/* Confirmation Error */}
       {confirmError && (
-        <View style={styles.errorContainer}>
-          <MaterialCommunityIcons name="alert-circle" size={16} color={themeColors.error} />
+        <View style={styles.errorBox}>
           <Text style={styles.errorText}>{confirmError}</Text>
         </View>
       )}
 
-      {/* Warning for sensitive actions */}
-      {action.type === 'delete' && (
-        <View style={styles.warningContainer}>
-          <MaterialCommunityIcons
-            name="alert"
-            size={16}
-            color={themeColors.warning}
-          />
-          <Text style={styles.warningText}>This action cannot be undone</Text>
-        </View>
-      )}
+      {/* Action Buttons */}
+      <View style={styles.buttonDeck}>
+        <TouchableOpacity
+          style={styles.cancelButton}
+          onPress={handleCancel}
+          disabled={isConfirming}
+        >
+          <Text style={styles.cancelText}>CANCEL</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.confirmButton, (isConfirming || isExpired) ? styles.disabledBtn : null]}
+          onPress={handleConfirm}
+          disabled={isConfirming || isExpired}
+        >
+          {isConfirming ? (
+            <ActivityIndicator size="small" color={themeColors.background} />
+          ) : (
+            <Text style={styles.confirmText}>EXECUTE & COMMIT</Text>
+          )}
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
 
-// Detail Row Component
-interface DetailRowProps {
-  label: string;
-  value: string;
-  icon: string;
-}
-
-const DetailRow: React.FC<DetailRowProps> = ({ label, value, icon }) => {
-  const themeColors = useThemeColors();
-
-  return (
-    <View style={{
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: spacing.sm,
-      minWidth: 0,
-    }}>
-      <MaterialCommunityIcons
-        name={icon as any}
-        size={16}
-        color={themeColors.textSecondary}
-        style={{ marginRight: spacing.sm, flexShrink: 0 }}
-      />
-      <Text style={{
-        color: themeColors.textSecondary,
-        marginRight: spacing.sm,
-        flexShrink: 0,
-      }}>
-        {label}:
-      </Text>
-      <Text style={{
-        color: themeColors.text,
-        fontWeight: '600',
-        flex: 1,
-        flexWrap: 'wrap',
-        minWidth: 0,
-      }}>
-        {value}
-      </Text>
-    </View>
-  );
-};
-
-const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
+const createStyles = (theme: any) =>
   StyleSheet.create({
-    container: {
-      backgroundColor: themeColors.surface,
-      borderRadius: borderRadius.md,
-      borderWidth: 2,
-      borderColor: themeColors.primary,
-      borderStyle: 'dashed',
-      padding: spacing.md,
-      marginVertical: spacing.sm,
-      shadowColor: themeColors.shadow,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-      elevation: 3,
+    ticketCard: {
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      backgroundColor: theme.card || theme.surface,
+      borderRadius: 2,
+      marginTop: spacing.sm,
+      overflow: 'hidden',
     },
-
-    // Header
-    header: {
+    ticketHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      alignItems: 'flex-start',
-      marginBottom: spacing.md,
-    },
-    headerLeft: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      flex: 1,
-      gap: spacing.sm,
-    },
-    headerText: {
-      flex: 1,
-      minWidth: 0,
-    },
-    actionType: {
-      ...typography.bodySmall,
-      color: themeColors.textSecondary,
-      textTransform: 'uppercase',
-      fontWeight: '700',
-      marginBottom: spacing.xs / 2,
-      flexWrap: 'wrap',
-    },
-    actionSummary: {
-      ...typography.body,
-      color: themeColors.text,
-      fontWeight: '600',
-      flexWrap: 'wrap',
-    },
-
-    // Time Badge
-    timeBadge: {
-      flexDirection: 'row',
       alignItems: 'center',
-      gap: spacing.xs / 2,
-      backgroundColor: themeColors.background,
-      paddingHorizontal: spacing.sm,
-      paddingVertical: spacing.xs / 2,
-      borderRadius: borderRadius.sm,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.hairline || theme.border,
+      backgroundColor: theme.background,
     },
-    expiredBadge: {
-      backgroundColor: `${themeColors.error}15`,
+    ticketSuper: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 9,
+      letterSpacing: 1.2,
+      fontWeight: '700',
+    },
+    ticketAction: {
+      ...typography.caption,
+      color: theme.text,
+      fontSize: 12,
+      fontWeight: '700',
+      letterSpacing: 0.5,
+    },
+    timeBadge: {
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 2,
+      backgroundColor: theme.background,
+    },
+    timeBadgeExpired: {
+      borderColor: '#FF3B30',
+      backgroundColor: '#FF3B3015',
     },
     timeText: {
       ...typography.caption,
-      color: themeColors.textSecondary,
+      color: theme.textSecondary,
+      fontSize: 10,
+      fontWeight: '700',
+      fontFamily: 'monospace',
+    },
+    timeTextExpired: {
+      color: '#FF3B30',
+    },
+    summaryBar: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.xs + 2,
+      backgroundColor: theme.card || theme.surface,
+    },
+    summaryText: {
+      ...typography.caption,
+      color: theme.text,
+      fontSize: 12,
+      fontStyle: 'italic',
+    },
+    specsTable: {
+      borderTopWidth: 1,
+      borderTopColor: theme.hairline || theme.border,
+    },
+    specRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: spacing.md,
+      paddingVertical: 6,
+    },
+    specDivider: {
+      borderTopWidth: 1,
+      borderTopColor: theme.hairline || theme.border,
+    },
+    specLabel: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 0.8,
+    },
+    specValue: {
+      ...typography.caption,
+      color: theme.text,
+      fontSize: 12,
       fontWeight: '600',
     },
-    expiredText: {
-      color: themeColors.error,
-    },
-
-    // Details
-    details: {
-      backgroundColor: themeColors.background,
-      borderRadius: borderRadius.sm,
-      padding: spacing.md,
-      marginBottom: spacing.md,
-    },
-
-    // Actions
-    actions: {
-      flexDirection: 'row',
-      gap: spacing.sm,
-    },
-    button: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: spacing.xs,
-      paddingVertical: spacing.md,
-      borderRadius: borderRadius.sm,
-    },
-    cancelButton: {
-      backgroundColor: `${themeColors.error}15`,
-      borderWidth: 1,
-      borderColor: themeColors.error,
-    },
-    confirmButton: {
-      backgroundColor: themeColors.success,
-    },
-    disabledButton: {
-      opacity: 0.5,
-    },
-    buttonText: {
-      ...typography.body,
+    monoVal: {
+      fontFamily: 'monospace',
       fontWeight: '700',
     },
-    cancelText: {
-      color: themeColors.error,
-    },
-    confirmText: {
-      color: themeColors.neutral.white,
-    },
-
-    errorContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.xs,
-      marginTop: spacing.sm,
-      padding: spacing.sm,
-      backgroundColor: `${themeColors.error}15`,
-      borderRadius: borderRadius.sm,
+    errorBox: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: 6,
+      backgroundColor: '#FF3B3015',
+      borderTopWidth: 1,
+      borderTopColor: '#FF3B3040',
     },
     errorText: {
-      ...typography.bodySmall,
-      color: themeColors.error,
-      flex: 1,
+      ...typography.caption,
+      color: '#FF3B30',
+      fontSize: 11,
     },
-
-    // Warning
-    warningContainer: {
+    buttonDeck: {
       flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.xs,
-      marginTop: spacing.sm,
-      padding: spacing.sm,
-      backgroundColor: `${themeColors.warning}15`,
-      borderRadius: borderRadius.sm,
+      borderTopWidth: 1,
+      borderTopColor: theme.hairline || theme.border,
     },
-    warningText: {
-      ...typography.bodySmall,
-      color: themeColors.warning,
-      fontWeight: '600',
+    cancelButton: {
+      flex: 1,
+      paddingVertical: spacing.sm + 2,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRightWidth: 1,
+      borderRightColor: theme.hairline || theme.border,
+      backgroundColor: theme.background,
+    },
+    cancelText: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontWeight: '700',
+      fontSize: 11,
+      letterSpacing: 1,
+    },
+    confirmButton: {
+      flex: 1.3,
+      paddingVertical: spacing.sm + 2,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.text,
+    },
+    confirmText: {
+      ...typography.caption,
+      color: theme.background,
+      fontWeight: '700',
+      fontSize: 11,
+      letterSpacing: 1,
+    },
+    disabledBtn: {
+      opacity: 0.4,
     },
   });

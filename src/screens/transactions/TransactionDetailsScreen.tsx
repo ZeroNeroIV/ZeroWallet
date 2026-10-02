@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+// Simplizum Transaction Details — Architectural Specification View with Dual Currency & Image Viewer
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,115 +8,98 @@ import {
   Alert,
   TouchableOpacity,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { CategoryIcon } from '../../components/transactions/CategoryIcon';
-import { Button } from '../../components/forms/Button';
-import { ImageViewer } from '../../components/common/ImageViewer';
-import { spacing } from '../../theme/spacing';
-import { typography } from '../../theme/typography';
-import { MainStackParamList } from '../../types/navigation';
-import { Transaction, Category, VaultType } from '../../types/models';
-import { walletShortName } from '../../utils/wallets';
-import { useVaultStore } from '../../store/vaultStore';
+import { format } from 'date-fns';
+import type { MainStackParamList } from '../../types/navigation';
+import type { Transaction, Category, Wallet } from '../../types/models';
+import { useAuthStore } from '../../store/authStore';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { TransactionRepository } from '../../database/repositories/TransactionRepository';
 import { CategoryRepository } from '../../database/repositories/CategoryRepository';
-import { deleteTransactionImage } from '../../utils/imageStorage';
-import { formatCurrency } from '../../constants/currencies';
+import { WalletRepository } from '../../database/repositories/WalletRepository';
+import { AccountRepository } from '../../database/repositories/AccountRepository';
+import { syncBalancesFromDatabase } from '../../services/walletTransferService';
+import { formatCurrency } from '../../utils/currencyFormatter';
+import { triggerHaptic } from '../../services/haptics/hapticFeedback';
+import { borderRadius } from '../../theme/spacing';
+import { ImageViewer } from '../../components/common/ImageViewer';
 
-type TransactionDetailsScreenNavigationProp = StackNavigationProp<
-  MainStackParamList,
-  'TransactionDetails'
->;
-
-type TransactionDetailsScreenRouteProp = RouteProp<
-  MainStackParamList,
-  'TransactionDetails'
->;
+type NavProp = StackNavigationProp<MainStackParamList, 'TransactionDetails'>;
+type RouteProps = RouteProp<MainStackParamList, 'TransactionDetails'>;
 
 export const TransactionDetailsScreen: React.FC = () => {
-  const navigation = useNavigation<TransactionDetailsScreenNavigationProp>();
-  const route = useRoute<TransactionDetailsScreenRouteProp>();
+  const navigation = useNavigation<NavProp>();
+  const route = useRoute<RouteProps>();
   const { transactionId } = route.params;
-
-  const { addToVault, subtractFromVault } = useVaultStore();
+  const { currentAccountId } = useAuthStore();
   const themeColors = useThemeColors();
 
   const [transaction, setTransaction] = useState<Transaction | null>(null);
   const [category, setCategory] = useState<Category | null>(null);
-  const [walletName, setWalletName] = useState<string | null>(null);
+  const [wallet, setWallet] = useState<Wallet | null>(null);
+  const [destinationWallet, setDestinationWallet] = useState<Wallet | null>(null);
+  const [accountCurrency, setAccountCurrency] = useState('USD');
   const [loading, setLoading] = useState(true);
-  const [showImageViewer, setShowImageViewer] = useState(false);
-  const [viewerIndex, setViewerIndex] = useState(0);
-  const [imageLoadError, setImageLoadError] = useState(false);
-  const [accountCurrency, setAccountCurrency] = useState<string>('USD');
 
-  const transactionRepo = new TransactionRepository();
-  const categoryRepo = new CategoryRepository();
+  // Image viewer state
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
 
-  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
-
-  useEffect(() => {
-    loadTransaction();
-  }, [transactionId]);
-
-  // Reload when returning from the edit screen
-  useFocusEffect(
-    useCallback(() => {
-      loadTransaction();
-    }, [transactionId])
-  );
-
-  const loadTransaction = async () => {
+  const loadData = useCallback(async () => {
+    if (!transactionId || !currentAccountId) return;
     try {
       setLoading(true);
+      const txRepo = new TransactionRepository();
+      const catRepo = new CategoryRepository();
+      const walletRepo = new WalletRepository();
+      const accRepo = new AccountRepository();
 
-      const txn = await transactionRepo.findById(transactionId);
+      const [txn, acc] = await Promise.all([
+        txRepo.findById(transactionId),
+        accRepo.findById(currentAccountId),
+      ]);
+
       if (!txn) {
-        Alert.alert('Error', 'Transaction not found');
+        Alert.alert('Not Found', 'Transaction could not be found.');
         navigation.goBack();
         return;
       }
 
-      const cat = txn.categoryId ? await categoryRepo.findById(txn.categoryId) : null;
-      const { WalletRepository } = await import('../../database/repositories/WalletRepository');
-      const walletRow = await new WalletRepository().findById(txn.vaultType, txn.accountId).catch(() => null);
-      setWalletName(walletRow?.name ?? null);
-
-      try {
-        const { AccountRepository } = await import('../../database/repositories/AccountRepository');
-        const acc = await new AccountRepository().findById(txn.accountId);
-        if (acc?.currency) {
-          setAccountCurrency(acc.currency);
-        }
-      } catch (err) {
-        console.warn('[TransactionDetails] Could not load account currency:', err);
-      }
-
-      console.log('[TransactionDetails] Transaction loaded:', {
-        id: txn.id,
-        hasImage: !!txn.imagePath,
-        imagePath: txn.imagePath,
-      });
-
       setTransaction(txn);
-      setCategory(cat || null);
-    } catch (error) {
-      console.error('[TransactionDetails] Error loading transaction:', error);
-      Alert.alert('Error', 'Failed to load transaction details');
-      navigation.goBack();
+      if (acc?.currency) setAccountCurrency(acc.currency);
+
+      const [cat, w, destW] = await Promise.all([
+        txn.categoryId ? catRepo.findById(txn.categoryId) : Promise.resolve(null),
+        walletRepo.findByAccountAndId(currentAccountId, txn.walletId || txn.vaultType),
+        txn.destinationWalletId
+          ? walletRepo.findByAccountAndId(currentAccountId, txn.destinationWalletId)
+          : Promise.resolve(null),
+      ]);
+
+      setCategory(cat);
+      setWallet(w);
+      setDestinationWallet(destW);
+    } catch (err) {
+      console.warn('[TransactionDetailsScreen] loadData error:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [transactionId, currentAccountId, navigation]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
 
   const handleDelete = () => {
     Alert.alert(
-      'Delete Transaction',
-      'Are you sure you want to delete this transaction? This action cannot be undone.',
+      'Delete Entry',
+      'Are you sure you want to delete this transaction? This action will reverse its effect on your wallet balance.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -123,34 +107,14 @@ export const TransactionDetailsScreen: React.FC = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              if (!transaction) return;
-
-              // Delete associated image files if they exist
-              if (transaction.imagePath) {
-                await deleteTransactionImage(transaction.id);
-              }
-
-              // Delete transaction from SQLite
-              await transactionRepo.delete(transaction.id);
-
-              // Reverse the balance change in MMKV
-              // Use converted amount if it exists, otherwise use regular amount
-              const balanceAmount = transaction.convertedAmount || transaction.amount;
-              if (transaction.type === 'income') {
-                subtractFromVault(transaction.vaultType, balanceAmount);
-              } else {
-                addToVault(transaction.vaultType, balanceAmount);
-              }
-
-              Alert.alert('Success', 'Transaction deleted successfully', [
-                {
-                  text: 'OK',
-                  onPress: () => navigation.goBack(),
-                },
-              ]);
-            } catch (error) {
-              console.error('[TransactionDetails] Error deleting transaction:', error);
-              Alert.alert('Error', 'Failed to delete transaction');
+              if (!currentAccountId || !transaction) return;
+              const txRepo = new TransactionRepository();
+              await txRepo.delete(transaction.id);
+              await syncBalancesFromDatabase(currentAccountId);
+              triggerHaptic('notificationSuccess');
+              navigation.goBack();
+            } catch (err: any) {
+              Alert.alert('Error', err?.message || 'Failed to delete transaction.');
             }
           },
         },
@@ -158,360 +122,427 @@ export const TransactionDetailsScreen: React.FC = () => {
     );
   };
 
-  const formatAmount = (amount: number, currency: string = accountCurrency) => {
-    return formatCurrency(amount, currency);
-  };
-
-  const formatDate = (timestamp: number) => {
-    const date = new Date(timestamp);
-    const options: Intl.DateTimeFormatOptions = {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    };
-    return date.toLocaleDateString('en-US', options);
-  };
-
-  const getVaultLabel = (vault: string) => {
-    if (walletName) return walletName;
-    if (vault === 'main' || vault === 'savings' || vault === 'held') {
-      return walletShortName(vault as VaultType);
+  const images = useMemo(() => {
+    if (transaction?.images && transaction.images.length > 0) {
+      return transaction.images;
     }
-    return vault.charAt(0).toUpperCase() + vault.slice(1);
-  };
+    if (transaction?.imagePath) {
+      return [transaction.imagePath];
+    }
+    return [];
+  }, [transaction]);
 
-  const handleEdit = () => {
-    navigation.navigate('AddTransaction', { transactionId });
-  };
-
-  if (loading || !transaction) {
+  if (loading && !transaction) {
     return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>Loading...</Text>
+      <View style={[styles.root, styles.center, { backgroundColor: themeColors.background }]}>
+        <ActivityIndicator color={themeColors.text} size="small" />
       </View>
     );
   }
 
+  if (!transaction) return null;
+
+  const isTransfer = transaction.type === 'transfer' || !!transaction.destinationWalletId;
+  const isIncome = transaction.type === 'income';
+  const baseAmount = transaction.convertedAmount ?? transaction.amount;
+  const hasForeignCurrency =
+    transaction.currency && transaction.currency !== accountCurrency && transaction.originalAmount;
+
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.content}>
-        {/* Header Section */}
-        <View style={styles.header}>
-          <CategoryIcon
-            icon={category?.icon ?? 'help-circle'}
-            color={category?.color ?? '#999'}
-            size="large"
-          />
-          <Text style={styles.categoryName}>{category?.name ?? 'Unknown'}</Text>
+    <View style={[styles.root, { backgroundColor: themeColors.background }]}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* 1. Hero Amount Card */}
+        <View
+          style={[
+            styles.heroCard,
+            {
+              backgroundColor: themeColors.surface,
+              borderColor: themeColors.cardBorder,
+            },
+          ]}
+        >
+          <View style={styles.heroTopRow}>
+            <View
+              style={[
+                styles.typeBadge,
+                {
+                  borderColor: themeColors.hairline,
+                  backgroundColor: themeColors.background,
+                },
+              ]}
+            >
+              <Text style={[styles.typeBadgeText, { color: themeColors.textMuted }]}>
+                {transaction.type.toUpperCase()}
+              </Text>
+            </View>
+
+            <Text style={[styles.dateText, { color: themeColors.textMuted }]}>
+              {format(new Date(transaction.date), 'dd MMM yyyy, h:mm a').toUpperCase()}
+            </Text>
+          </View>
+
+          {/* Big Amount */}
           <Text
             style={[
-              styles.amount,
-              transaction.type === 'income' ? styles.incomeAmount : styles.expenseAmount,
+              styles.amountText,
+              {
+                color: isTransfer
+                  ? themeColors.text
+                  : isIncome
+                  ? themeColors.success
+                  : themeColors.text,
+              },
             ]}
           >
-            {transaction.type === 'income' ? '+' : '-'}
-            {formatAmount(transaction.convertedAmount || transaction.amount, accountCurrency)}
-            {transaction.currency !== accountCurrency && transaction.convertedAmount && (
-              <Text style={styles.originalAmount}>
-                {' '}({formatAmount(transaction.amount, transaction.currency)})
-              </Text>
-            )}
+            {isTransfer ? '⇄ ' : isIncome ? '+' : '-'}
+            {formatCurrency(baseAmount, accountCurrency)}
           </Text>
+
+          {/* Dual Currency Subtext */}
+          {hasForeignCurrency && (
+            <View style={styles.dualCurrencyRow}>
+              <Text style={[styles.foreignAmountText, { color: themeColors.textMuted }]}>
+                Original: {formatCurrency(transaction.originalAmount!, transaction.currency)}
+              </Text>
+              {transaction.exchangeRate && (
+                <Text style={[styles.exchangeRateText, { color: themeColors.textMuted }]}>
+                  (Rate: 1 {transaction.currency} = {transaction.exchangeRate.toFixed(4)} {accountCurrency})
+                </Text>
+              )}
+            </View>
+          )}
         </View>
 
-        {/* Receipt Images */}
-        {((transaction.images && transaction.images.length > 0) || transaction.imagePath) && (() => {
-          const allImages: string[] = transaction.images && transaction.images.length > 0
-            ? transaction.images
-            : transaction.imagePath
-              ? [transaction.imagePath]
-              : [];
-          return (
-            <View style={styles.imageSection}>
-              <View style={styles.imageHeader}>
-                <MaterialCommunityIcons name="receipt" size={20} color={themeColors.primary} />
-                <Text style={styles.imageSectionTitle}>
-                  Receipt / Proof ({allImages.length})
+        {/* 2. Architectural Specification Table */}
+        <View
+          style={[
+            styles.specsCard,
+            {
+              backgroundColor: themeColors.surface,
+              borderColor: themeColors.cardBorder,
+            },
+          ]}
+        >
+          {/* Row: Description / Memo */}
+          <View style={[styles.specRow, { borderBottomColor: themeColors.hairline }]}>
+            <Text style={[styles.specLabel, { color: themeColors.textMuted }]}>
+              MEMO / TITLE
+            </Text>
+            <Text style={[styles.specValue, { color: themeColors.text }]}>
+              {transaction.description || 'No description provided'}
+            </Text>
+          </View>
+
+          {/* Row: Category */}
+          <View style={[styles.specRow, { borderBottomColor: themeColors.hairline }]}>
+            <Text style={[styles.specLabel, { color: themeColors.textMuted }]}>
+              CATEGORY
+            </Text>
+            <View style={styles.categoryValueRow}>
+              {category?.icon && (
+                <MaterialCommunityIcons
+                  name={category.icon}
+                  size={16}
+                  color={themeColors.text}
+                  style={{ marginRight: 6 }}
+                />
+              )}
+              <Text style={[styles.specValue, { color: themeColors.text }]}>
+                {category?.name || 'Uncategorized'}
+              </Text>
+            </View>
+          </View>
+
+          {/* Row: Source Wallet */}
+          <View style={[styles.specRow, { borderBottomColor: themeColors.hairline }]}>
+            <Text style={[styles.specLabel, { color: themeColors.textMuted }]}>
+              {isTransfer ? 'SOURCE WALLET' : 'WALLET'}
+            </Text>
+            <View style={styles.categoryValueRow}>
+              <MaterialCommunityIcons
+                name={wallet?.icon || 'wallet-outline'}
+                size={16}
+                color={themeColors.text}
+                style={{ marginRight: 6 }}
+              />
+              <Text style={[styles.specValue, { color: themeColors.text }]}>
+                {wallet?.name || transaction.walletId || transaction.vaultType}
+              </Text>
+            </View>
+          </View>
+
+          {/* Row: Destination Wallet (If transfer) */}
+          {isTransfer && destinationWallet && (
+            <View style={[styles.specRow, { borderBottomColor: themeColors.hairline }]}>
+              <Text style={[styles.specLabel, { color: themeColors.textMuted }]}>
+                DESTINATION WALLET
+              </Text>
+              <View style={styles.categoryValueRow}>
+                <MaterialCommunityIcons
+                  name={destinationWallet.icon || 'wallet-outline'}
+                  size={16}
+                  color={themeColors.text}
+                  style={{ marginRight: 6 }}
+                />
+                <Text style={[styles.specValue, { color: themeColors.text }]}>
+                  {destinationWallet.name}
                 </Text>
               </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {allImages.map((img, idx) => {
-                  const uri = img.startsWith('file://') ? img : `file://${img}`;
-                  return (
-                    <TouchableOpacity
-                      key={idx}
-                      onPress={() => { setViewerIndex(idx); setShowImageViewer(true); }}
-                      activeOpacity={0.8}
-                      style={styles.thumbWrap}
-                    >
-                      <Image source={{ uri }} style={styles.thumbnailImage} resizeMode="cover" />
-                      <View style={styles.imageOverlay}>
-                        <MaterialCommunityIcons name="magnify-plus" size={24} color="#FFF" />
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
             </View>
-          );
-        })()}
-
-        {/* Details Section */}
-        <View style={styles.detailsSection}>
-          <DetailRow
-            icon="calendar"
-            label="Date"
-            value={formatDate(transaction.date)}
-          />
-          <DetailRow
-            icon="wallet"
-            label="Wallet"
-            value={getVaultLabel(transaction.vaultType)}
-          />
-          <DetailRow
-            icon="swap-horizontal"
-            label="Type"
-            value={transaction.type === 'income' ? 'Income' : 'Expense'}
-          />
-          {transaction.description ? (
-            <DetailRow
-              icon="note-text"
-              label="Description"
-              value={transaction.description}
-            />
-          ) : null}
-          {transaction.isRecurring && (
-            <DetailRow
-              icon="repeat"
-              label="Recurring"
-              value="Yes"
-            />
           )}
-          {transaction.currency !== accountCurrency && transaction.convertedAmount ? (
-            <>
-              <DetailRow
-                icon="cash-multiple"
-                label="Original Amount"
-                value={`${transaction.amount.toFixed(3)} ${transaction.currency}`}
-              />
-              <DetailRow
-                icon="currency-usd"
-                label="Exchange Rate"
-                value={`1 ${transaction.currency} ≈ ${(transaction.exchangeRate ?? (transaction.convertedAmount / transaction.amount)).toFixed(4)} ${accountCurrency}`}
-              />
-            </>
-          ) : null}
+
+          {/* Row: Recurring Flag */}
+          <View style={styles.specRow}>
+            <Text style={[styles.specLabel, { color: themeColors.textMuted }]}>
+              COMMITMENT TYPE
+            </Text>
+            <Text style={[styles.specValue, { color: themeColors.text }]}>
+              {transaction.isRecurring ? 'RECURRING AUTOMATION' : 'ONE-TIME MANUAL'}
+            </Text>
+          </View>
         </View>
 
-        {/* Actions Section */}
-        <View style={styles.actionsSection}>
-          <Button
-            title="Edit Transaction"
-            onPress={handleEdit}
-            leftIcon={<MaterialCommunityIcons name="pencil" size={20} color="#FFF" />}
-          />
-          <Button
-            title="Delete Transaction"
-            onPress={handleDelete}
-            variant="outline"
-            style={styles.deleteButton}
-          />
+        {/* 3. Attached Receipts & Proof */}
+        {images.length > 0 && (
+          <View
+            style={[
+              styles.receiptsCard,
+              {
+                backgroundColor: themeColors.surface,
+                borderColor: themeColors.cardBorder,
+              },
+            ]}
+          >
+            <Text style={[styles.receiptsTitle, { color: themeColors.textMuted }]}>
+              ATTACHED RECEIPT ({images.length})
+            </Text>
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.receiptsRow}>
+              {images.map((uri, idx) => (
+                <TouchableOpacity
+                  key={uri + idx}
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    triggerHaptic('selection');
+                    setActiveImageIndex(idx);
+                    setViewerVisible(true);
+                  }}
+                  style={[
+                    styles.thumbnailWrapper,
+                    {
+                      borderColor: themeColors.hairline,
+                      backgroundColor: themeColors.background,
+                    },
+                  ]}
+                >
+                  <Image source={{ uri }} style={styles.thumbnail} resizeMode="cover" />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* 4. Action Duo: Edit & Delete */}
+        <View style={styles.actionDuoRow}>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => {
+              triggerHaptic('selection');
+              navigation.navigate('AddTransaction', { transactionId: transaction.id });
+            }}
+            style={[
+              styles.actionBtn,
+              {
+                borderColor: themeColors.cardBorder,
+                backgroundColor: themeColors.surface,
+              },
+            ]}
+          >
+            <MaterialCommunityIcons
+              name="pencil-outline"
+              size={16}
+              color={themeColors.text}
+              style={{ marginRight: 8 }}
+            />
+            <Text style={[styles.actionBtnText, { color: themeColors.text }]}>
+              EDIT ENTRY
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => {
+              triggerHaptic('impactMedium');
+              handleDelete();
+            }}
+            style={[
+              styles.actionBtn,
+              {
+                borderColor: themeColors.error,
+                backgroundColor: themeColors.surface,
+              },
+            ]}
+          >
+            <MaterialCommunityIcons
+              name="trash-can-outline"
+              size={16}
+              color={themeColors.error}
+              style={{ marginRight: 8 }}
+            />
+            <Text style={[styles.actionBtnText, { color: themeColors.error }]}>
+              DELETE ENTRY
+            </Text>
+          </TouchableOpacity>
         </View>
-      </View>
+      </ScrollView>
 
-      {/* Image Viewer Modal */}
-      {showImageViewer && (() => {
-        const allImages = transaction.images && transaction.images.length > 0
-          ? transaction.images
-          : transaction.imagePath ? [transaction.imagePath] : [];
-        const uris = allImages.map(img => img.startsWith('file://') ? img : `file://${img}`);
-        return (
-          <ImageViewer
-            visible={showImageViewer}
-            images={uris}
-            initialIndex={viewerIndex}
-            onClose={() => setShowImageViewer(false)}
-          />
-        );
-      })()}
-    </ScrollView>
-  );
-};
-
-interface DetailRowProps {
-  icon: string;
-  label: string;
-  value: string;
-}
-
-const DetailRow: React.FC<DetailRowProps> = ({ icon, label, value }) => {
-  const themeColors = useThemeColors();
-  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
-
-  return (
-    <View style={styles.detailRow}>
-      <View style={styles.detailLabel}>
-        <MaterialCommunityIcons
-          name={icon as any}
-          size={20}
-          color={themeColors.textSecondary}
+      {/* Full-Screen Image Viewer */}
+      {images.length > 0 && (
+        <ImageViewer
+          visible={viewerVisible}
+          images={images}
+          initialIndex={activeImageIndex}
+          onClose={() => setViewerVisible(false)}
         />
-        <Text style={styles.detailLabelText}>{label}</Text>
-      </View>
-      <Text style={styles.detailValue}>{value}</Text>
+      )}
     </View>
   );
 };
 
-const createStyles = (themeColors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
-  container: {
+const styles = StyleSheet.create({
+  root: {
     flex: 1,
-    backgroundColor: themeColors.background,
   },
-  loadingContainer: {
-    flex: 1,
+  center: {
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: themeColors.background,
   },
-  loadingText: {
-    ...typography.body,
-    color: themeColors.textSecondary,
+  scroll: {
+    flex: 1,
   },
-  content: {
-    padding: spacing.lg,
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 40,
   },
-  header: {
-    alignItems: 'center',
-    backgroundColor: themeColors.surface,
-    borderRadius: 16,
-    padding: spacing.xl,
-    marginBottom: spacing.lg,
+  heroCard: {
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    padding: 18,
+    marginBottom: 16,
   },
-  categoryName: {
-    ...typography.h2,
-    color: themeColors.text,
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  amount: {
-    ...typography.h1,
-    fontWeight: '700',
-  },
-  incomeAmount: {
-    color: themeColors.success,
-  },
-  expenseAmount: {
-    color: themeColors.error,
-  },
-  originalAmount: {
-    ...typography.bodySmall,
-    color: themeColors.textSecondary,
-    fontWeight: '400',
-  },
-  detailsSection: {
-    backgroundColor: themeColors.surface,
-    borderRadius: 16,
-    padding: spacing.lg,
-    marginBottom: spacing.lg,
-  },
-  detailRow: {
+  heroTopRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: themeColors.border,
+    marginBottom: 12,
   },
-  detailLabel: {
+  typeBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderRadius: 2,
+  },
+  typeBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  dateText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+  },
+  amountText: {
+    fontSize: 36,
+    fontWeight: '800',
+    letterSpacing: -1,
+    fontVariant: ['tabular-nums'],
+    marginBottom: 4,
+  },
+  dualCurrencyRow: {
+    marginTop: 4,
+  },
+  foreignAmountText: {
+    fontSize: 13,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+  },
+  exchangeRateText: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  specsCard: {
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  specRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    justifyContent: 'space-between',
+    paddingVertical: 14,
   },
-  detailLabelText: {
-    ...typography.body,
-    color: themeColors.textSecondary,
+  specLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
   },
-  detailValue: {
-    ...typography.body,
+  specValue: {
+    fontSize: 13,
     fontWeight: '600',
-    color: themeColors.text,
   },
-  actionsSection: {
-    gap: spacing.md,
-  },
-  deleteButton: {
-    borderColor: themeColors.error,
-  },
-  imageSection: {
-    backgroundColor: themeColors.surface,
-    borderRadius: 16,
-    padding: spacing.lg,
-    marginBottom: spacing.lg,
-  },
-  imageHeader: {
+  categoryValueRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
   },
-  imageSectionTitle: {
-    ...typography.bodyLarge,
-    fontWeight: '600',
-    color: themeColors.text,
+  receiptsCard: {
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    padding: 16,
+    marginBottom: 16,
   },
-  imageContainer: {
-    position: 'relative',
-    borderRadius: 12,
+  receiptsTitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginBottom: 12,
+  },
+  receiptsRow: {
+    flexDirection: 'row',
+  },
+  thumbnailWrapper: {
+    width: 72,
+    height: 72,
+    borderRadius: 2,
+    borderWidth: 1,
     overflow: 'hidden',
-    aspectRatio: 1,
-    backgroundColor: themeColors.background,
+    marginRight: 10,
   },
-  thumbWrap: {
-    width: 110,
-    height: 110,
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginRight: spacing.sm,
-    position: 'relative',
+  thumbnail: {
+    width: '100%',
+    height: '100%',
   },
-  thumbnailImage: {
-    width: 110,
-    height: 110,
+  actionDuoRow: {
+    flexDirection: 'row',
+    gap: 12,
   },
-  imageOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  imageOverlayText: {
-    ...typography.caption,
-    color: '#FFFFFF',
-    marginTop: spacing.xs,
-  },
-  imageErrorContainer: {
+  actionBtn: {
     flex: 1,
-    justifyContent: 'center',
+    height: 44,
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    flexDirection: 'row',
     alignItems: 'center',
-    padding: spacing.lg,
+    justifyContent: 'center',
   },
-  imageErrorText: {
-    ...typography.body,
-    color: themeColors.textSecondary,
-    marginTop: spacing.md,
-    textAlign: 'center',
-  },
-  imageErrorPath: {
-    ...typography.caption,
-    color: themeColors.textSecondary,
-    marginTop: spacing.xs,
-    textAlign: 'center',
+  actionBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
   },
 });

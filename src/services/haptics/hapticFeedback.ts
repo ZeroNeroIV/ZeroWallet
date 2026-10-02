@@ -215,6 +215,45 @@ export const softHaptic = () => {
   }
 };
 
+/**
+ * Universal haptic trigger helper
+ */
+export const triggerHaptic = (
+  type:
+    | 'impactLight'
+    | 'impactMedium'
+    | 'impactHeavy'
+    | 'selection'
+    | 'success'
+    | 'warning'
+    | 'error'
+    | 'notificationSuccess'
+    | 'notificationWarning'
+    | 'notificationError' = 'impactLight'
+) => {
+  switch (type) {
+    case 'impactLight':
+      return lightHaptic();
+    case 'impactMedium':
+      return mediumHaptic();
+    case 'impactHeavy':
+      return heavyHaptic();
+    case 'selection':
+      return selectionHaptic();
+    case 'success':
+    case 'notificationSuccess':
+      return successHaptic();
+    case 'warning':
+    case 'notificationWarning':
+      return warningHaptic();
+    case 'error':
+    case 'notificationError':
+      return errorHaptic();
+    default:
+      return lightHaptic();
+  }
+};
+
 // Export all haptic functions
 export default {
   light: lightHaptic,
@@ -226,4 +265,5 @@ export default {
   selection: selectionHaptic,
   rigid: rigidHaptic,
   soft: softHaptic,
+  trigger: triggerHaptic,
 };

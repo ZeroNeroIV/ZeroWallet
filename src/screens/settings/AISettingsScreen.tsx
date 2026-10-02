@@ -1,8 +1,12 @@
 /**
- * Purpose: Configure AI Assistant settings: Laya System-1 fast router,
- * Multi-Provider setup (Groq SLMs, Google Gemini, Local Ollama/Custom).
+ * AISettingsScreen — Simplizum Multi-Provider Architectural Deck
  *
- * Airy Minimalist Bento design with high contrast controls.
+ * Disciplined, sparse, hairline-bordered AI engine configuration:
+ *  - System-1 Laya Sub-20ms Router toggle
+ *  - Multi-Provider architectural deck (Google Gemini, Groq SLM, Local Ollama)
+ *  - Foundation model matrix with latency & capability specs
+ *  - Secure masked API credential storage
+ *  - Real-time connectivity benchmark with millisecond latency ping
  */
 
 import React, { useState, useMemo, useCallback } from 'react';
@@ -20,10 +24,10 @@ import {
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSettingsStore } from '../../store/settingsStore';
-import { spacing, borderRadius } from '../../theme/spacing';
+import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { lightHaptic, mediumHaptic } from '../../services/haptics/hapticFeedback';
+import { lightHaptic, mediumHaptic, heavyHaptic, errorHaptic } from '../../services/haptics/hapticFeedback';
 import {
   PROVIDER_LABELS,
   PROVIDER_MODELS,
@@ -41,7 +45,7 @@ export default function AISettingsScreen({ navigation }: any) {
   const themeColors = useThemeColors();
 
   // State
-  const [provider, setProvider] = useState<AIProvider>(aiSettings?.provider || 'groq');
+  const [provider, setProvider] = useState<AIProvider>(aiSettings?.provider || 'gemini');
   const [system1Enabled, setSystem1Enabled] = useState<boolean>(aiSettings?.system1Enabled ?? true);
 
   // Keys per provider
@@ -61,17 +65,16 @@ export default function AISettingsScreen({ navigation }: any) {
 
   const [showKey, setShowKey] = useState<boolean>(false);
   const [isValidating, setIsValidating] = useState<boolean>(false);
+  const [latencyResult, setLatencyResult] = useState<number | null>(null);
   const [hasChanges, setHasChanges] = useState<boolean>(false);
 
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
 
-  const activeKey = provider === 'gemini' ? geminiKey : provider === 'groq' ? groqKey : customKey;
-
   const handleProviderSelect = (p: AIProvider) => {
     lightHaptic();
     setProvider(p);
+    setLatencyResult(null);
     setHasChanges(true);
-    // select default model for provider
     const models = PROVIDER_MODELS[p];
     if (models && models.length > 0) {
       setSelectedModel(models.find((m) => m.recommended)?.id || models[0].id);
@@ -79,25 +82,28 @@ export default function AISettingsScreen({ navigation }: any) {
   };
 
   const handleGetAPIKey = useCallback(async () => {
-    mediumHaptic();
+    lightHaptic();
     const url = provider === 'groq' ? GROQ_CONSOLE_URL : GEMINI_STUDIO_URL;
     const canOpen = await Linking.canOpenURL(url);
     if (canOpen) {
       await Linking.openURL(url);
     } else {
-      Alert.alert('Cannot open link', `Copy into browser:\n${url}`);
+      Alert.alert('Cannot open link', `Direct URL:\n${url}`);
     }
   }, [provider]);
 
-  // Live test connection
+  // Live test connection with latency benchmark
   const handleTestConnection = useCallback(async () => {
     mediumHaptic();
     setIsValidating(true);
+    setLatencyResult(null);
+    const startTime = Date.now();
 
     try {
       if (provider === 'groq') {
         if (!groqKey || groqKey.trim().length === 0) {
-          Alert.alert('Key Required', 'Please enter your Groq API key first.');
+          errorHaptic();
+          Alert.alert('Key Required', 'Please enter your Groq API key.');
           return;
         }
 
@@ -114,15 +120,20 @@ export default function AISettingsScreen({ navigation }: any) {
           }),
         });
 
+        const elapsed = Date.now() - startTime;
         if (res.ok) {
-          Alert.alert('Success!', 'Connected to Groq Cloud successfully with Llama 3.2.');
+          lightHaptic();
+          setLatencyResult(elapsed);
+          Alert.alert('BENCHMARK PASSED', `Connected to Groq Cloud in ${elapsed}ms.`);
         } else {
+          errorHaptic();
           const err = await res.json();
-          Alert.alert('Connection Failed', err.error?.message || 'Check your Groq key.');
+          Alert.alert('Connection Failed', err.error?.message || 'Check your Groq API key.');
         }
       } else if (provider === 'gemini') {
         if (!geminiKey || geminiKey.trim().length === 0) {
-          Alert.alert('Key Required', 'Please enter your Google Gemini API key first.');
+          errorHaptic();
+          Alert.alert('Key Required', 'Please enter your Google Gemini API key.');
           return;
         }
 
@@ -131,14 +142,17 @@ export default function AISettingsScreen({ navigation }: any) {
           { method: 'GET' }
         );
 
+        const elapsed = Date.now() - startTime;
         if (res.ok) {
-          Alert.alert('Success!', 'Connected to Google Gemini successfully.');
+          lightHaptic();
+          setLatencyResult(elapsed);
+          Alert.alert('BENCHMARK PASSED', `Connected to Google Gemini in ${elapsed}ms.`);
         } else {
+          errorHaptic();
           const err = await res.json();
           Alert.alert('Connection Failed', err.error?.message || 'Check your Gemini key.');
         }
       } else {
-        // Custom OpenAI endpoint
         let endpoint = customBaseUrl.trim();
         if (!endpoint.endsWith('/chat/completions')) {
           endpoint = endpoint.replace(/\/+$/, '') + '/chat/completions';
@@ -159,13 +173,18 @@ export default function AISettingsScreen({ navigation }: any) {
           }),
         });
 
+        const elapsed = Date.now() - startTime;
         if (res.ok) {
-          Alert.alert('Success!', 'Connected to local/custom OpenAI endpoint successfully.');
+          lightHaptic();
+          setLatencyResult(elapsed);
+          Alert.alert('BENCHMARK PASSED', `Connected to Local Endpoint in ${elapsed}ms.`);
         } else {
+          errorHaptic();
           Alert.alert('Connection Failed', `Status ${res.status}. Verify endpoint URL and model.`);
         }
       }
     } catch (error: any) {
+      errorHaptic();
       Alert.alert(
         'Connection Error',
         `Could not reach endpoint: ${error.message || 'Please check network connection.'}`
@@ -175,10 +194,8 @@ export default function AISettingsScreen({ navigation }: any) {
     }
   }, [provider, groqKey, geminiKey, customKey, customBaseUrl, selectedModel]);
 
-  // Save settings
   const handleSave = () => {
-    mediumHaptic();
-
+    heavyHaptic();
     const activeApiKey =
       provider === 'groq' ? groqKey : provider === 'gemini' ? geminiKey : customKey;
 
@@ -195,455 +212,588 @@ export default function AISettingsScreen({ navigation }: any) {
     });
 
     setHasChanges(false);
-    Alert.alert('Saved', 'AI Assistant preferences updated.');
+    Alert.alert('CONFIGURED', 'AI Assistant preferences updated.');
   };
 
   const availableModels = PROVIDER_MODELS[provider] || [];
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Laya System-1 Fast Engine Card */}
-      <View style={styles.bentoCard}>
-        <View style={styles.cardHeader}>
-          <View style={[styles.iconCircle, { backgroundColor: 'rgba(245, 158, 11, 0.15)' }]}>
-            <MaterialCommunityIcons name="lightning-bolt" size={24} color="#F59E0B" />
-          </View>
-          <View style={styles.headerTitleCol}>
-            <Text style={styles.cardTitle}>Laya System-1 Engine</Text>
-            <Text style={styles.cardBadgeText}>Non-Autoregressive • On-Device</Text>
-          </View>
-          <Switch
-            value={system1Enabled}
-            onValueChange={(val) => {
-              lightHaptic();
-              setSystem1Enabled(val);
-              setHasChanges(true);
-            }}
-            trackColor={{ false: themeColors.border, true: themeColors.primary }}
-            thumbColor={system1Enabled ? themeColors.onPrimary : themeColors.textMuted}
-          />
+    <View style={styles.root}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => {
+            lightHaptic();
+            navigation.goBack();
+          }}
+        >
+          <MaterialCommunityIcons name="arrow-left" size={20} color={themeColors.text} />
+        </TouchableOpacity>
+        <View style={styles.headerTitles}>
+          <Text style={styles.headerSuper}>INTELLIGENCE ENGINE</Text>
+          <Text style={styles.headerTitle}>AI & LAYA CONFIG</Text>
         </View>
-
-        <Text style={styles.cardBodyText}>
-          Routes routine operations (logging transactions, checking balances, and viewing summaries)
-          in <Text style={styles.boldText}>&lt;20ms</Text> directly on your phone with zero token usage.
-          Complex questions seamlessly pass to System-2.
-        </Text>
-      </View>
-
-      {/* Provider Selector Card */}
-      <View style={styles.bentoCard}>
-        <Text style={styles.sectionHeading}>SYSTEM-2 PROVIDER</Text>
-        <Text style={styles.sectionSubtitle}>
-          Choose the intelligence engine for deep reasoning and budgeting advice
-        </Text>
-
-        <View style={styles.providerGrid}>
-          {(['groq', 'gemini', 'custom_openai'] as AIProvider[]).map((p) => {
-            const isSelected = provider === p;
-            const meta = PROVIDER_LABELS[p];
-            return (
-              <TouchableOpacity
-                key={p}
-                style={[styles.providerTile, isSelected && styles.providerTileSelected]}
-                onPress={() => handleProviderSelect(p)}
-                activeOpacity={0.8}
-              >
-                <View style={styles.tileHeader}>
-                  <MaterialCommunityIcons
-                    name={meta.icon as any}
-                    size={22}
-                    color={isSelected ? themeColors.primary : themeColors.textSecondary}
-                  />
-                  {isSelected && (
-                    <MaterialCommunityIcons name="check-circle" size={18} color={themeColors.primary} />
-                  )}
-                </View>
-                <Text style={[styles.providerTitle, isSelected && styles.providerTitleSelected]}>
-                  {meta.name}
-                </Text>
-                <Text style={styles.providerDesc} numberOfLines={2}>
-                  {meta.subtitle}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+        <View style={styles.statusPill}>
+          <Text style={styles.statusText}>{provider.toUpperCase()}</Text>
         </View>
       </View>
 
-      {/* Provider Configuration Card */}
-      <View style={styles.bentoCard}>
-        <Text style={styles.sectionHeading}>CREDENTIALS & MODEL</Text>
-
-        {provider !== 'custom_openai' ? (
-          <>
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>
-                {provider === 'groq' ? 'Groq API Key' : 'Gemini API Key'}
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        {/* CARD 1: LAYA SYSTEM-1 FAST ROUTER */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardHeaderTitle}>LAYA SYSTEM-1 HYPER-ROUTER</Text>
+          </View>
+          <View style={styles.row}>
+            <View style={styles.rowLeft}>
+              <Text style={styles.rowLabel}>Non-Autoregressive Fast Path</Text>
+              <Text style={styles.rowDesc}>
+                Executes balance queries & transaction logging in &lt;20ms with 0 token overhead
               </Text>
-              <View style={styles.inputRow}>
+            </View>
+            <Switch
+              value={system1Enabled}
+              onValueChange={(val) => {
+                lightHaptic();
+                setSystem1Enabled(val);
+                setHasChanges(true);
+              }}
+              trackColor={{ false: themeColors.border, true: themeColors.text }}
+              thumbColor={themeColors.background}
+            />
+          </View>
+        </View>
+
+        {/* CARD 2: MULTI-PROVIDER ARCHITECTURAL DECK */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardHeaderTitle}>FOUNDATION PROVIDER DECK</Text>
+          </View>
+          <View style={styles.providerRow}>
+            {(['gemini', 'groq', 'custom_openai'] as AIProvider[]).map((p) => {
+              const isSelected = provider === p;
+              const meta = PROVIDER_LABELS[p];
+              return (
+                <TouchableOpacity
+                  key={p}
+                  style={[styles.providerTab, isSelected ? styles.providerTabActive : null]}
+                  onPress={() => handleProviderSelect(p)}
+                >
+                  <Text style={[styles.providerTabTitle, isSelected ? styles.providerTabTitleActive : null]}>
+                    {meta.name.toUpperCase()}
+                  </Text>
+                  <Text style={[styles.providerTabSub, isSelected ? styles.providerTabSubActive : null]}>
+                    {p === 'gemini' ? 'Multimodal' : p === 'groq' ? 'Ultra-Fast' : 'Self-Hosted'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* CARD 3: CREDENTIALS & SECURITY VAULT */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardHeaderTitle}>CREDENTIALS & SECURITY</Text>
+          </View>
+
+          {provider !== 'custom_openai' ? (
+            <View style={styles.cardBody}>
+              <Text style={styles.fieldLabel}>
+                {provider === 'groq' ? 'GROQ API KEY' : 'GOOGLE GEMINI API KEY'}
+              </Text>
+              <View style={styles.inputContainer}>
                 <TextInput
-                  style={styles.textInput}
+                  style={styles.keyInput}
                   value={provider === 'groq' ? groqKey : geminiKey}
                   onChangeText={(val) => {
                     if (provider === 'groq') setGroqKey(val.trim());
                     else setGeminiKey(val.trim());
                     setHasChanges(true);
                   }}
-                  placeholder={`Paste your ${provider === 'groq' ? 'gsk_...' : 'AIza...'} key`}
-                  placeholderTextColor={themeColors.textMuted}
+                  placeholder={`Paste ${provider === 'groq' ? 'gsk_...' : 'AIza...'} key`}
+                  placeholderTextColor={themeColors.textSecondary}
                   secureTextEntry={!showKey}
                   autoCapitalize="none"
                   autoCorrect={false}
                 />
                 <TouchableOpacity
+                  style={styles.eyeBtn}
                   onPress={() => setShowKey(!showKey)}
-                  style={styles.inputIconBtn}
                   hitSlop={8}
                 >
                   <MaterialCommunityIcons
                     name={showKey ? 'eye-off' : 'eye'}
-                    size={20}
+                    size={18}
                     color={themeColors.textSecondary}
                   />
                 </TouchableOpacity>
               </View>
-            </View>
 
-            <TouchableOpacity
-              style={styles.getKeyBtn}
-              onPress={handleGetAPIKey}
-              activeOpacity={0.7}
-            >
-              <MaterialCommunityIcons name="open-in-new" size={16} color={themeColors.primary} />
-              <Text style={styles.getKeyBtnText}>
-                Get free key from {provider === 'groq' ? 'Groq Console' : 'Google AI Studio'}
-              </Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Local / Endpoint Base URL</Text>
+              <TouchableOpacity style={styles.linkRow} onPress={handleGetAPIKey}>
+                <MaterialCommunityIcons name="open-in-new" size={14} color={themeColors.text} />
+                <Text style={styles.linkText}>
+                  Get free key from {provider === 'groq' ? 'Groq Console' : 'Google AI Studio'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.cardBody}>
+              <Text style={styles.fieldLabel}>LOCAL ENDPOINT BASE URL</Text>
               <TextInput
-                style={[styles.textInput, styles.singleLineInput]}
+                style={styles.plainInput}
                 value={customBaseUrl}
                 onChangeText={(val) => {
                   setCustomBaseUrl(val.trim());
                   setHasChanges(true);
                 }}
                 placeholder="http://192.168.1.100:11434/v1"
-                placeholderTextColor={themeColors.textMuted}
+                placeholderTextColor={themeColors.textSecondary}
                 autoCapitalize="none"
                 autoCorrect={false}
               />
-            </View>
 
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Endpoint API Key (Optional)</Text>
+              <Text style={[styles.fieldLabel, { marginTop: spacing.md }]}>BEARER TOKEN (OPTIONAL)</Text>
               <TextInput
-                style={[styles.textInput, styles.singleLineInput]}
+                style={styles.plainInput}
                 value={customKey}
                 onChangeText={(val) => {
                   setCustomKey(val.trim());
                   setHasChanges(true);
                 }}
-                placeholder="Optional Bearer token"
-                placeholderTextColor={themeColors.textMuted}
+                placeholder="Authorization header token"
+                placeholderTextColor={themeColors.textSecondary}
                 secureTextEntry={!showKey}
                 autoCapitalize="none"
               />
             </View>
-          </>
-        )}
+          )}
+        </View>
 
-        {/* Model Picker */}
-        <Text style={[styles.inputLabel, { marginTop: 14 }]}>Selected Model</Text>
-        <View style={styles.modelList}>
-          {availableModels.map((m) => {
+        {/* CARD 4: FOUNDATION MODEL MATRIX */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardHeaderTitle}>FOUNDATION MODEL MATRIX</Text>
+          </View>
+          {availableModels.map((m, idx) => {
             const isSelected = selectedModel === m.id;
             return (
-              <TouchableOpacity
-                key={m.id}
-                style={[styles.modelRow, isSelected && styles.modelRowSelected]}
-                onPress={() => {
-                  lightHaptic();
-                  setSelectedModel(m.id);
-                  setHasChanges(true);
-                }}
-                activeOpacity={0.75}
-              >
-                <View style={styles.modelRowLeft}>
-                  <Text style={[styles.modelName, isSelected && styles.modelNameSelected]}>
-                    {m.name}
-                  </Text>
-                  <Text style={styles.modelDesc}>{m.description}</Text>
-                </View>
-                {isSelected && (
-                  <MaterialCommunityIcons name="check" size={20} color={themeColors.primary} />
-                )}
-              </TouchableOpacity>
+              <React.Fragment key={m.id}>
+                {idx > 0 && <View style={styles.divider} />}
+                <TouchableOpacity
+                  style={[styles.modelRow, isSelected ? styles.modelRowActive : null]}
+                  onPress={() => {
+                    lightHaptic();
+                    setSelectedModel(m.id);
+                    setHasChanges(true);
+                  }}
+                >
+                  <View style={styles.modelLeft}>
+                    <View style={styles.modelNameRow}>
+                      <Text style={[styles.modelName, isSelected ? styles.modelNameActive : null]}>
+                        {m.name}
+                      </Text>
+                      {m.recommended && (
+                        <View style={styles.recBadge}>
+                          <Text style={styles.recBadgeText}>RECOMMENDED</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.modelDesc}>{m.description}</Text>
+                  </View>
+                  <View style={styles.modelRight}>
+                    {isSelected ? (
+                      <View style={styles.checkPill}>
+                        <Text style={styles.checkPillText}>SELECTED</Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.selectText}>SELECT</Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              </React.Fragment>
             );
           })}
         </View>
 
-        {/* Test Connection Button */}
-        <TouchableOpacity
-          style={styles.testBtn}
-          onPress={handleTestConnection}
-          disabled={isValidating}
-          activeOpacity={0.75}
-        >
-          {isValidating ? (
-            <ActivityIndicator size="small" color={themeColors.primary} />
-          ) : (
-            <>
-              <MaterialCommunityIcons name="connection" size={18} color={themeColors.primary} />
-              <Text style={styles.testBtnText}>Test Connection</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
+        {/* CARD 5: LATENCY BENCHMARK & TEST */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardHeaderTitle}>CONNECTIVITY & LATENCY BENCHMARK</Text>
+          </View>
+          <View style={styles.benchmarkBody}>
+            <View style={styles.benchmarkMeta}>
+              <Text style={styles.benchmarkLabel}>ENDPOINT LATENCY:</Text>
+              <Text style={styles.benchmarkValue}>
+                {latencyResult !== null ? `${latencyResult} ms` : 'NOT TESTED'}
+              </Text>
+            </View>
 
-      {/* Save Button */}
-      <TouchableOpacity
-        style={[styles.saveBtn, !hasChanges && styles.saveBtnMuted]}
-        onPress={handleSave}
-        activeOpacity={0.8}
-      >
-        <MaterialCommunityIcons name="content-save-outline" size={20} color={themeColors.onPrimary} />
-        <Text style={styles.saveBtnText}>Save Preferences</Text>
-      </TouchableOpacity>
-    </ScrollView>
+            <TouchableOpacity
+              style={styles.pingButton}
+              onPress={handleTestConnection}
+              disabled={isValidating}
+            >
+              {isValidating ? (
+                <ActivityIndicator size="small" color={themeColors.text} />
+              ) : (
+                <>
+                  <MaterialCommunityIcons name="speedometer" size={16} color={themeColors.text} />
+                  <Text style={styles.pingButtonText}>RUN LIVE LATENCY BENCHMARK</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* BOTTOM SAVE BUTTON */}
+        <TouchableOpacity
+          style={[styles.saveButton, !hasChanges ? styles.saveButtonMuted : null]}
+          onPress={handleSave}
+        >
+          <Text style={styles.saveButtonText}>SAVE ARCHITECTURAL PREFERENCES</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </View>
   );
 }
 
-const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
+const createStyles = (theme: any) =>
   StyleSheet.create({
-    container: {
+    root: {
       flex: 1,
-      backgroundColor: themeColors.background,
+      backgroundColor: theme.background,
     },
-    content: {
-      padding: spacing.lg,
-      paddingBottom: 60,
-      gap: 16,
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: spacing.md,
+      paddingTop: spacing.xl,
+      paddingBottom: spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.hairline || theme.border,
+      gap: spacing.sm,
     },
-    bentoCard: {
-      backgroundColor: themeColors.surface,
-      borderRadius: 24,
-      padding: 20,
+    backButton: {
+      width: 36,
+      height: 36,
       borderWidth: 1,
-      borderColor: themeColors.cardBorder,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 3 },
-      shadowOpacity: 0.08,
-      shadowRadius: 8,
-      elevation: 3,
+      borderColor: theme.hairline || theme.border,
+      borderRadius: 2,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    headerTitles: {
+      flex: 1,
+    },
+    headerSuper: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 10,
+      letterSpacing: 1.5,
+      fontWeight: '700',
+    },
+    headerTitle: {
+      ...typography.h3,
+      color: theme.text,
+      letterSpacing: 0.5,
+      fontWeight: '700',
+    },
+    statusPill: {
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 4,
+      borderRadius: 2,
+    },
+    statusText: {
+      ...typography.caption,
+      color: theme.text,
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 0.8,
+    },
+    scrollView: {
+      flex: 1,
+    },
+    scrollContent: {
+      padding: spacing.md,
+      paddingBottom: spacing.xxl + 40,
+    },
+    card: {
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      backgroundColor: theme.card || theme.surface,
+      borderRadius: 2,
+      marginBottom: spacing.md,
+      overflow: 'hidden',
     },
     cardHeader: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.hairline || theme.border,
+      backgroundColor: theme.background,
+    },
+    cardHeaderTitle: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 1.2,
+    },
+    cardBody: {
+      padding: spacing.md,
+    },
+    row: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 12,
-    },
-    iconCircle: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: 12,
-    },
-    headerTitleCol: {
-      flex: 1,
-    },
-    cardTitle: {
-      ...typography.h3,
-      color: themeColors.text,
-      fontWeight: '700',
-      marginBottom: 2,
-    },
-    cardBadgeText: {
-      ...typography.caption,
-      color: themeColors.textMuted,
-      fontWeight: '600',
-    },
-    cardBodyText: {
-      ...typography.bodySmall,
-      color: themeColors.textSecondary,
-      lineHeight: 20,
-    },
-    boldText: {
-      fontWeight: '700',
-      color: themeColors.text,
-    },
-    sectionHeading: {
-      ...typography.caption,
-      color: themeColors.textMuted,
-      fontWeight: '800',
-      letterSpacing: 0.8,
-      marginBottom: 4,
-    },
-    sectionSubtitle: {
-      ...typography.bodySmall,
-      color: themeColors.textSecondary,
-      marginBottom: 16,
-    },
-    providerGrid: {
-      gap: 10,
-    },
-    providerTile: {
-      backgroundColor: themeColors.surfaceHighlight,
-      borderRadius: 16,
-      padding: 14,
-      borderWidth: 1.5,
-      borderColor: themeColors.cardBorder,
-    },
-    providerTileSelected: {
-      borderColor: themeColors.primary,
-      backgroundColor: `${themeColors.primary}12`,
-    },
-    tileHeader: {
-      flexDirection: 'row',
       justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 6,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.md,
     },
-    providerTitle: {
+    rowLeft: {
+      flex: 1,
+      marginRight: spacing.md,
+    },
+    rowLabel: {
       ...typography.body,
-      fontWeight: '700',
-      color: themeColors.text,
+      color: theme.text,
+      fontWeight: '600',
+      fontSize: 14,
       marginBottom: 2,
     },
-    providerTitleSelected: {
-      color: themeColors.primary,
-    },
-    providerDesc: {
+    rowDesc: {
       ...typography.caption,
-      color: themeColors.textMuted,
+      color: theme.textSecondary,
+      fontSize: 12,
       lineHeight: 16,
     },
-    inputContainer: {
-      marginTop: 12,
+    providerRow: {
+      flexDirection: 'row',
     },
-    inputLabel: {
+    providerTab: {
+      flex: 1,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.xs,
+      alignItems: 'center',
+      borderRightWidth: 1,
+      borderRightColor: theme.hairline || theme.border,
+      backgroundColor: theme.background,
+    },
+    providerTabActive: {
+      backgroundColor: theme.text,
+    },
+    providerTabTitle: {
       ...typography.caption,
-      color: themeColors.textSecondary,
+      color: theme.text,
       fontWeight: '700',
-      marginBottom: 6,
+      fontSize: 11,
+      letterSpacing: 0.5,
     },
-    inputRow: {
+    providerTabTitleActive: {
+      color: theme.background,
+    },
+    providerTabSub: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 9,
+      marginTop: 2,
+    },
+    providerTabSubActive: {
+      color: theme.background,
+      opacity: 0.8,
+    },
+    fieldLabel: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 1,
+      marginBottom: spacing.xs,
+    },
+    inputContainer: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: themeColors.surfaceHighlight,
-      borderRadius: 14,
       borderWidth: 1,
-      borderColor: themeColors.cardBorder,
-      paddingHorizontal: 12,
+      borderColor: theme.hairline || theme.border,
+      backgroundColor: theme.background,
+      borderRadius: 2,
+      paddingHorizontal: spacing.sm,
     },
-    singleLineInput: {
-      backgroundColor: themeColors.surfaceHighlight,
-      borderRadius: 14,
-      borderWidth: 1,
-      borderColor: themeColors.cardBorder,
-      paddingHorizontal: 14,
-      paddingVertical: 10,
-      color: themeColors.text,
-    },
-    textInput: {
+    keyInput: {
       flex: 1,
-      paddingVertical: 10,
-      ...typography.body,
-      color: themeColors.text,
+      paddingVertical: spacing.sm,
+      fontFamily: 'monospace',
+      fontSize: 13,
+      color: theme.text,
     },
-    inputIconBtn: {
-      padding: 6,
+    plainInput: {
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      backgroundColor: theme.background,
+      borderRadius: 2,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      fontFamily: 'monospace',
+      fontSize: 13,
+      color: theme.text,
     },
-    getKeyBtn: {
+    eyeBtn: {
+      padding: spacing.xs,
+    },
+    linkRow: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
-      alignSelf: 'flex-start',
-      marginTop: 8,
-      paddingVertical: 4,
+      marginTop: spacing.sm,
     },
-    getKeyBtnText: {
+    linkText: {
       ...typography.caption,
-      color: themeColors.primary,
-      fontWeight: '700',
+      color: theme.text,
+      fontSize: 11,
+      fontWeight: '600',
+      textDecorationLine: 'underline',
     },
-    modelList: {
-      marginTop: 8,
-      gap: 8,
+    divider: {
+      height: 1,
+      backgroundColor: theme.hairline || theme.border,
+      marginLeft: spacing.md,
     },
     modelRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      padding: 12,
-      borderRadius: 14,
-      backgroundColor: themeColors.surfaceHighlight,
-      borderWidth: 1,
-      borderColor: themeColors.cardBorder,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm + 4,
     },
-    modelRowSelected: {
-      borderColor: themeColors.primary,
-      backgroundColor: `${themeColors.primary}12`,
+    modelRowActive: {
+      backgroundColor: theme.background,
     },
-    modelRowLeft: {
+    modelLeft: {
       flex: 1,
-      paddingRight: 8,
+      marginRight: spacing.md,
     },
-    modelName: {
-      ...typography.bodySmall,
-      fontWeight: '700',
-      color: themeColors.text,
+    modelNameRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
       marginBottom: 2,
     },
-    modelNameSelected: {
-      color: themeColors.primary,
+    modelName: {
+      ...typography.body,
+      color: theme.text,
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    modelNameActive: {
+      fontWeight: '700',
+    },
+    recBadge: {
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      paddingHorizontal: 4,
+      paddingVertical: 1,
+      borderRadius: 2,
+    },
+    recBadgeText: {
+      ...typography.caption,
+      fontSize: 8,
+      fontWeight: '700',
+      letterSpacing: 0.5,
+      color: theme.textSecondary,
     },
     modelDesc: {
       ...typography.caption,
-      color: themeColors.textMuted,
-      lineHeight: 16,
+      color: theme.textSecondary,
+      fontSize: 11,
     },
-    testBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      paddingVertical: 12,
-      borderRadius: 14,
+    modelRight: {
+      alignItems: 'flex-end',
+    },
+    checkPill: {
       borderWidth: 1,
-      borderColor: themeColors.primary,
-      marginTop: 16,
+      borderColor: theme.text,
+      backgroundColor: theme.text,
+      paddingHorizontal: spacing.xs + 2,
+      paddingVertical: 2,
+      borderRadius: 2,
     },
-    testBtnText: {
-      ...typography.bodySmall,
-      color: themeColors.primary,
+    checkPillText: {
+      ...typography.caption,
+      color: theme.background,
+      fontSize: 9,
+      fontWeight: '700',
+      letterSpacing: 0.5,
+    },
+    selectText: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 10,
+      fontWeight: '600',
+      letterSpacing: 0.5,
+    },
+    benchmarkBody: {
+      padding: spacing.md,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    benchmarkMeta: {
+      flex: 1,
+    },
+    benchmarkLabel: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 10,
+      letterSpacing: 1,
       fontWeight: '700',
     },
-    saveBtn: {
+    benchmarkValue: {
+      ...typography.caption,
+      color: theme.text,
+      fontSize: 14,
+      fontWeight: '700',
+      fontFamily: 'monospace',
+      marginTop: 2,
+    },
+    pingButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      backgroundColor: themeColors.primary,
-      paddingVertical: 16,
-      borderRadius: borderRadius.round,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.2,
-      shadowRadius: 8,
-      elevation: 4,
+      gap: 6,
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      borderRadius: 2,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.sm,
+      backgroundColor: theme.background,
     },
-    saveBtnMuted: {
-      opacity: 0.85,
-    },
-    saveBtnText: {
-      ...typography.body,
-      color: themeColors.onPrimary,
+    pingButtonText: {
+      ...typography.caption,
+      color: theme.text,
+      fontSize: 10,
       fontWeight: '700',
+      letterSpacing: 0.5,
+    },
+    saveButton: {
+      borderWidth: 1,
+      borderColor: theme.text,
+      backgroundColor: theme.text,
+      paddingVertical: spacing.md,
+      borderRadius: 2,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: spacing.xs,
+    },
+    saveButtonMuted: {
+      opacity: 0.4,
+    },
+    saveButtonText: {
+      ...typography.caption,
+      color: theme.background,
+      fontSize: 11,
+      fontWeight: '700',
+      letterSpacing: 1.2,
     },
   });
