@@ -16,6 +16,7 @@ import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { lightHaptic } from '../../services/haptics/hapticFeedback';
 import { MainStackParamList } from '../../types/navigation';
+import { useNavigationTabStore } from '../../store/navigationTabStore';
 
 type Nav = StackNavigationProp<MainStackParamList>;
 
@@ -40,7 +41,7 @@ const COMMAND_ITEMS: CommandItem[] = [
     subtitle: 'Manage & reorder',
     icon: 'wallet-outline',
     color: '#06D6A0',
-    onPress: (nav) => nav.navigate('Wallets'),
+    onPress: () => useNavigationTabStore.getState().scrollToTab(1),
   },
   {
     id: 'recurring',
@@ -48,7 +49,7 @@ const COMMAND_ITEMS: CommandItem[] = [
     subtitle: 'Subscriptions & bills',
     icon: 'refresh-circle',
     color: '#118AB2',
-    onPress: (nav) => nav.navigate('Recurring'),
+    onPress: () => useNavigationTabStore.getState().scrollToTab(2),
   },
   {
     id: 'transfer',
@@ -96,7 +97,7 @@ const COMMAND_ITEMS: CommandItem[] = [
     subtitle: 'Theme & security',
     icon: 'cog-outline',
     color: '#89CFF0',
-    onPress: (nav) => nav.navigate('Settings'),
+    onPress: () => useNavigationTabStore.getState().scrollToTab(3),
   },
 ];
 

@@ -9,7 +9,8 @@ import { AddTransactionScreen } from '../screens/transactions/AddTransactionScre
 import { TransactionHistoryScreen } from '../screens/transactions/TransactionHistoryScreen';
 import { TransactionDetailsScreen } from '../screens/transactions/TransactionDetailsScreen';
 import { VaultManagementScreen } from '../screens/vault/VaultManagementScreen';
-import { DashboardScreen } from '../screens/dashboard/DashboardScreen';
+import { MainTabScreen } from '../screens/main/MainTabScreen';
+import { useNavigationTabStore } from '../store/navigationTabStore';
 import CategoriesScreen from '../screens/categories/CategoriesScreen';
 import CreateCategoryScreen from '../screens/categories/CreateCategoryScreen';
 import AddSubscriptionScreen from '../screens/subscriptions/AddSubscriptionScreen';
@@ -34,6 +35,36 @@ import { AnalyticsScreen } from '../screens/analytics/AnalyticsScreen';
 import { useThemeColors } from '../hooks/useThemeColors';
 
 const Stack = createStackNavigator<MainStackParamList>();
+
+const WalletsTabRedirect: React.FC<{ navigation: any }> = ({ navigation }) => {
+  React.useEffect(() => {
+    useNavigationTabStore.getState().scrollToTab(1);
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    }
+  }, [navigation]);
+  return null;
+};
+
+const RecurringTabRedirect: React.FC<{ navigation: any }> = ({ navigation }) => {
+  React.useEffect(() => {
+    useNavigationTabStore.getState().scrollToTab(2);
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    }
+  }, [navigation]);
+  return null;
+};
+
+const SettingsTabRedirect: React.FC<{ navigation: any }> = ({ navigation }) => {
+  React.useEffect(() => {
+    useNavigationTabStore.getState().scrollToTab(3);
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    }
+  }, [navigation]);
+  return null;
+};
 
 export function MainNavigator() {
   const themeColors = useThemeColors();
@@ -61,7 +92,7 @@ export function MainNavigator() {
     >
       <Stack.Screen
         name="Dashboard"
-        component={DashboardScreen}
+        component={MainTabScreen}
         options={{ headerShown: false }}
       />
       <Stack.Screen
@@ -81,8 +112,8 @@ export function MainNavigator() {
       />
       <Stack.Screen
         name="Settings"
-        component={SettingsScreen}
-        options={{ headerShown: false }}
+        component={SettingsTabRedirect}
+        options={{ headerShown: false, animation: 'none' }}
       />
       <Stack.Screen
         name="AddTransaction"
@@ -128,8 +159,8 @@ export function MainNavigator() {
       />
       <Stack.Screen
         name="Recurring"
-        component={RecurringHubScreen}
-        options={{ title: 'Recurring & Subscriptions' }}
+        component={RecurringTabRedirect}
+        options={{ headerShown: false, animation: 'none' }}
       />
       <Stack.Screen
         name="AddSubscription"
@@ -165,8 +196,8 @@ export function MainNavigator() {
       />
       <Stack.Screen
         name="Wallets"
-        component={WalletsScreen}
-        options={{ title: 'Wallets' }}
+        component={WalletsTabRedirect}
+        options={{ headerShown: false, animation: 'none' }}
       />
       <Stack.Screen
         name="WalletDetails"

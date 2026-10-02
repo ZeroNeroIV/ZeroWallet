@@ -1,75 +1,78 @@
 /**
- * Purpose: Fixed bottom navigation bar with 5 tabs (replaces FAB)
+ * Purpose: Persistent bottom navigation rail with 5 tabs across primary hubs
  *
  * Inputs:
- *   - currentRoute (string): Currently active route name
- *   - navigation (NavigationProp): React Navigation object
+ *   - None (reads active tab from navigationTabStore)
  *
  * Outputs:
  *   - Returns (JSX.Element): Bottom navigation bar component
  *
  * Side effects:
- *   - Navigates to respective screens when tabs are pressed
+ *   - Smoothly scrolls to respective horizontal tab pages or opens QuickAdd modal
  */
 
-import React, { useMemo, useCallback } from 'react';
-import { View, TouchableOpacity, StyleSheet, Platform, Alert } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import React, { useMemo, useCallback, useState } from 'react';
+import { View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { spacing } from '../../theme/spacing';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { useSettingsStore } from '../../store/settingsStore';
 import { QuickAddSheet, type QuickAddAction } from './QuickAddSheet';
 import { MainStackParamList } from '../../types/navigation';
+import { useNavigationTabStore } from '../../store/navigationTabStore';
+import { triggerHaptic } from '../../services/haptics/hapticFeedback';
 
 type NavigationProp = StackNavigationProp<MainStackParamList>;
 
 interface TabConfig {
   id: string;
   icon: string;
-  route: keyof MainStackParamList;
+  pageIndex?: number;
   isCenter?: boolean;
 }
 
 const tabs: TabConfig[] = [
-  { id: 'dashboard', icon: 'view-dashboard-outline', route: 'Dashboard' },
-  { id: 'wallets', icon: 'wallet-outline', route: 'Wallets' },
-  { id: 'add', icon: 'plus', route: 'AddTransaction', isCenter: true },
-  { id: 'recurring', icon: 'calendar-clock-outline', route: 'Recurring' },
-  { id: 'settings', icon: 'cog-outline', route: 'Settings' },
+  { id: 'dashboard', icon: 'view-dashboard-outline', pageIndex: 0 },
+  { id: 'wallets', icon: 'wallet-outline', pageIndex: 1 },
+  { id: 'add', icon: 'plus', isCenter: true },
+  { id: 'recurring', icon: 'calendar-clock-outline', pageIndex: 2 },
+  { id: 'settings', icon: 'cog-outline', pageIndex: 3 },
 ];
 
 export const BottomNavigation: React.FC = React.memo(() => {
   const navigation = useNavigation<NavigationProp>();
-  const route = useRoute();
   const themeColors = useThemeColors();
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
-  const [showQuickAdd, setShowQuickAdd] = React.useState(false);
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
 
-  const handleQuickAdd = useCallback((action: QuickAddAction) => {
-    setShowQuickAdd(false);
-    if (action === 'expense') {
-      navigation.navigate('AddTransaction', { type: 'expense' });
-    } else if (action === 'income') {
-      navigation.navigate('AddTransaction', { type: 'income' });
-    } else {
-      navigation.navigate('Transfer');
-    }
-  }, [navigation]);
+  const activeTabIndex = useNavigationTabStore((s) => s.activeTabIndex);
+
+  const handleQuickAdd = useCallback(
+    (action: QuickAddAction) => {
+      setShowQuickAdd(false);
+      if (action === 'expense') {
+        navigation.navigate('AddTransaction', { type: 'expense' });
+      } else if (action === 'income') {
+        navigation.navigate('AddTransaction', { type: 'income' });
+      } else {
+        navigation.navigate('Transfer');
+      }
+    },
+    [navigation]
+  );
 
   const handleTabPress = useCallback((tab: TabConfig) => {
     if (tab.isCenter) {
+      triggerHaptic('selection');
       setShowQuickAdd(true);
       return;
     }
 
-    navigation.navigate(tab.route as any);
-  }, [navigation]);
-
-  const isActive = useCallback((tab: TabConfig) => {
-    return route.name === tab.route;
-  }, [route.name]);
+    if (tab.pageIndex !== undefined) {
+      triggerHaptic('selection');
+      useNavigationTabStore.getState().scrollToTab(tab.pageIndex);
+    }
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -79,7 +82,7 @@ export const BottomNavigation: React.FC = React.memo(() => {
         onSelect={handleQuickAdd}
       />
       {tabs.map((tab) => {
-        const active = isActive(tab);
+        const active = !tab.isCenter && tab.pageIndex === activeTabIndex;
 
         if (tab.isCenter) {
           return (
@@ -88,6 +91,8 @@ export const BottomNavigation: React.FC = React.memo(() => {
               style={styles.centerButton}
               onPress={() => handleTabPress(tab)}
               activeOpacity={0.8}
+              accessibilityLabel="Quick Add Transaction or Transfer"
+              accessibilityRole="button"
             >
               <MaterialCommunityIcons
                 name={tab.icon}
@@ -104,6 +109,9 @@ export const BottomNavigation: React.FC = React.memo(() => {
             style={styles.tab}
             onPress={() => handleTabPress(tab)}
             activeOpacity={0.7}
+            accessibilityLabel={`${tab.id} tab`}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: active }}
           >
             <MaterialCommunityIcons
               name={tab.icon}
@@ -119,47 +127,48 @@ export const BottomNavigation: React.FC = React.memo(() => {
 
 BottomNavigation.displayName = 'BottomNavigation';
 
-const createStyles = (themeColors: ReturnType<typeof useThemeColors>) => StyleSheet.create({
-  container: {
-    position: 'absolute',
-    bottom: Platform.OS === 'ios' ? 24 : 16,
-    left: 20,
-    right: 20,
-    height: 54,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: themeColors.hairline,
-    backgroundColor: themeColors.railBackground,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingHorizontal: 12,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.08,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 6,
-      },
-    }),
-  },
-  tab: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 44,
-    height: 44,
-  },
-  centerButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: themeColors.primary,
-    backgroundColor: themeColors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
+  StyleSheet.create({
+    container: {
+      position: 'absolute',
+      bottom: Platform.OS === 'ios' ? 24 : 16,
+      left: 20,
+      right: 20,
+      height: 54,
+      borderRadius: 4,
+      borderWidth: 1,
+      borderColor: themeColors.hairline,
+      backgroundColor: themeColors.railBackground,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-around',
+      paddingHorizontal: 12,
+      ...Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.08,
+          shadowRadius: 8,
+        },
+        android: {
+          elevation: 6,
+        },
+      }),
+    },
+    tab: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: 44,
+      height: 44,
+    },
+    centerButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 4,
+      borderWidth: 1,
+      borderColor: themeColors.primary,
+      backgroundColor: themeColors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+  });

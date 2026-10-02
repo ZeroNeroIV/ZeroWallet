@@ -27,6 +27,7 @@ import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { MainStackParamList } from '../../types/navigation';
+import { useNavigationTabStore } from '../../store/navigationTabStore';
 import { GoalsCard } from './GoalsCard';
 import { DebtsCard } from './DebtsCard';
 import { SubscriptionsCard } from './SubscriptionsCard';
@@ -72,16 +73,16 @@ export const DashboardCardsGrid: React.FC<DashboardCardsGridProps> = React.memo(
   }, [navigation]);
 
   const handleSubscriptionsPress = useCallback(() => {
-    navigation.navigate('Recurring', { tab: 'subscriptions' });
-  }, [navigation]);
+    useNavigationTabStore.getState().scrollToTab(2);
+  }, []);
 
   const handleCategoriesPress = useCallback(() => {
     navigation.navigate('CategoriesScreen');
   }, [navigation]);
 
   const handleRecurringPress = useCallback(() => {
-    navigation.navigate('Recurring', { tab: 'recurring' });
-  }, [navigation]);
+    useNavigationTabStore.getState().scrollToTab(2);
+  }, []);
 
   const handleViewAllSections = useCallback(() => {
     navigation.navigate('AllSectionsScreen');

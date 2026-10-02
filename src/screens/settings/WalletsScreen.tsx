@@ -1,5 +1,5 @@
 // Simplizum Wallets Hub — Unified Single-Tier Architectural List & Net Worth Command Header
-import React, { useMemo, useState, useCallback, useLayoutEffect } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,12 +8,15 @@ import {
   ScrollView,
   RefreshControl,
   Alert,
+  Platform,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import type { MainStackParamList } from '../../types/navigation';
 import { useAuthStore } from '../../store/authStore';
+import { useNavigationTabStore } from '../../store/navigationTabStore';
 import { WalletRepository } from '../../database/repositories/WalletRepository';
 import { AccountRepository } from '../../database/repositories/AccountRepository';
 import { TransactionRepository } from '../../database/repositories/TransactionRepository';
@@ -58,6 +61,9 @@ export default function WalletsScreen() {
     }
   }, [currentAccountId]);
 
+  const insets = useSafeAreaInsets();
+  const activeTabIndex = useNavigationTabStore((s) => s.activeTabIndex);
+
   useFocusEffect(
     useCallback(() => {
       refresh();
@@ -65,32 +71,13 @@ export default function WalletsScreen() {
     }, [refresh, loadData])
   );
 
-  // Set small '+' button in header right
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerRight: () => (
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={() => {
-            triggerHaptic('selection');
-            setEditingWallet(null);
-            setFormModalVisible(true);
-          }}
-          style={[
-            styles.headerAddBtn,
-            {
-              borderColor: themeColors.hairline,
-              backgroundColor: themeColors.surface,
-            },
-          ]}
-          accessibilityLabel="Add New Wallet"
-          accessibilityRole="button"
-        >
-          <MaterialCommunityIcons name="plus" size={18} color={themeColors.text} />
-        </TouchableOpacity>
-      ),
-    });
-  }, [navigation, themeColors]);
+  // Reload when user switches to Wallets tab
+  useEffect(() => {
+    if (activeTabIndex === 1) {
+      refresh();
+      loadData();
+    }
+  }, [activeTabIndex, refresh, loadData]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -261,9 +248,53 @@ export default function WalletsScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: themeColors.background }]}>
+      {/* Simplizum In-Screen Architectural Header */}
+      <View
+        style={[
+          styles.header,
+          {
+            paddingTop: Math.max(insets.top, 16),
+            borderBottomColor: themeColors.hairline,
+            backgroundColor: themeColors.background,
+          },
+        ]}
+      >
+        <View>
+          <Text style={[styles.headerSuper, { color: themeColors.textMuted }]}>
+            ZERO WALLET · LEDGER
+          </Text>
+          <Text style={[styles.headerTitle, { color: themeColors.text }]}>
+            WALLETS
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => {
+            triggerHaptic('selection');
+            setEditingWallet(null);
+            setFormModalVisible(true);
+          }}
+          style={[
+            styles.headerAddBtn,
+            {
+              borderColor: themeColors.hairline,
+              backgroundColor: themeColors.surface,
+            },
+          ]}
+          accessibilityLabel="Add New Wallet"
+          accessibilityRole="button"
+        >
+          <MaterialCommunityIcons name="plus" size={18} color={themeColors.text} />
+        </TouchableOpacity>
+      </View>
+
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Platform.OS === 'ios' ? 120 : 100 },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -364,12 +395,40 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
   },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    paddingHorizontal: 20,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+  },
+  headerSuper: {
+    fontSize: 10,
+    letterSpacing: 1.5,
+    fontWeight: '700',
+    marginBottom: 2,
+    textTransform: 'uppercase',
+  },
+  headerTitle: {
+    fontSize: 20,
+    letterSpacing: 0.5,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  headerAddBtn: {
+    width: 30,
+    height: 30,
+    borderWidth: 1,
+    borderRadius: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   scroll: {
     flex: 1,
   },
   scrollContent: {
     padding: 20,
-    paddingBottom: 40,
   },
   commandCard: {
     borderWidth: 1,
@@ -400,15 +459,6 @@ const styles = StyleSheet.create({
     letterSpacing: -1,
     fontVariant: ['tabular-nums'],
     marginBottom: 18,
-  },
-  headerAddBtn: {
-    marginRight: 14,
-    width: 30,
-    height: 30,
-    borderWidth: 1,
-    borderRadius: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   actionBtn: {
     width: '100%',

@@ -27,7 +27,7 @@ import { RecurringTicker } from '../../components/dashboard/RecurringTicker';
 import { ActionDuo } from '../../components/dashboard/ActionDuo';
 import { CashFlowTrend } from '../../components/dashboard/CashFlowTrend';
 import { ChronologicalMovements } from '../../components/dashboard/ChronologicalMovements';
-import { BottomNavigation } from '../../components/navigation/BottomNavigation';
+import { useNavigationTabStore } from '../../store/navigationTabStore';
 
 type NavProp = StackNavigationProp<MainStackParamList, 'Dashboard'>;
 
@@ -86,6 +86,14 @@ export const DashboardScreen: React.FC = () => {
       checkTasks();
     }, [currentAccountId, currentUser, loadData, checkTasks])
   );
+
+  // Reload when user switches to Dashboard tab
+  const activeTabIndex = useNavigationTabStore((s) => s.activeTabIndex);
+  useEffect(() => {
+    if (activeTabIndex === 0 && currentAccountId && currentUser) {
+      loadData();
+    }
+  }, [activeTabIndex, currentAccountId, currentUser, loadData]);
 
   // Reload when app returns from background
   useEffect(() => {
@@ -155,14 +163,14 @@ export const DashboardScreen: React.FC = () => {
                 wallets={activeWallets}
                 walletBalances={derivedBalances}
                 onSelectWallet={(wallet) => navigation.navigate('WalletDetails', { walletId: wallet.id })}
-                onCreateWallet={() => navigation.navigate('Wallets')}
+                onCreateWallet={() => useNavigationTabStore.getState().scrollToTab(1)}
               />
 
               {/* Upcoming Recurring Ticker (1-line) */}
               <RecurringTicker
                 item={data.upcomingRecurring}
                 currency={data.currency}
-                onPress={() => navigation.navigate('Recurring')}
+                onPress={() => useNavigationTabStore.getState().scrollToTab(2)}
               />
 
               {/* Action Duo: Log & Transfer */}
@@ -192,9 +200,6 @@ export const DashboardScreen: React.FC = () => {
           )}
         </ScrollView>
       </Animated.View>
-
-      {/* 3. Floating Minimalist Rail */}
-      <BottomNavigation />
     </View>
   );
 };

@@ -11,8 +11,9 @@
  *  6. Danger Zone & Account Wipe
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   View,
   Text,
@@ -24,7 +25,9 @@ import {
   Modal,
   TextInput,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
+import { useNavigationTabStore } from '../../store/navigationTabStore';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useAuthStore } from '../../store/authStore';
@@ -90,11 +93,21 @@ export default function SettingsScreen({ navigation }: any) {
 
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
 
+  const insets = useSafeAreaInsets();
+  const activeTabIndex = useNavigationTabStore((s) => s.activeTabIndex);
+
   useFocusEffect(
     useCallback(() => {
       loadAccountData();
     }, [currentAccountId])
   );
+
+  // Reload when user switches to Settings tab
+  useEffect(() => {
+    if (activeTabIndex === 3) {
+      loadAccountData();
+    }
+  }, [activeTabIndex]);
 
   const loadAccountData = async () => {
     if (!currentAccountId) return;
@@ -239,7 +252,7 @@ export default function SettingsScreen({ navigation }: any) {
   return (
     <View style={styles.root}>
       {/* Architectural Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, spacing.lg) }]}>
         <View>
           <Text style={styles.headerSuper}>ZERO WALLET · OS CONFIG</Text>
           <Text style={styles.headerTitle}>SETTINGS</Text>
@@ -289,7 +302,7 @@ export default function SettingsScreen({ navigation }: any) {
             style={styles.row}
             onPress={() => {
               lightHaptic();
-              navigation.navigate('Wallets');
+              useNavigationTabStore.getState().scrollToTab(1);
             }}
           >
             <View style={styles.rowLeft}>
@@ -684,7 +697,7 @@ const createStyles = (theme: any) =>
     },
     scrollContent: {
       padding: spacing.md,
-      paddingBottom: spacing.xxl + 40,
+      paddingBottom: Platform.OS === 'ios' ? 120 : 100,
     },
     groupCard: {
       borderWidth: 1,

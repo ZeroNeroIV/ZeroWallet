@@ -9,12 +9,15 @@ import {
   RefreshControl,
   ScrollView,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { format, differenceInDays } from 'date-fns';
 import { useAuthStore } from '../../store/authStore';
+import { useNavigationTabStore } from '../../store/navigationTabStore';
 import { RecurringRepository } from '../../database/repositories/RecurringRepository';
 import { WalletRepository } from '../../database/repositories/WalletRepository';
 import { CategoryRepository } from '../../database/repositories/CategoryRepository';
@@ -104,11 +107,21 @@ export default function RecurringHubScreen() {
     }
   }, [currentAccountId, currentUser, recurringRepo]);
 
+  const insets = useSafeAreaInsets();
+  const activeTabIndex = useNavigationTabStore((s) => s.activeTabIndex);
+
   useFocusEffect(
     useCallback(() => {
       loadData();
     }, [loadData])
   );
+
+  // Reload when user switches to Recurring tab
+  useEffect(() => {
+    if (activeTabIndex === 2) {
+      loadData();
+    }
+  }, [activeTabIndex, loadData]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -329,9 +342,53 @@ export default function RecurringHubScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: themeColors.background }]}>
+      {/* Simplizum In-Screen Architectural Header */}
+      <View
+        style={[
+          styles.header,
+          {
+            paddingTop: Math.max(insets.top, 16),
+            borderBottomColor: themeColors.hairline,
+            backgroundColor: themeColors.background,
+          },
+        ]}
+      >
+        <View>
+          <Text style={[styles.headerSuper, { color: themeColors.textMuted }]}>
+            ZERO WALLET · COMMITMENTS
+          </Text>
+          <Text style={[styles.headerTitle, { color: themeColors.text }]}>
+            RECURRING
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => {
+            triggerHaptic('selection');
+            setEditingItem(null);
+            setFormModalVisible(true);
+          }}
+          style={[
+            styles.headerAddBtn,
+            {
+              borderColor: themeColors.hairline,
+              backgroundColor: themeColors.surface,
+            },
+          ]}
+          accessibilityLabel="Add New Commitment"
+          accessibilityRole="button"
+        >
+          <MaterialCommunityIcons name="plus" size={18} color={themeColors.text} />
+        </TouchableOpacity>
+      </View>
+
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Platform.OS === 'ios' ? 120 : 100 },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -594,12 +651,40 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
   },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+  },
+  headerSuper: {
+    fontSize: 10,
+    letterSpacing: 1.5,
+    fontWeight: '700',
+    marginBottom: 2,
+    textTransform: 'uppercase',
+  },
+  headerTitle: {
+    fontSize: 20,
+    letterSpacing: 0.5,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  headerAddBtn: {
+    width: 30,
+    height: 30,
+    borderWidth: 1,
+    borderRadius: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   scroll: {
     flex: 1,
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 40,
   },
   projectionsCard: {
     borderWidth: 1,
