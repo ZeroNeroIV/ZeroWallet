@@ -1,5 +1,5 @@
 // Simplizum Wallets Hub — Unified Single-Tier Architectural List & Net Worth Command Header
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useLayoutEffect } from 'react';
 import {
   View,
   Text,
@@ -64,6 +64,33 @@ export default function WalletsScreen() {
       loadData();
     }, [refresh, loadData])
   );
+
+  // Set small '+' button in header right
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => {
+            triggerHaptic('selection');
+            setEditingWallet(null);
+            setFormModalVisible(true);
+          }}
+          style={[
+            styles.headerAddBtn,
+            {
+              borderColor: themeColors.hairline,
+              backgroundColor: themeColors.surface,
+            },
+          ]}
+          accessibilityLabel="Add New Wallet"
+          accessibilityRole="button"
+        >
+          <MaterialCommunityIcons name="plus" size={18} color={themeColors.text} />
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, themeColors]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -269,59 +296,31 @@ export default function WalletsScreen() {
             {formatCurrency(totalNetWorth, currency)}
           </Text>
 
-          {/* Action Duo */}
-          <View style={styles.actionDuoRow}>
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => {
-                triggerHaptic('selection');
-                setEditingWallet(null);
-                setFormModalVisible(true);
-              }}
-              style={[
-                styles.actionBtn,
-                {
-                  borderColor: themeColors.cardBorder,
-                  backgroundColor: themeColors.background,
-                },
-              ]}
-            >
-              <MaterialCommunityIcons
-                name="plus"
-                size={16}
-                color={themeColors.text}
-                style={{ marginRight: 6 }}
-              />
-              <Text style={[styles.actionBtnText, { color: themeColors.text }]}>
-                NEW WALLET
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => {
-                triggerHaptic('selection');
-                navigation.navigate('Transfer');
-              }}
-              style={[
-                styles.actionBtn,
-                {
-                  borderColor: themeColors.cardBorder,
-                  backgroundColor: themeColors.background,
-                },
-              ]}
-            >
-              <MaterialCommunityIcons
-                name="swap-vertical"
-                size={16}
-                color={themeColors.text}
-                style={{ marginRight: 6 }}
-              />
-              <Text style={[styles.actionBtnText, { color: themeColors.text }]}>
-                TRANSFER
-              </Text>
-            </TouchableOpacity>
-          </View>
+          {/* Transfer Action */}
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => {
+              triggerHaptic('selection');
+              navigation.navigate('Transfer');
+            }}
+            style={[
+              styles.actionBtn,
+              {
+                borderColor: themeColors.cardBorder,
+                backgroundColor: themeColors.background,
+              },
+            ]}
+          >
+            <MaterialCommunityIcons
+              name="swap-vertical"
+              size={16}
+              color={themeColors.text}
+              style={{ marginRight: 6 }}
+            />
+            <Text style={[styles.actionBtnText, { color: themeColors.text }]}>
+              TRANSFER FUNDS
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Section Title */}
@@ -402,12 +401,17 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
     marginBottom: 18,
   },
-  actionDuoRow: {
-    flexDirection: 'row',
-    gap: 12,
+  headerAddBtn: {
+    marginRight: 14,
+    width: 30,
+    height: 30,
+    borderWidth: 1,
+    borderRadius: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   actionBtn: {
-    flex: 1,
+    width: '100%',
     height: 42,
     borderWidth: 1,
     borderRadius: borderRadius.xs,
