@@ -175,29 +175,16 @@ export class DashboardService {
     const notifications: string[] = [];
 
     try {
-      const { checkAndProcessAutoSalary } = await import('./backgroundTasks/autoSalaryTask');
-      const salaryResult = await checkAndProcessAutoSalary();
-      if (salaryResult.processed && salaryResult.count > 0) {
-        const monthText = salaryResult.count === 1 ? '1 month' : `${salaryResult.count} months`;
-        notifications.push(`💰 Salary: ${monthText} added (${salaryResult.totalAmount.toFixed(3)})`);
-      }
-
-      const { checkAndProcessSubscriptions } = await import('./backgroundTasks/subscriptionTask');
-      const subscriptionResult = await checkAndProcessSubscriptions(this.accountId);
-      if (subscriptionResult.processed > 0) {
-        notifications.push(`📱 Subscriptions: ${subscriptionResult.processed} processed (-${subscriptionResult.totalAmount.toFixed(3)})`);
-      }
-
-      const { checkAndProcessRecurringExpenses } = await import('./backgroundTasks/recurringExpenseTask');
-      const recurringResult = await checkAndProcessRecurringExpenses(this.accountId);
-      if (recurringResult.processed > 0) {
-        notifications.push(`🔄 Recurring: ${recurringResult.processed} processed (-${recurringResult.totalAmount.toFixed(3)})`);
+      const { checkAndPromptHitlTasks } = await import('./hitl/hitlService');
+      const pendingCount = await checkAndPromptHitlTasks(this.accountId);
+      if (pendingCount > 0) {
+        notifications.push(`⏳ ${pendingCount} recurring commitment(s) awaiting approval`);
       }
 
       const { checkAndCompleteGoals } = await import('./backgroundTasks/goalTask');
       const goalResult = await checkAndCompleteGoals(this.accountId);
       if (goalResult.completed.length > 0) {
-        const goalNames = goalResult.completed.map(g => g.name).join(', ');
+        const goalNames = goalResult.completed.map((g) => g.name).join(', ');
         notifications.push(`🎯 Goals Completed: ${goalNames}`);
       }
     } catch (error) {

@@ -173,20 +173,13 @@ export function advanceOneMonth(
  *   - Updates vault balance
  *   - Updates nextPaymentDate in settings
  */
-let salaryRunInFlight: Promise<{ processed: boolean; count: number; totalAmount: number }> | null = null;
-
 export async function checkAndProcessAutoSalary(): Promise<{ processed: boolean; count: number; totalAmount: number }> {
-  if (salaryRunInFlight) {
-    // Another caller is already processing; wait for it and report nothing new
-    await salaryRunInFlight.catch(() => undefined);
-    return { processed: false, count: 0, totalAmount: 0 };
+  const authStore = useAuthStore.getState();
+  if (authStore.currentAccountId) {
+    const { checkAndPromptHitlTasks } = await import('../hitl/hitlService');
+    await checkAndPromptHitlTasks(authStore.currentAccountId);
   }
-  salaryRunInFlight = processAutoSalary();
-  try {
-    return await salaryRunInFlight;
-  } finally {
-    salaryRunInFlight = null;
-  }
+  return { processed: false, count: 0, totalAmount: 0 };
 }
 
 async function processAutoSalary(): Promise<{ processed: boolean; count: number; totalAmount: number }> {

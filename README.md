@@ -25,8 +25,9 @@ The UI follows the **Simplizum** design language: 1px hairline borders, 2px corn
 - **Dashboard** — net worth, wallet strip, next-due ticker, 30-day cash-flow trend and recent movements. The eye icon hides **every** number on the screen.
 - **Transactions** — expense / income / transfer, multi-currency with automatic conversion, receipt images.
 - **Auto-salary & payroll engine** — automated monthly salary deposit on a chosen calendar day (1st–31st) with estimated arrival time (24H). Includes single-flight execution mutex, calendar-month idempotency, and backup-import calibration to prevent duplicate deposits.
+- **Human-In-The-Loop (HITL) recurring approval** — recurring expenses, subscriptions, and auto-salary are never triggered automatically without confirmation. When due, an interactive Simplizum popup prompts the user to either **Accept** (log transaction & advance cycle), **Cancel for this sprint** (skip without moving funds), or **Delay** with a custom duration (`XX` minutes, days, weeks, months, or years).
 - **Laya auto-categorization** — after you stop typing a description (600 ms debounce), Laya picks the closest category. If confidence is below 55% it selects **Other** and suggests a new *general* category you can add with one tap.
-- **Recurring & subscriptions** — unified hub with auto-deduct and notifications.
+- **Recurring & subscriptions** — unified hub with HITL approval queue and smart notification nudges.
 - **Goals, debts and category budgets.**
 - **AI settings** — Gemini, Groq or any OpenAI-compatible endpoint (Ollama, LM Studio, OpenAI). The model list is loaded live from the provider's API; you choose which model to use.
 - **Currencies** — always displayed as 3-letter ISO codes (e.g. `USD 12.500`).
@@ -137,5 +138,6 @@ Notable recent changes:
 - Laya auto-categorization with debounce and one-tap general-category suggestion.
 - Auto-salary estimated arrival time configuration (24H) to prevent premature execution.
 - Single-flight concurrency lock, calendar-month idempotency, and backup import calibration preventing duplicate salary deposits.
+- Human-In-The-Loop (HITL) approval process for recurring expenses, subscriptions, and auto-salary with 3-way triage: Accept, Cancel for this sprint, or Delay by custom duration (minutes, days, weeks, months, or years).
 
 > This README is updated with every change to the app.

@@ -10,6 +10,7 @@ import { RootNavigator } from './src/navigation/RootNavigator';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { useThemeColors } from './src/hooks/useThemeColors';
 import { SimplizumDialog } from './src/components/common/SimplizumDialog';
+import { HitlApprovalModal } from './src/components/hitl/HitlApprovalModal';
 import { dialogService } from './src/services/dialogService';
 
 // Initialize global Alert.alert override with bespoke Simplizum Dialog UI
@@ -28,6 +29,7 @@ function AppContent() {
       />
       <RootNavigator />
       <SimplizumDialog />
+      <HitlApprovalModal />
     </GestureHandlerRootView>
   );
 }

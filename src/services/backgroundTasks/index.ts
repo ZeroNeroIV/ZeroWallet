@@ -55,43 +55,17 @@ export async function runAllBackgroundTasks(accountId: string): Promise<void> {
     // Check notification permission
     const hasNotificationPermission = await checkNotificationPermission();
 
-    // 1. Process auto-salary (1st of month)
-    const salaryResult = await checkAndProcessAutoSalary();
-    if (salaryResult.processed && hasNotificationPermission) {
-      const settingsStore = useSettingsStore.getState();
-      const { salarySettings } = settingsStore;
-      let walletName = salarySettings.targetVault;
-      try {
-        const wallets = await new WalletRepository().findByAccount(accountId);
-        walletName = wallets.find((w) => w.id === salarySettings.targetVault)?.name ?? walletName;
-      } catch {
-        // fall back to raw vault key
-      }
-      await showSalaryNotification(
-        salarySettings.amount,
-        walletName
-      );
-    }
+    // 1. Scan and prompt user for any due recurring commitments (HITL approval)
+    const { checkAndPromptHitlTasks } = await import('../hitl/hitlService');
+    await checkAndPromptHitlTasks(accountId);
 
-    // 2. Process subscriptions (daily billing day check)
-    const subscriptionResults = await checkAndProcessSubscriptions(accountId);
-    if (hasNotificationPermission && subscriptionResults.processed > 0) {
-      console.log(`[BackgroundTasks] ${subscriptionResults.processed} subscriptions processed`);
-    }
-
-    // 3. Process recurring expenses (based on frequency)
-    const recurringResults = await checkAndProcessRecurringExpenses(accountId);
-    if (hasNotificationPermission && recurringResults.processed > 0) {
-      console.log(`[BackgroundTasks] ${recurringResults.processed} recurring expenses processed`);
-    }
-
-    // 4. Check goal completions
+    // 2. Check goal completions
     await checkAndCompleteGoals(accountId);
 
-    // 5. Check for low balance warnings
+    // 3. Check for low balance warnings
     await checkLowBalanceWarnings();
 
-    // 6. Refresh due-date + salary reminders from Smart Nudges settings
+    // 4. Refresh due-date + salary reminders from Smart Nudges settings
     const { scheduleDueReminders, scheduleSalaryReminder } = await import('../notifications/scheduleNudges');
     await scheduleDueReminders(accountId);
     await scheduleSalaryReminder();
@@ -115,33 +89,24 @@ export async function runAllBackgroundTasks(accountId: string): Promise<void> {
  *   - Returns (Promise<void>): Completes when catch-up is done
  * 
  * Side effects:
- *   - Processes missed salary, subscriptions, and recurring expenses
- *   - Sends notifications for missed items
- *   - Updates vault balances
+ *   - Detects missed salary, subscriptions, and recurring expenses and queues them for HITL approval
+ *   - Checks goal completions & low balance warnings
  */
 export async function runMissedTasks(accountId: string): Promise<void> {
   console.log('[BackgroundTasks] Checking for missed tasks...');
 
   try {
-    // All missed tasks are now handled by the new check functions
-    // They automatically detect and process multiple missed periods
-    
-    // 1. Check for missed salary (if past 1st of month)
-    await checkAndProcessAutoSalary();
+    // 1. Check for missed commitments and queue for HITL approval
+    const { checkAndPromptHitlTasks } = await import('../hitl/hitlService');
+    await checkAndPromptHitlTasks(accountId);
 
-    // 2. Check for missed subscriptions
-    await checkAndProcessSubscriptions(accountId);
-
-    // 3. Check for missed recurring expenses
-    await checkAndProcessRecurringExpenses(accountId);
-
-    // 4. Check goal completions
+    // 2. Check goal completions
     await checkAndCompleteGoals(accountId);
 
-    // 5. Check low balance warnings
+    // 3. Check low balance warnings
     await checkLowBalanceWarnings();
 
-    // 6. Refresh due-date + salary reminders from Smart Nudges settings
+    // 4. Refresh due-date + salary reminders from Smart Nudges settings
     const { scheduleDueReminders, scheduleSalaryReminder } = await import('../notifications/scheduleNudges');
     await scheduleDueReminders(accountId);
     await scheduleSalaryReminder();
