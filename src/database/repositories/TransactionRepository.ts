@@ -209,5 +209,29 @@ export class TransactionRepository extends BaseRepository<Transaction, Transacti
     );
     return (rows[0]?.count ?? 0) > 0;
   }
+  async existsAutoSalaryForMonth(accountId: string, monthDate: Date): Promise<boolean> {
+    const year = monthDate.getFullYear();
+    const month = monthDate.getMonth();
+    const startOfMonth = new Date(year, month, 1, 0, 0, 0, 0).getTime();
+    const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999).getTime();
+    const monthName = monthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const targetDesc = `Monthly Salary - ${monthName} (Auto)`;
+
+    const rows = await executeSql<{ count: number }>(
+      `SELECT COUNT(*) as count FROM transactions 
+       WHERE account_id = ? 
+         AND type = 'income' 
+         AND (
+           description = ? 
+           OR (description LIKE 'Monthly Salary - %' AND date >= ? AND date <= ?)
+         )`,
+      [accountId, targetDesc, startOfMonth, endOfMonth],
+    );
+    return (rows[0]?.count ?? 0) > 0;
+  }
+
+  async existsAutoSalaryByDate(accountId: string, date: number): Promise<boolean> {
+    return this.existsAutoSalaryForMonth(accountId, new Date(date));
+  }
 
 }

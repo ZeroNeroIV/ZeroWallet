@@ -24,6 +24,7 @@ The UI follows the **Simplizum** design language: 1px hairline borders, 2px corn
 - **Horizontal tab paging** — Dashboard, Wallets, Recurring and Settings live in one swipeable pager with a persistent floating bottom navigation bar (no push/pop between hubs).
 - **Dashboard** — net worth, wallet strip, next-due ticker, 30-day cash-flow trend and recent movements. The eye icon hides **every** number on the screen.
 - **Transactions** — expense / income / transfer, multi-currency with automatic conversion, receipt images.
+- **Auto-salary & payroll engine** — automated monthly salary deposit on a chosen calendar day (1st–31st) with estimated arrival time (24H). Includes single-flight execution mutex, calendar-month idempotency, and backup-import calibration to prevent duplicate deposits.
 - **Laya auto-categorization** — after you stop typing a description (600 ms debounce), Laya picks the closest category. If confidence is below 55% it selects **Other** and suggests a new *general* category you can add with one tap.
 - **Recurring & subscriptions** — unified hub with auto-deduct and notifications.
 - **Goals, debts and category budgets.**
@@ -134,5 +135,7 @@ Notable recent changes:
 - Floating Save / Update buttons on editing screens.
 - Eye icon hides all dashboard numbers.
 - Laya auto-categorization with debounce and one-tap general-category suggestion.
+- Auto-salary estimated arrival time configuration (24H) to prevent premature execution.
+- Single-flight concurrency lock, calendar-month idempotency, and backup import calibration preventing duplicate salary deposits.
 
 > This README is updated with every change to the app.

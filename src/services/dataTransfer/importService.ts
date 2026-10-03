@@ -772,6 +772,14 @@ export async function importPayload(
   // 8. Restore application and notification settings if present
   const settingsStore = useSettingsStore.getState();
   if (salarySettings && typeof salarySettings === 'object') {
+    const payDay = salarySettings.payDay ?? 1;
+    const payTime = salarySettings.payTime || '09:00';
+    const nextProc = salarySettings.nextProcessing;
+    // If nextProcessing is stale or in the past, recalibrate to the upcoming payday
+    if (salarySettings.isEnabled && (!nextProc || nextProc <= now)) {
+      const { getNextPayDate } = await import('../backgroundTasks/autoSalaryTask');
+      salarySettings.nextProcessing = getNextPayDate(new Date(), payDay, payTime).getTime();
+    }
     settingsStore.updateSalarySettings(salarySettings);
   }
   if (notificationSettings && typeof notificationSettings === 'object') {

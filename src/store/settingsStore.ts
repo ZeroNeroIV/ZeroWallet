@@ -15,6 +15,7 @@ const defaultSalarySettings = {
   categoryId: '',
   targetVault: 'main' as const,
   payDay: 1,
+  payTime: '09:00',
   lastProcessed: null,
   nextProcessing: getNextFirstOfMonth(),
 };
@@ -169,8 +170,15 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: 'settings-storage',
       storage: mmkvStorage,
-      version: 3,
+      version: 4,
       migrate: (persistedState: any, version: number) => {
+        // v4: salary payTime (arrival time e.g. "15:00")
+        if (version < 4) {
+          if (persistedState?.salarySettings && !persistedState.salarySettings.payTime) {
+            persistedState.salarySettings.payTime = '09:00';
+          }
+        }
+
         // Migrate old model names to new ones
         if (persistedState?.aiSettings?.selectedModel) {
           const oldModel = persistedState.aiSettings.selectedModel;

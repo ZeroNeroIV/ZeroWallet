@@ -31,19 +31,27 @@ import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { ordinalDay } from '../../utils/wallets';
 import { useWallets } from '../../hooks/useWallets';
-import { lightHaptic, mediumHaptic, heavyHaptic } from '../../services/haptics/hapticFeedback';
+import { lightHaptic, heavyHaptic } from '../../services/haptics/hapticFeedback';
+import {
+  isValidTime,
+  formatTo24H,
+  formatPayTimeDisplay,
+  initializeAutoSalarySchedule,
+} from '../../services/backgroundTasks/autoSalaryTask';
 import type { Category } from '../../types/models';
 
 export default function SalarySettingsScreen({ navigation }: any) {
-  const { salarySettings, updateSalarySettings } = useSettingsStore();
+  const { salarySettings, updateSalarySettings, appSettings } = useSettingsStore();
   const { currentUser } = useAuthStore();
   const themeColors = useThemeColors();
   const { wallets } = useWallets();
 
+  const currencyCode = appSettings?.currency || 'USD';
   const [isEnabled, setIsEnabled] = useState(salarySettings.isEnabled);
   const [amount, setAmount] = useState(salarySettings.amount > 0 ? salarySettings.amount.toString() : '');
   const [selectedVault, setSelectedVault] = useState<string>(salarySettings.targetVault || 'main');
   const [payDay, setPayDay] = useState(salarySettings.payDay ?? 1);
+  const [payTime, setPayTime] = useState(salarySettings.payTime || '09:00');
   const [showPayDayPicker, setShowPayDayPicker] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -75,6 +83,13 @@ export default function SalarySettingsScreen({ navigation }: any) {
       return;
     }
 
+    if (!isValidTime(payTime)) {
+      Alert.alert('Invalid Time', 'Please enter a valid arrival time in 24-hour format (e.g. 15:00 for 3:00 PM).');
+      return;
+    }
+
+    const normalizedPayTime = formatTo24H(payTime);
+
     setIsSaving(true);
     heavyHaptic();
 
@@ -91,8 +106,7 @@ export default function SalarySettingsScreen({ navigation }: any) {
       }
     }
 
-    const { initializeAutoSalarySchedule } = await import('../../services/backgroundTasks/autoSalaryTask');
-    const nextProcessing = initializeAutoSalarySchedule(payDay);
+    const nextProcessing = initializeAutoSalarySchedule(payDay, normalizedPayTime);
 
     updateSalarySettings({
       isEnabled,
@@ -100,6 +114,7 @@ export default function SalarySettingsScreen({ navigation }: any) {
       categoryId,
       targetVault: selectedVault as any,
       payDay,
+      payTime: normalizedPayTime,
       nextProcessing,
     });
 
@@ -169,7 +184,7 @@ export default function SalarySettingsScreen({ navigation }: any) {
           <View style={styles.cardBody}>
             <Text style={styles.inputCaption}>Enter exact monthly credit amount:</Text>
             <View style={styles.amountInputRow}>
-              <Text style={styles.currencyPrefix}>$</Text>
+              <Text style={styles.currencyPrefix}>{currencyCode}</Text>
               <TextInput
                 style={styles.amountInput}
                 value={amount}
@@ -208,7 +223,65 @@ export default function SalarySettingsScreen({ navigation }: any) {
           </TouchableOpacity>
         </View>
 
-        {/* CARD 4: DESTINATION WALLET */}
+        {/* CARD 4: ESTIMATED ARRIVAL TIME */}
+        <View style={[styles.card, !isEnabled ? styles.cardMuted : null]}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardHeaderTitle}>ESTIMATED ARRIVAL TIME (24H)</Text>
+          </View>
+          <View style={styles.cardBody}>
+            <Text style={styles.inputCaption}>
+              Time salary is deposited (prevents early execution before real arrival):
+            </Text>
+            <View style={styles.timeInputRow}>
+              <TextInput
+                style={styles.timeInput}
+                value={payTime}
+                onChangeText={setPayTime}
+                placeholder="15:00"
+                placeholderTextColor={themeColors.textSecondary}
+                keyboardType="numbers-and-punctuation"
+                maxLength={5}
+                editable={isEnabled}
+              />
+              <View style={styles.timePreviewBadge}>
+                <Text style={styles.timePreviewText}>
+                  {isValidTime(payTime) ? formatPayTimeDisplay(payTime) : 'INVALID TIME'}
+                </Text>
+              </View>
+            </View>
+
+            {/* Quick Presets */}
+            <View style={styles.timePresetsRow}>
+              {[
+                { label: '09:00 AM', value: '09:00' },
+                { label: '12:00 PM', value: '12:00' },
+                { label: '03:00 PM', value: '15:00' },
+                { label: '06:00 PM', value: '18:00' },
+              ].map((preset) => {
+                const isSelected = payTime === preset.value;
+                return (
+                  <TouchableOpacity
+                    key={preset.value}
+                    style={[styles.presetChip, isSelected ? styles.presetChipActive : null]}
+                    onPress={() => {
+                      if (isEnabled) {
+                        lightHaptic();
+                        setPayTime(preset.value);
+                      }
+                    }}
+                    disabled={!isEnabled}
+                  >
+                    <Text style={[styles.presetChipText, isSelected ? styles.presetChipTextActive : null]}>
+                      {preset.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+
+        {/* CARD 5: DESTINATION WALLET */}
         <View style={[styles.card, !isEnabled ? styles.cardMuted : null]}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardHeaderTitle}>TARGET DESTINATION WALLET</Text>
@@ -240,13 +313,13 @@ export default function SalarySettingsScreen({ navigation }: any) {
           </View>
         </View>
 
-        {/* CARD 5: RECURRING AUDIT SUMMARY */}
+        {/* CARD 6: RECURRING AUDIT SUMMARY */}
         {isEnabled && (
           <View style={styles.summaryCard}>
             <Text style={styles.summarySuper}>LEDGER SCHEDULE NOTE</Text>
             <Text style={styles.summaryText}>
-              On the {ordinalDay(payDay)} of each month, ZeroWallet will automatically append a{' '}
-              {amount ? `$${amount}` : 'salary'} credit directly to your{' '}
+              On the {ordinalDay(payDay)} of each month at {formatPayTimeDisplay(payTime)}, ZeroWallet will automatically append a{' '}
+              {amount ? `${currencyCode} ${amount}` : 'salary'} credit directly to your{' '}
               <Text style={styles.boldText}>
                 {wallets.find((w) => w.id === selectedVault)?.name ?? 'Selected'}
               </Text>{' '}
@@ -493,6 +566,74 @@ const createStyles = (theme: any) =>
       fontSize: 10,
       fontWeight: '700',
       letterSpacing: 0.8,
+    },
+    timeInputRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      marginBottom: spacing.sm,
+    },
+    timeInput: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      backgroundColor: theme.background,
+      borderRadius: 2,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      fontSize: 18,
+      fontFamily: 'monospace',
+      color: theme.text,
+      fontWeight: '700',
+    },
+    timePreviewBadge: {
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      backgroundColor: theme.background,
+      borderRadius: 2,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    timePreviewText: {
+      ...typography.caption,
+      color: theme.text,
+      fontFamily: 'monospace',
+      fontWeight: '700',
+      fontSize: 12,
+      letterSpacing: 0.5,
+    },
+    timePresetsRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.xs,
+    },
+    presetChip: {
+      flex: 1,
+      minWidth: '22%',
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      borderRadius: 2,
+      paddingVertical: spacing.xs,
+      paddingHorizontal: spacing.xs,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.background,
+    },
+    presetChipActive: {
+      borderColor: theme.text,
+      backgroundColor: theme.text,
+    },
+    presetChipText: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontWeight: '700',
+      fontSize: 10,
+      fontFamily: 'monospace',
+    },
+    presetChipTextActive: {
+      color: theme.background,
     },
     walletGrid: {
       flexDirection: 'row',

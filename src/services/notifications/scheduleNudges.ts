@@ -445,20 +445,17 @@ export async function scheduleSalaryReminder(): Promise<void> {
     }
 
     const payDay = salarySettings.payDay ?? 1;
+    const payTime = salarySettings.payTime || '09:00';
     const nextPayday = salarySettings.nextProcessing || Date.now();
     const triggerDate = new Date(nextPayday);
-    triggerDate.setHours(9, 0, 0, 0);
 
-    // If this payday's morning passed, aim at the following month.
-    // getNextPayDate can still return 9 AM today when payday is today but
-    // morning already passed, so keep advancing until the trigger is ahead.
+    // If this payday's arrival time passed, aim at the following month.
     if (triggerDate.getTime() <= Date.now()) {
       const { getNextPayDate, advanceOneMonth } = await import('../backgroundTasks/autoSalaryTask');
-      const upcoming = getNextPayDate(new Date(), payDay);
-      upcoming.setHours(9, 0, 0, 0);
+      const upcoming = getNextPayDate(new Date(), payDay, payTime);
       let guard = 0;
       while (upcoming.getTime() <= Date.now() && guard < 24) {
-        const advanced = advanceOneMonth(upcoming, payDay);
+        const advanced = advanceOneMonth(upcoming, payDay, payTime);
         upcoming.setTime(advanced.getTime());
         guard += 1;
       }
@@ -477,7 +474,7 @@ export async function scheduleSalaryReminder(): Promise<void> {
       {
         id: 'salary-day-reminder',
         title: '💰 Salary Day',
-        body: `Payday is here! Your $${salarySettings.amount.toFixed(3)} salary lands today.`,
+        body: `Payday is here! Your ${salarySettings.amount.toFixed(3)} salary lands today.`,
         android: {
           channelId: CHANNEL_IDS.REMINDERS,
           color: '#06D6A0',

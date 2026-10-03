@@ -229,6 +229,7 @@ export interface SalarySettings {
   categoryId: string; // FK to Category (salary category)
   targetVault: VaultType; // Where to deposit
   payDay: number; // Day of month salary arrives (1-31, default 1)
+  payTime: string; // Time of day salary arrives, 24h "HH:MM" (default "09:00")
   lastProcessed: number | null; // Unix timestamp
   nextProcessing: number; // Unix timestamp (next payday)
 }
