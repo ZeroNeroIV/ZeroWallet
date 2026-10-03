@@ -9,7 +9,7 @@
  *  - Real-time connectivity benchmark with millisecond latency ping
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,7 @@ import {
   Linking,
   ActivityIndicator,
   Switch,
+  Platform,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -68,6 +69,12 @@ export default function AISettingsScreen({ navigation }: any) {
   const [latencyResult, setLatencyResult] = useState<number | null>(null);
   const [hasChanges, setHasChanges] = useState<boolean>(false);
 
+  // Dynamic model list fetched from the provider's API
+  const [fetchedModels, setFetchedModels] = useState<string[]>([]);
+  const [isFetchingModels, setIsFetchingModels] = useState<boolean>(false);
+  const [fetchModelError, setFetchModelError] = useState<string | null>(null);
+  const fetchAbortRef = useRef<AbortController | null>(null);
+
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
 
   const handleProviderSelect = (p: AIProvider) => {
@@ -75,11 +82,77 @@ export default function AISettingsScreen({ navigation }: any) {
     setProvider(p);
     setLatencyResult(null);
     setHasChanges(true);
+    // Clear fetched models — they'll reload via useEffect when key is present
+    setFetchedModels([]);
+    setFetchModelError(null);
     const models = PROVIDER_MODELS[p];
     if (models && models.length > 0) {
       setSelectedModel(models.find((m) => m.recommended)?.id || models[0].id);
     }
   };
+
+  // Fetch available models from the provider's REST endpoint
+  const fetchModels = useCallback(async () => {
+    fetchAbortRef.current?.abort();
+    const controller = new AbortController();
+    fetchAbortRef.current = controller;
+
+    setIsFetchingModels(true);
+    setFetchModelError(null);
+
+    try {
+      if (provider === 'gemini') {
+        const key = geminiKey.trim();
+        if (!key) { setIsFetchingModels(false); return; }
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`,
+          { signal: controller.signal }
+        );
+        if (!res.ok) { throw new Error(`${res.status}`); }
+        const json = await res.json();
+        const ids: string[] = (json.models || [])
+          .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
+          .map((m: any) => (m.name as string).replace('models/', ''))
+          .filter(Boolean);
+        setFetchedModels(ids);
+      } else if (provider === 'groq') {
+        const key = groqKey.trim();
+        if (!key) { setIsFetchingModels(false); return; }
+        const res = await fetch('https://api.groq.com/openai/v1/models', {
+          headers: { Authorization: `Bearer ${key}` },
+          signal: controller.signal,
+        });
+        if (!res.ok) { throw new Error(`${res.status}`); }
+        const json = await res.json();
+        const ids: string[] = (json.data || []).map((m: any) => m.id as string).filter(Boolean);
+        setFetchedModels(ids);
+      } else if (provider === 'custom_openai') {
+        const base = customBaseUrl.trim().replace(/\/+$/, '');
+        if (!base) { setIsFetchingModels(false); return; }
+        const endpoint = `${base}/models`;
+        const headers: Record<string, string> = {};
+        if (customKey.trim()) { headers.Authorization = `Bearer ${customKey.trim()}`; }
+        const res = await fetch(endpoint, { headers, signal: controller.signal });
+        if (!res.ok) { throw new Error(`${res.status}`); }
+        const json = await res.json();
+        const ids: string[] = (json.data || json.models || [])
+          .map((m: any) => (m.id || m.name) as string)
+          .filter(Boolean);
+        setFetchedModels(ids);
+      }
+    } catch (e: any) {
+      if (e?.name === 'AbortError') return;
+      setFetchModelError('Could not load models — check your key/endpoint');
+    } finally {
+      setIsFetchingModels(false);
+    }
+  }, [provider, geminiKey, groqKey, customKey, customBaseUrl]);
+
+  // Reload model list whenever the active key or base url changes
+  useEffect(() => {
+    fetchModels();
+    return () => { fetchAbortRef.current?.abort(); };
+  }, [fetchModels]);
 
   const handleGetAPIKey = useCallback(async () => {
     lightHaptic();
@@ -215,7 +288,6 @@ export default function AISettingsScreen({ navigation }: any) {
     Alert.alert('CONFIGURED', 'AI Assistant preferences updated.');
   };
 
-  const availableModels = PROVIDER_MODELS[provider] || [];
 
   return (
     <View style={styles.root}>
@@ -371,50 +443,100 @@ export default function AISettingsScreen({ navigation }: any) {
           )}
         </View>
 
+
         {/* CARD 4: FOUNDATION MODEL MATRIX */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardHeaderTitle}>FOUNDATION MODEL MATRIX</Text>
+            <TouchableOpacity
+              onPress={() => { lightHaptic(); fetchModels(); }}
+              hitSlop={8}
+              disabled={isFetchingModels}
+            >
+              {isFetchingModels ? (
+                <ActivityIndicator size="small" color={themeColors.textSecondary} />
+              ) : (
+                <MaterialCommunityIcons name="refresh" size={16} color={themeColors.textSecondary} />
+              )}
+            </TouchableOpacity>
           </View>
-          {availableModels.map((m, idx) => {
-            const isSelected = selectedModel === m.id;
-            return (
-              <React.Fragment key={m.id}>
-                {idx > 0 && <View style={styles.divider} />}
-                <TouchableOpacity
-                  style={[styles.modelRow, isSelected ? styles.modelRowActive : null]}
-                  onPress={() => {
-                    lightHaptic();
-                    setSelectedModel(m.id);
-                    setHasChanges(true);
-                  }}
-                >
-                  <View style={styles.modelLeft}>
-                    <View style={styles.modelNameRow}>
-                      <Text style={[styles.modelName, isSelected ? styles.modelNameActive : null]}>
-                        {m.name}
-                      </Text>
-                      {m.recommended && (
-                        <View style={styles.recBadge}>
-                          <Text style={styles.recBadgeText}>RECOMMENDED</Text>
+
+          {isFetchingModels && fetchedModels.length === 0 ? (
+            <View style={styles.modelLoadingRow}>
+              <ActivityIndicator size="small" color={themeColors.textSecondary} />
+              <Text style={styles.modelLoadingText}>LOADING MODELS…</Text>
+            </View>
+          ) : fetchModelError && fetchedModels.length === 0 ? (
+            /* Fallback: show static models when fetch failed */
+            <>
+              <View style={styles.modelErrorBanner}>
+                <MaterialCommunityIcons name="alert-circle-outline" size={13} color={themeColors.textSecondary} />
+                <Text style={styles.modelErrorText}>
+                  {fetchModelError} · Showing defaults
+                </Text>
+              </View>
+              {(PROVIDER_MODELS[provider] || []).map((m, idx) => {
+                const isSelected = selectedModel === m.id;
+                return (
+                  <React.Fragment key={m.id}>
+                    {idx > 0 && <View style={styles.divider} />}
+                    <TouchableOpacity
+                      style={[styles.modelRow, isSelected ? styles.modelRowActive : null]}
+                      onPress={() => { lightHaptic(); setSelectedModel(m.id); setHasChanges(true); }}
+                    >
+                      <View style={styles.modelLeft}>
+                        <View style={styles.modelNameRow}>
+                          <Text style={[styles.modelName, isSelected ? styles.modelNameActive : null]}>
+                            {m.name}
+                          </Text>
+                          {m.recommended && (
+                            <View style={styles.recBadge}>
+                              <Text style={styles.recBadgeText}>DEFAULT</Text>
+                            </View>
+                          )}
                         </View>
+                        <Text style={styles.modelDesc}>{m.description}</Text>
+                      </View>
+                      <View style={styles.modelRight}>
+                        {isSelected ? (
+                          <View style={styles.checkPill}><Text style={styles.checkPillText}>SELECTED</Text></View>
+                        ) : (
+                          <Text style={styles.selectText}>SELECT</Text>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  </React.Fragment>
+                );
+              })}
+            </>
+          ) : (
+            /* Live models from API */
+            fetchedModels.map((modelId, idx) => {
+              const isSelected = selectedModel === modelId;
+              return (
+                <React.Fragment key={modelId}>
+                  {idx > 0 && <View style={styles.divider} />}
+                  <TouchableOpacity
+                    style={[styles.modelRow, isSelected ? styles.modelRowActive : null]}
+                    onPress={() => { lightHaptic(); setSelectedModel(modelId); setHasChanges(true); }}
+                  >
+                    <View style={styles.modelLeft}>
+                      <Text style={[styles.modelName, isSelected ? styles.modelNameActive : null]}>
+                        {modelId}
+                      </Text>
+                    </View>
+                    <View style={styles.modelRight}>
+                      {isSelected ? (
+                        <View style={styles.checkPill}><Text style={styles.checkPillText}>SELECTED</Text></View>
+                      ) : (
+                        <Text style={styles.selectText}>SELECT</Text>
                       )}
                     </View>
-                    <Text style={styles.modelDesc}>{m.description}</Text>
-                  </View>
-                  <View style={styles.modelRight}>
-                    {isSelected ? (
-                      <View style={styles.checkPill}>
-                        <Text style={styles.checkPillText}>SELECTED</Text>
-                      </View>
-                    ) : (
-                      <Text style={styles.selectText}>SELECT</Text>
-                    )}
-                  </View>
-                </TouchableOpacity>
-              </React.Fragment>
-            );
-          })}
+                  </TouchableOpacity>
+                </React.Fragment>
+              );
+            })
+          )}
         </View>
 
         {/* CARD 5: LATENCY BENCHMARK & TEST */}
@@ -447,14 +569,15 @@ export default function AISettingsScreen({ navigation }: any) {
           </View>
         </View>
 
-        {/* BOTTOM SAVE BUTTON */}
-        <TouchableOpacity
-          style={[styles.saveButton, !hasChanges ? styles.saveButtonMuted : null]}
-          onPress={handleSave}
-        >
-          <Text style={styles.saveButtonText}>SAVE ARCHITECTURAL PREFERENCES</Text>
-        </TouchableOpacity>
       </ScrollView>
+
+      {/* FLOATING SAVE BUTTON */}
+      <TouchableOpacity
+        style={[styles.saveButton, !hasChanges ? styles.saveButtonMuted : null]}
+        onPress={handleSave}
+      >
+        <Text style={styles.saveButtonText}>SAVE ARCHITECTURAL PREFERENCES</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -519,7 +642,7 @@ const createStyles = (theme: any) =>
     },
     scrollContent: {
       padding: spacing.md,
-      paddingBottom: spacing.xxl + 40,
+      paddingBottom: 120,
     },
     card: {
       borderWidth: 1,
@@ -777,14 +900,17 @@ const createStyles = (theme: any) =>
       letterSpacing: 0.5,
     },
     saveButton: {
+      position: 'absolute',
+      left: 20,
+      right: 20,
+      bottom: Platform.OS === 'ios' ? 24 : 16,
+      height: 52,
       borderWidth: 1,
       borderColor: theme.text,
       backgroundColor: theme.text,
-      paddingVertical: spacing.md,
       borderRadius: 2,
       alignItems: 'center',
       justifyContent: 'center',
-      marginTop: spacing.xs,
     },
     saveButtonMuted: {
       opacity: 0.4,
@@ -795,5 +921,34 @@ const createStyles = (theme: any) =>
       fontSize: 11,
       fontWeight: '700',
       letterSpacing: 1.2,
+    },
+    modelLoadingRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.md,
+    },
+    modelLoadingText: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 1,
+    },
+    modelErrorBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      marginBottom: spacing.xs,
+    },
+    modelErrorText: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 10,
+      fontWeight: '600',
+      flex: 1,
     },
   });

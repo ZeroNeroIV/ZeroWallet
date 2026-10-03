@@ -13,6 +13,7 @@ import {
   TextInput,
   SafeAreaView,
   StatusBar,
+  Platform,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -346,6 +347,17 @@ export default function CreateGoalScreen() {
           </TouchableOpacity>
         )}
       </ScrollView>
+
+      {/* Floating Save Button */}
+      <TouchableOpacity
+        onPress={handleSave}
+        disabled={saving}
+        style={[styles.floatingButton, { backgroundColor: themeColors.text }]}
+      >
+        <Text style={[styles.saveHeaderText, { color: themeColors.background }]}>
+          {saving ? '...' : 'SAVE'}
+        </Text>
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }
@@ -401,6 +413,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingVertical: spacing.lg,
+    paddingBottom: 120,
     gap: spacing.lg,
   },
   sectionBlock: {
@@ -480,5 +493,15 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: typography.weights.bold,
     letterSpacing: 0.8,
+  },
+  floatingButton: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    bottom: Platform.OS === 'ios' ? 24 : 16,
+    height: 52,
+    borderRadius: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

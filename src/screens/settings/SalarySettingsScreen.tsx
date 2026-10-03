@@ -20,6 +20,7 @@ import {
   Alert,
   TextInput,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -254,19 +255,20 @@ export default function SalarySettingsScreen({ navigation }: any) {
           </View>
         )}
 
-        {/* BOTTOM SAVE BUTTON */}
-        <TouchableOpacity
-          style={[styles.saveButton, isSaving ? styles.buttonMuted : null]}
-          onPress={handleSave}
-          disabled={isSaving}
-        >
-          {isSaving ? (
-            <ActivityIndicator size="small" color={themeColors.background} />
-          ) : (
-            <Text style={styles.saveButtonText}>SAVE SALARY CONFIGURATION</Text>
-          )}
-        </TouchableOpacity>
       </ScrollView>
+
+      {/* FLOATING SAVE BUTTON */}
+      <TouchableOpacity
+        style={[styles.saveButton, isSaving ? styles.buttonMuted : null]}
+        onPress={handleSave}
+        disabled={isSaving}
+      >
+        {isSaving ? (
+          <ActivityIndicator size="small" color={themeColors.background} />
+        ) : (
+          <Text style={styles.saveButtonText}>SAVE SALARY CONFIGURATION</Text>
+        )}
+      </TouchableOpacity>
 
       {/* Payday Modal Calendar Grid */}
       <Modal
@@ -382,7 +384,7 @@ const createStyles = (theme: any) =>
     },
     scrollContent: {
       padding: spacing.md,
-      paddingBottom: spacing.xxl + 40,
+      paddingBottom: 120,
     },
     card: {
       borderWidth: 1,
@@ -558,14 +560,17 @@ const createStyles = (theme: any) =>
       fontWeight: '700',
     },
     saveButton: {
+      position: 'absolute',
+      left: 20,
+      right: 20,
+      bottom: Platform.OS === 'ios' ? 24 : 16,
+      height: 52,
       borderWidth: 1,
       borderColor: theme.text,
       backgroundColor: theme.text,
-      paddingVertical: spacing.md,
       borderRadius: 2,
       alignItems: 'center',
       justifyContent: 'center',
-      marginTop: spacing.xs,
     },
     saveButtonText: {
       ...typography.caption,

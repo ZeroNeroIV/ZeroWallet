@@ -57,20 +57,18 @@ export const getCurrencyByCode = (code: string): Currency | undefined => {
     return CURRENCIES.find((c) => c.code === upper);
 };
 
-// Get currency symbol
+// Get currency display label — always the 3-letter ISO code
 export const getCurrencySymbol = (code: string): string => {
-    const currency = getCurrencyByCode(code);
-    return currency ? currency.symbol : (code ? code.trim().toUpperCase() : '$');
+    return (code || 'USD').trim().toUpperCase();
 };
 
-// Format amount with currency
+// Format amount with currency — always uses 3-letter ISO code prefix
 export const formatCurrency = (
     amount: number,
     currencyCode: string,
-    showCode: boolean = false
+    _showCode: boolean = false
 ): string => {
     const code = (currencyCode || 'USD').trim().toUpperCase();
-    const symbol = getCurrencySymbol(code);
     const isNegative = amount < 0;
     const absFormatted = Math.abs(amount).toLocaleString('en-US', {
         minimumFractionDigits: 3,
@@ -78,11 +76,8 @@ export const formatCurrency = (
     });
     const sign = isNegative ? '-' : '';
 
-    if (showCode) {
-        return `${sign}${symbol}${absFormatted} ${code}`;
-    }
-
-    return `${sign}${symbol}${absFormatted}`;
+    // _showCode is ignored: the ISO code is always shown (kept for call-site compatibility)
+    return `${sign}${code} ${absFormatted}`;
 };
 
 // Search currencies by name, code, symbol, or aliases

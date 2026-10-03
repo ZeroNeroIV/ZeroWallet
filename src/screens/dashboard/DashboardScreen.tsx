@@ -170,6 +170,7 @@ export const DashboardScreen: React.FC = () => {
               <RecurringTicker
                 item={data.upcomingRecurring}
                 currency={data.currency}
+                isBalanceHidden={isBalanceHidden}
                 onPress={() => useNavigationTabStore.getState().scrollToTab(2)}
               />
 
@@ -184,6 +185,7 @@ export const DashboardScreen: React.FC = () => {
                 data={data.trend30Day}
                 netChange={data.net30DayChange}
                 currency={data.currency}
+                isBalanceHidden={isBalanceHidden}
               />
 
               {/* Chronological Movements: Today & Yesterday */}
@@ -191,6 +193,7 @@ export const DashboardScreen: React.FC = () => {
                 transactions={data.recentTransactions}
                 wallets={activeWallets}
                 currency={data.currency}
+                isBalanceHidden={isBalanceHidden}
                 onSelectTransaction={(tx) =>
                   navigation.navigate('TransactionDetails', { transactionId: tx.id })
                 }

@@ -1,5 +1,5 @@
 // Simplizum Log & Edit Transaction — Swift Minimalist Flow with Tabular Figures & Category Grid
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -33,6 +33,9 @@ import { triggerHaptic } from '../../services/haptics/hapticFeedback';
 import { borderRadius } from '../../theme/spacing';
 import { ImagePickerButton } from '../../components/forms/ImagePickerButton';
 import { compressAndSaveImage } from '../../utils/imageStorage';
+import { useAutoCategorize } from '../../hooks/useAutoCategorize';
+import { createProposedCategory } from '../../services/ai/categorizationService';
+import { CATEGORIZATION_DEFAULTS, type NewCategoryProposal } from '../../types/categorization';
 
 type NavProp = StackNavigationProp<MainStackParamList, 'AddTransaction'>;
 type RouteProps = RouteProp<MainStackParamList, 'AddTransaction'>;
@@ -72,6 +75,65 @@ export const AddTransactionScreen: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [walletPickerTarget, setWalletPickerTarget] = useState<'single' | 'from' | 'to' | null>(null);
   const [currencyPickerVisible, setCurrencyPickerVisible] = useState(false);
+
+  // Laya auto-categorization (debounced on description)
+  const categoryType: 'income' | 'expense' = type === 'income' ? 'income' : 'expense';
+  const { suggest: suggestCategory, loading: categorizing } = useAutoCategorize(categoryType);
+  const [categoryProposal, setCategoryProposal] = useState<NewCategoryProposal | null>(null);
+  const [addingProposal, setAddingProposal] = useState(false);
+  const manualCategoryRef = useRef(false);
+  const categoriesRef = useRef<Category[]>([]);
+  categoriesRef.current = categories;
+
+  useEffect(() => {
+    if (type === 'transfer' || isEditMode) return undefined;
+    const text = description.trim();
+    if (text.length < 3) {
+      setCategoryProposal(null);
+      manualCategoryRef.current = false;
+      return undefined;
+    }
+    const timer = setTimeout(async () => {
+      const pool = categoriesRef.current.filter((c) => c.type === categoryType);
+      if (pool.length === 0) return;
+      const outcome = await suggestCategory(text, undefined, pool);
+      if (!outcome) return;
+
+      const confident = outcome.choice.confidence >= CATEGORIZATION_DEFAULTS.SUGGEST_THRESHOLD;
+      if (outcome.kind === 'match' && confident && outcome.choice.categoryId) {
+        setCategoryProposal(null);
+        if (!manualCategoryRef.current) setSelectedCategoryId(outcome.choice.categoryId);
+        return;
+      }
+
+      const other = pool.find((c) => c.name.toLowerCase() === 'other');
+      if (other && !manualCategoryRef.current) setSelectedCategoryId(other.id);
+      setCategoryProposal(outcome.kind === 'create_new' ? outcome.newCategory : null);
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [description, type, categoryType, isEditMode, suggestCategory]);
+
+  useEffect(() => {
+    setCategoryProposal(null);
+  }, [type]);
+
+  const handleAddProposedCategory = async () => {
+    if (!categoryProposal || !currentUser) return;
+    try {
+      setAddingProposal(true);
+      triggerHaptic('selection');
+      const created = await createProposedCategory(currentUser.id, categoryType, categoryProposal);
+      setCategories((prev) => (prev.some((c) => c.id === created.id) ? prev : [...prev, created]));
+      manualCategoryRef.current = true;
+      setSelectedCategoryId(created.id);
+      setCategoryProposal(null);
+      triggerHaptic('notificationSuccess');
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to add category.');
+    } finally {
+      setAddingProposal(false);
+    }
+  };
 
   // Load initial data & edit record if present
   useEffect(() => {
@@ -663,27 +725,6 @@ export const AddTransactionScreen: React.FC = () => {
               />
             </View>
 
-            {/* Confirm Transfer Button */}
-            <TouchableOpacity
-              activeOpacity={0.8}
-              disabled={saving}
-              onPress={handleTransfer}
-              style={[
-                styles.submitButton,
-                {
-                  backgroundColor: themeColors.text,
-                  borderColor: themeColors.text,
-                },
-              ]}
-            >
-              {saving ? (
-                <ActivityIndicator color={themeColors.background} size="small" />
-              ) : (
-                <Text style={[styles.submitButtonText, { color: themeColors.background }]}>
-                  CONFIRM TRANSFER
-                </Text>
-              )}
-            </TouchableOpacity>
           </>
         ) : (
           <>
@@ -778,9 +819,47 @@ export const AddTransactionScreen: React.FC = () => {
 
         {/* 3. Category Grid */}
         <View style={styles.categorySection}>
-          <Text style={[styles.sectionTitle, { color: themeColors.textMuted }]}>
-            SELECT CATEGORY
-          </Text>
+          <View style={styles.categoryTitleRow}>
+            <Text style={[styles.sectionTitle, styles.titleNoMargin, { color: themeColors.textMuted }]}>
+              SELECT CATEGORY
+            </Text>
+            {categorizing && (
+              <Text style={[styles.layaStatus, { color: themeColors.textMuted }]}>LAYA THINKING…</Text>
+            )}
+          </View>
+
+          {categoryProposal && (
+            <View
+              style={[
+                styles.proposalBanner,
+                { borderColor: themeColors.hairline, backgroundColor: themeColors.surface },
+              ]}
+            >
+              <View style={styles.proposalTextWrap}>
+                <Text style={[styles.proposalLabel, { color: themeColors.textMuted }]}>
+                  LAYA SUGGESTS A NEW CATEGORY
+                </Text>
+                <Text style={[styles.proposalName, { color: themeColors.text }]} numberOfLines={1}>
+                  {categoryProposal.name}
+                </Text>
+              </View>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                disabled={addingProposal}
+                onPress={handleAddProposedCategory}
+                style={[
+                  styles.proposalAddButton,
+                  { borderColor: themeColors.text, backgroundColor: themeColors.text },
+                ]}
+              >
+                {addingProposal ? (
+                  <ActivityIndicator size="small" color={themeColors.background} />
+                ) : (
+                  <Text style={[styles.proposalAddText, { color: themeColors.background }]}>+ ADD</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
 
           <View style={styles.categoryGrid}>
             {filteredCategories.map((cat) => {
@@ -791,6 +870,7 @@ export const AddTransactionScreen: React.FC = () => {
                   activeOpacity={0.7}
                   onPress={() => {
                     triggerHaptic('selection');
+                    manualCategoryRef.current = true;
                     setSelectedCategoryId(cat.id);
                   }}
                   style={[
@@ -880,30 +960,34 @@ export const AddTransactionScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* 5. Submit Button */}
-        <TouchableOpacity
-          activeOpacity={0.8}
-          disabled={saving}
-          onPress={handleSave}
-          style={[
-            styles.submitButton,
-            {
-              backgroundColor: themeColors.text,
-              borderColor: themeColors.text,
-            },
-          ]}
-        >
-          {saving ? (
-            <ActivityIndicator color={themeColors.background} size="small" />
-          ) : (
-            <Text style={[styles.submitButtonText, { color: themeColors.background }]}>
-              {isEditMode ? 'UPDATE TRANSACTION' : 'LOG TRANSACTION'}
-            </Text>
-          )}
-        </TouchableOpacity>
           </>
         )}
       </ScrollView>
+
+      {/* Floating Submit Button — outside ScrollView, fixed at bottom */}
+      <TouchableOpacity
+        activeOpacity={0.8}
+        disabled={saving}
+        onPress={type === 'transfer' ? handleTransfer : handleSave}
+        style={[
+          styles.floatingButton,
+          {
+            backgroundColor: themeColors.text,
+          },
+        ]}
+      >
+        {saving ? (
+          <ActivityIndicator color={themeColors.background} size="small" />
+        ) : (
+          <Text style={[styles.submitButtonText, { color: themeColors.background }]}>
+            {type === 'transfer'
+              ? 'CONFIRM TRANSFER'
+              : isEditMode
+              ? 'UPDATE TRANSACTION'
+              : 'LOG TRANSACTION'}
+          </Text>
+        )}
+      </TouchableOpacity>
 
       {/* Wallet Picker Modal */}
       <Modal
@@ -1073,7 +1157,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 120,
   },
   typeSwitchContainer: {
     flexDirection: 'row',
@@ -1163,6 +1247,57 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     paddingHorizontal: 2,
   },
+  titleNoMargin: {
+    marginBottom: 0,
+  },
+  categoryTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  layaStatus: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  proposalBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderRadius: borderRadius.xs,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+    gap: 10,
+  },
+  proposalTextWrap: {
+    flex: 1,
+  },
+  proposalLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginBottom: 2,
+  },
+  proposalName: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  proposalAddButton: {
+    borderWidth: 1,
+    borderRadius: 2,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    minWidth: 56,
+    alignItems: 'center',
+  },
+  proposalAddText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
   categoryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1218,6 +1353,16 @@ const styles = StyleSheet.create({
     height: 48,
     borderWidth: 1,
     borderRadius: borderRadius.xs,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  floatingButton: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    bottom: Platform.OS === 'ios' ? 24 : 16,
+    height: 52,
+    borderRadius: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },

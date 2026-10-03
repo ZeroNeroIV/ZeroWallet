@@ -15,6 +15,7 @@ interface ChronologicalMovementsProps {
   currency: string;
   onSelectTransaction: (transaction: TransactionWithCat) => void;
   onViewAll: () => void;
+  isBalanceHidden?: boolean;
 }
 
 export const ChronologicalMovements: React.FC<ChronologicalMovementsProps> = ({
@@ -23,6 +24,7 @@ export const ChronologicalMovements: React.FC<ChronologicalMovementsProps> = ({
   currency,
   onSelectTransaction,
   onViewAll,
+  isBalanceHidden = false,
 }) => {
   const themeColors = useThemeColors();
 
@@ -70,7 +72,9 @@ export const ChronologicalMovements: React.FC<ChronologicalMovementsProps> = ({
             const isTransfer = tx.type === 'transfer';
             const amountVal = tx.convertedAmount ?? tx.amount;
             const prefix = isTransfer ? '⇄ ' : isIncome ? '+' : '-';
-            const amountStr = `${prefix}${formatCurrency(amountVal, currency)}`;
+            const amountStr = isBalanceHidden
+              ? '••••'
+              : `${prefix}${formatCurrency(amountVal, currency)}`;
 
             const amountColor = isTransfer
               ? themeColors.transfer

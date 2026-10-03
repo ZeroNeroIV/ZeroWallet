@@ -8,6 +8,7 @@ import {
   Alert,
   TouchableOpacity,
   Switch,
+  Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -136,113 +137,116 @@ export default function CreateAccountScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Input
-        label="Account Name"
-        placeholder="e.g., My Savings, Business Account"
-        value={name}
-        onChangeText={(text) => {
-          setName(text);
-          setErrors({});
-        }}
-        error={errors.name}
-        leftIcon="wallet-outline"
-        autoFocus
-      />
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Choose Icon</Text>
-        <View style={styles.iconGrid}>
-          {ACCOUNT_ICONS.map((icon) => (
-            <TouchableOpacity
-              key={icon}
-              style={[
-                styles.iconOption,
-                selectedIcon === icon && styles.iconOptionSelected,
-                { borderColor: selectedColor },
-              ]}
-              onPress={() => setSelectedIcon(icon)}
-            >
-              <Icon
-                name={icon}
-                size={32}
-                color={selectedIcon === icon ? selectedColor : themeColors.textSecondary}
-              />
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Choose Color</Text>
-        <View style={styles.colorGrid}>
-          {ACCOUNT_COLORS.map((color) => (
-            <TouchableOpacity
-              key={color}
-              style={[
-                styles.colorOption,
-                { backgroundColor: color },
-                selectedColor === color && styles.colorOptionSelected,
-              ]}
-              onPress={() => setSelectedColor(color)}
-            >
-              {selectedColor === color && (
-                <Icon name="check" size={20} color={themeColors.surface} />
-              )}
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.preview}>
-        <Text style={styles.previewLabel}>Preview</Text>
-        <View style={styles.previewCard}>
-          <View
-            style={[
-              styles.previewIcon,
-              { backgroundColor: selectedColor + '20' },
-            ]}
-          >
-            <Icon name={selectedIcon} size={32} color={selectedColor} />
-          </View>
-          <View style={styles.previewInfo}>
-            <Text style={styles.previewName}>{name || 'Account Name'}</Text>
-            <Text style={styles.previewCurrency}>{selectedCurrency}</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Currency Selection */}
-      <View style={styles.section}>
-        <CurrencyPicker
-          selectedCurrency={selectedCurrency}
-          onSelectCurrency={setSelectedCurrency}
-          label="Account Currency"
+    <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <Input
+          label="Account Name"
+          placeholder="e.g., My Savings, Business Account"
+          value={name}
+          onChangeText={(text) => {
+            setName(text);
+            setErrors({});
+          }}
+          error={errors.name}
+          leftIcon="wallet-outline"
+          autoFocus
         />
-      </View>
 
-      {/* Set as Default Toggle */}
-      <View style={styles.section}>
-        <View style={styles.switchRow}>
-          <View style={styles.switchTextContainer}>
-            <Text style={styles.switchLabel}>Set as Default Account</Text>
-            <Text style={styles.switchDescription}>
-              Make this your primary active account and use its currency as default
-            </Text>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Choose Icon</Text>
+          <View style={styles.iconGrid}>
+            {ACCOUNT_ICONS.map((icon) => (
+              <TouchableOpacity
+                key={icon}
+                style={[
+                  styles.iconOption,
+                  selectedIcon === icon && styles.iconOptionSelected,
+                  { borderColor: selectedColor },
+                ]}
+                onPress={() => setSelectedIcon(icon)}
+              >
+                <Icon
+                  name={icon}
+                  size={32}
+                  color={selectedIcon === icon ? selectedColor : themeColors.textSecondary}
+                />
+              </TouchableOpacity>
+            ))}
           </View>
-          <Switch
-            value={isDefault}
-            onValueChange={setIsDefault}
-            trackColor={{
-              false: themeColors.border,
-              true: themeColors.primary,
-            }}
-            thumbColor={themeColors.surface}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Choose Color</Text>
+          <View style={styles.colorGrid}>
+            {ACCOUNT_COLORS.map((color) => (
+              <TouchableOpacity
+                key={color}
+                style={[
+                  styles.colorOption,
+                  { backgroundColor: color },
+                  selectedColor === color && styles.colorOptionSelected,
+                ]}
+                onPress={() => setSelectedColor(color)}
+              >
+                {selectedColor === color && (
+                  <Icon name="check" size={20} color={themeColors.surface} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.preview}>
+          <Text style={styles.previewLabel}>Preview</Text>
+          <View style={styles.previewCard}>
+            <View
+              style={[
+                styles.previewIcon,
+                { backgroundColor: selectedColor + '20' },
+              ]}
+            >
+              <Icon name={selectedIcon} size={32} color={selectedColor} />
+            </View>
+            <View style={styles.previewInfo}>
+              <Text style={styles.previewName}>{name || 'Account Name'}</Text>
+              <Text style={styles.previewCurrency}>{selectedCurrency}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Currency Selection */}
+        <View style={styles.section}>
+          <CurrencyPicker
+            selectedCurrency={selectedCurrency}
+            onSelectCurrency={setSelectedCurrency}
+            label="Account Currency"
           />
         </View>
-      </View>
 
-      <View style={styles.footer}>
+        {/* Set as Default Toggle */}
+        <View style={styles.section}>
+          <View style={styles.switchRow}>
+            <View style={styles.switchTextContainer}>
+              <Text style={styles.switchLabel}>Set as Default Account</Text>
+              <Text style={styles.switchDescription}>
+                Make this your primary active account and use its currency as default
+              </Text>
+            </View>
+            <Switch
+              value={isDefault}
+              onValueChange={setIsDefault}
+              trackColor={{
+                false: themeColors.border,
+                true: themeColors.primary,
+              }}
+              thumbColor={themeColors.surface}
+            />
+          </View>
+        </View>
+      </ScrollView>
+
+      {/* Save Button — floating */}
+      <View style={styles.floatingButtonWrap}>
         <Button
           title="Create Account"
           onPress={handleCreateAccount}
@@ -250,7 +254,7 @@ export default function CreateAccountScreen() {
           disabled={loading || !name.trim()}
         />
       </View>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -261,6 +265,13 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) => StyleSh
   },
   content: {
     padding: spacing.lg,
+    paddingBottom: 120,
+  },
+  floatingButtonWrap: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    bottom: Platform.OS === 'ios' ? 24 : 16,
   },
   section: {
     marginTop: spacing.lg,

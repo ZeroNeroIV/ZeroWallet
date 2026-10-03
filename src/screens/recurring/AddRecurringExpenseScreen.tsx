@@ -23,6 +23,7 @@ import {
   Alert,
   TouchableOpacity,
   Modal,
+  Platform,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -278,229 +279,253 @@ export default function AddRecurringExpenseScreen() {
   const intervals = Array.from({ length: 12 }, (_, i) => i + 1);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Name */}
-      <Input
-        label="Expense Name"
-        placeholder="e.g., Rent, Insurance, Maintenance"
-        value={name}
-        onChangeText={(text) => {
-          setName(text);
-          setErrors({});
-        }}
-        error={errors.name}
-        leftIcon="clock-outline"
-        autoFocus={!isEditMode}
-      />
+    <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.content}>
+        {/* Name */}
+        <Input
+          label="Expense Name"
+          placeholder="e.g., Rent, Insurance, Maintenance"
+          value={name}
+          onChangeText={(text) => {
+            setName(text);
+            setErrors({});
+          }}
+          error={errors.name}
+          leftIcon="clock-outline"
+          autoFocus={!isEditMode}
+        />
 
-      {/* Amount */}
-      <AmountInput
-        label="Amount"
-        value={amount}
-        onChangeText={(text) => {
-          setAmount(text);
-          setErrors({});
-        }}
-        error={errors.amount}
-      />
+        {/* Amount */}
+        <AmountInput
+          label="Amount"
+          value={amount}
+          onChangeText={(text) => {
+            setAmount(text);
+            setErrors({});
+          }}
+          error={errors.amount}
+        />
 
-      {/* Category */}
-      <View style={styles.section}>
-        <Text style={styles.label}>Category</Text>
-        <TouchableOpacity
-          style={styles.picker}
-          onPress={() => setShowCategoryPicker(true)}
-        >
-          {selectedCategory ? (
-            <View style={styles.pickerContent}>
-              <View
-                style={[
-                  styles.categoryIcon,
-                  { backgroundColor: selectedCategory.color },
-                ]}
-              >
-                <Icon
-                  name={selectedCategory.icon}
-                  size={20}
-                  color={themeColors.surface}
-                />
-              </View>
-              <Text style={styles.pickerText}>{selectedCategory.name}</Text>
-            </View>
-          ) : (
-            <Text style={styles.pickerPlaceholder}>Select category</Text>
-          )}
-          <Icon name="chevron-down" size={24} color={themeColors.textSecondary} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Frequency */}
-      <View style={styles.section}>
-        <Text style={styles.label}>Frequency</Text>
-        <View style={styles.frequencyGrid}>
-          {FREQUENCY_OPTIONS.map((freq) => (
-            <TouchableOpacity
-              key={freq.value}
-              style={[
-                styles.frequencyOption,
-                frequency === freq.value && styles.frequencyOptionSelected,
-              ]}
-              onPress={() => setFrequency(freq.value)}
-            >
-              <Icon
-                name={freq.icon}
-                size={20}
-                color={
-                  frequency === freq.value
-                    ? themeColors.primary
-                    : themeColors.textSecondary
-                }
-              />
-              <Text
-                style={[
-                  styles.frequencyText,
-                  frequency === freq.value && styles.frequencyTextSelected,
-                ]}
-              >
-                {freq.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      {/* Interval */}
-      <View style={styles.section}>
-        <Text style={styles.label}>Interval</Text>
-        <TouchableOpacity
-          style={styles.picker}
-          onPress={() => setShowIntervalPicker(!showIntervalPicker)}
-        >
-          <Text style={styles.pickerText}>{getFrequencyText()}</Text>
-          <Icon name="chevron-down" size={24} color={themeColors.textSecondary} />
-        </TouchableOpacity>
-
-        {showIntervalPicker && (
-          <View style={styles.intervalGrid}>
-            {intervals.map((int) => (
-              <TouchableOpacity
-                key={int}
-                style={[
-                  styles.intervalButton,
-                  interval === int && styles.intervalButtonSelected,
-                ]}
-                onPress={() => {
-                  setInterval(int);
-                  setShowIntervalPicker(false);
-                }}
-              >
-                <Text
+        {/* Category */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Category</Text>
+          <TouchableOpacity
+            style={styles.picker}
+            onPress={() => setShowCategoryPicker(true)}
+          >
+            {selectedCategory ? (
+              <View style={styles.pickerContent}>
+                <View
                   style={[
-                    styles.intervalText,
-                    interval === int && styles.intervalTextSelected,
+                    styles.categoryIcon,
+                    { backgroundColor: selectedCategory.color },
                   ]}
                 >
-                  {int}
+                  <Icon
+                    name={selectedCategory.icon}
+                    size={20}
+                    color={themeColors.surface}
+                  />
+                </View>
+                <Text style={styles.pickerText}>{selectedCategory.name}</Text>
+              </View>
+            ) : (
+              <Text style={styles.pickerPlaceholder}>Select category</Text>
+            )}
+            <Icon name="chevron-down" size={24} color={themeColors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Frequency */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Frequency</Text>
+          <View style={styles.frequencyGrid}>
+            {FREQUENCY_OPTIONS.map((freq) => (
+              <TouchableOpacity
+                key={freq.value}
+                style={[
+                  styles.frequencyOption,
+                  frequency === freq.value && styles.frequencyOptionSelected,
+                ]}
+                onPress={() => setFrequency(freq.value)}
+              >
+                <Icon
+                  name={freq.icon}
+                  size={20}
+                  color={
+                    frequency === freq.value
+                      ? themeColors.primary
+                      : themeColors.textSecondary
+                  }
+                />
+                <Text
+                  style={[
+                    styles.frequencyText,
+                    frequency === freq.value && styles.frequencyTextSelected,
+                  ]}
+                >
+                  {freq.label}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
-        )}
-      </View>
+        </View>
 
-      {/* Vault Selection */}
-      <View style={styles.section}>
-        <Text style={styles.label}>Deduct From</Text>
-        <View style={styles.vaultGrid}>
-          {VAULT_OPTIONS.map((vault) => (
-            <TouchableOpacity
-              key={vault.value}
-              style={[
-                styles.vaultOption,
-                selectedVault === vault.value && styles.vaultOptionSelected,
-              ]}
-              onPress={() => setSelectedVault(vault.value)}
-            >
-              <Icon
-                name={vault.icon}
-                size={24}
-                color={
-                  selectedVault === vault.value
-                    ? themeColors.primary
-                    : themeColors.textSecondary
-                }
-              />
-              <Text
+        {/* Interval */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Interval</Text>
+          <TouchableOpacity
+            style={styles.picker}
+            onPress={() => setShowIntervalPicker(!showIntervalPicker)}
+          >
+            <Text style={styles.pickerText}>{getFrequencyText()}</Text>
+            <Icon name="chevron-down" size={24} color={themeColors.textSecondary} />
+          </TouchableOpacity>
+
+          {showIntervalPicker && (
+            <View style={styles.intervalGrid}>
+              {intervals.map((int) => (
+                <TouchableOpacity
+                  key={int}
+                  style={[
+                    styles.intervalButton,
+                    interval === int && styles.intervalButtonSelected,
+                  ]}
+                  onPress={() => {
+                    setInterval(int);
+                    setShowIntervalPicker(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.intervalText,
+                      interval === int && styles.intervalTextSelected,
+                    ]}
+                  >
+                    {int}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+
+        {/* Vault Selection */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Deduct From</Text>
+          <View style={styles.vaultGrid}>
+            {VAULT_OPTIONS.map((vault) => (
+              <TouchableOpacity
+                key={vault.value}
                 style={[
-                  styles.vaultText,
-                  selectedVault === vault.value && styles.vaultTextSelected,
+                  styles.vaultOption,
+                  selectedVault === vault.value && styles.vaultOptionSelected,
                 ]}
+                onPress={() => setSelectedVault(vault.value)}
               >
-                {vault.label}
+                <Icon
+                  name={vault.icon}
+                  size={24}
+                  color={
+                    selectedVault === vault.value
+                      ? themeColors.primary
+                      : themeColors.textSecondary
+                  }
+                />
+                <Text
+                  style={[
+                    styles.vaultText,
+                    selectedVault === vault.value && styles.vaultTextSelected,
+                  ]}
+                >
+                  {vault.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* Auto-Deduct Toggle */}
+        <TouchableOpacity
+          style={styles.toggle}
+          onPress={() => setAutoDeduct(!autoDeduct)}
+        >
+          <View style={styles.toggleLeft}>
+            <Icon
+              name={autoDeduct ? 'lightning-bolt' : 'hand-coin-outline'}
+              size={24}
+              color={autoDeduct ? themeColors.warning : themeColors.textSecondary}
+            />
+            <View>
+              <Text style={styles.toggleTitle}>
+                {autoDeduct ? 'Auto-Deduct' : 'Manual'}
               </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      {/* Auto-Deduct Toggle */}
-      <TouchableOpacity
-        style={styles.toggle}
-        onPress={() => setAutoDeduct(!autoDeduct)}
-      >
-        <View style={styles.toggleLeft}>
-          <Icon
-            name={autoDeduct ? 'lightning-bolt' : 'hand-coin-outline'}
-            size={24}
-            color={autoDeduct ? themeColors.warning : themeColors.textSecondary}
-          />
-          <View>
-            <Text style={styles.toggleTitle}>
-              {autoDeduct ? 'Auto-Deduct' : 'Manual'}
-            </Text>
-            <Text style={styles.toggleSubtitle}>
-              {autoDeduct
-                ? 'Automatically deduct when due'
-                : 'Manually trigger when needed'}
-            </Text>
+              <Text style={styles.toggleSubtitle}>
+                {autoDeduct
+                  ? 'Automatically deduct when due'
+                  : 'Manually trigger when needed'}
+              </Text>
+            </View>
           </View>
-        </View>
-        <Icon
-          name={autoDeduct ? 'toggle-switch' : 'toggle-switch-off'}
-          size={32}
-          color={autoDeduct ? themeColors.primary : themeColors.textSecondary}
-        />
-      </TouchableOpacity>
-
-      {/* Active Toggle */}
-      <TouchableOpacity
-        style={styles.toggle}
-        onPress={() => setIsActive(!isActive)}
-      >
-        <View style={styles.toggleLeft}>
           <Icon
-            name={isActive ? 'check-circle' : 'close-circle'}
-            size={24}
-            color={isActive ? themeColors.success : themeColors.textSecondary}
+            name={autoDeduct ? 'toggle-switch' : 'toggle-switch-off'}
+            size={32}
+            color={autoDeduct ? themeColors.primary : themeColors.textSecondary}
           />
-          <View>
-            <Text style={styles.toggleTitle}>
-              {isActive ? 'Active' : 'Inactive'}
-            </Text>
-            <Text style={styles.toggleSubtitle}>
-              {isActive ? 'Expense is active' : 'Paused, will not process'}
-            </Text>
-          </View>
-        </View>
-        <Icon
-          name={isActive ? 'toggle-switch' : 'toggle-switch-off'}
-          size={32}
-          color={isActive ? themeColors.primary : themeColors.textSecondary}
-        />
-      </TouchableOpacity>
+        </TouchableOpacity>
 
-      {/* Save Button */}
-      <View style={styles.footer}>
+        {/* Active Toggle */}
+        <TouchableOpacity
+          style={styles.toggle}
+          onPress={() => setIsActive(!isActive)}
+        >
+          <View style={styles.toggleLeft}>
+            <Icon
+              name={isActive ? 'check-circle' : 'close-circle'}
+              size={24}
+              color={isActive ? themeColors.success : themeColors.textSecondary}
+            />
+            <View>
+              <Text style={styles.toggleTitle}>
+                {isActive ? 'Active' : 'Inactive'}
+              </Text>
+              <Text style={styles.toggleSubtitle}>
+                {isActive ? 'Expense is active' : 'Paused, will not process'}
+              </Text>
+            </View>
+          </View>
+          <Icon
+            name={isActive ? 'toggle-switch' : 'toggle-switch-off'}
+            size={32}
+            color={isActive ? themeColors.primary : themeColors.textSecondary}
+          />
+        </TouchableOpacity>
+
+        {/* Category Picker Modal */}
+        {showCategoryPicker && (
+          <Modal visible={showCategoryPicker} animationType="slide">
+            <View style={{ flex: 1, backgroundColor: themeColors.background }}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Select Category</Text>
+                <TouchableOpacity onPress={() => setShowCategoryPicker(false)}>
+                  <Icon name="close" size={24} color={themeColors.text} />
+                </TouchableOpacity>
+              </View>
+              <CategoryPicker
+                categories={categories}
+                onSelectCategory={(category: Category) => {
+                  setSelectedCategory(category);
+                  setShowCategoryPicker(false);
+                }}
+                type="expense"
+              />
+            </View>
+          </Modal>
+        )}
+      </ScrollView>
+
+      {/* Save Button — floating */}
+      <View style={styles.floatingButtonWrap}>
         <Button
           title={isEditMode ? 'Update Expense' : 'Create Expense'}
           onPress={handleSave}
@@ -508,29 +533,7 @@ export default function AddRecurringExpenseScreen() {
           leftIcon={<Icon name={isEditMode ? 'check' : 'plus'} size={20} color="#FFF" />}
         />
       </View>
-
-      {/* Category Picker Modal */}
-      {showCategoryPicker && (
-        <Modal visible={showCategoryPicker} animationType="slide">
-          <View style={{ flex: 1, backgroundColor: themeColors.background }}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Category</Text>
-              <TouchableOpacity onPress={() => setShowCategoryPicker(false)}>
-                <Icon name="close" size={24} color={themeColors.text} />
-              </TouchableOpacity>
-            </View>
-            <CategoryPicker
-              categories={categories}
-              onSelectCategory={(category: Category) => {
-                setSelectedCategory(category);
-                setShowCategoryPicker(false);
-              }}
-              type="expense"
-            />
-          </View>
-        </Modal>
-      )}
-    </ScrollView>
+    </View>
   );
 }
 
@@ -541,7 +544,7 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) => StyleSh
   },
   content: {
     padding: spacing.md,
-    paddingBottom: spacing.xxxl,
+    paddingBottom: 120,
   },
   section: {
     marginBottom: spacing.lg,
@@ -702,8 +705,11 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) => StyleSh
     color: themeColors.textSecondary,
     marginTop: 2,
   },
-  footer: {
-    marginTop: spacing.lg,
+  floatingButtonWrap: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    bottom: Platform.OS === 'ios' ? 24 : 16,
   },
   modalHeader: {
     flexDirection: 'row',

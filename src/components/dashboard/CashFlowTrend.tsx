@@ -11,12 +11,14 @@ interface CashFlowTrendProps {
   data?: CashFlow30DayPoint[];
   netChange?: number;
   currency: string;
+  isBalanceHidden?: boolean;
 }
 
 export const CashFlowTrend: React.FC<CashFlowTrendProps> = ({
   data = [],
   netChange = 0,
   currency,
+  isBalanceHidden = false,
 }) => {
   const themeColors = useThemeColors();
   const [chartWidth, setChartWidth] = useState(300);
@@ -127,7 +129,9 @@ export const CashFlowTrend: React.FC<CashFlowTrendProps> = ({
     : 'PAST 30 DAYS NET';
 
   const isPositive = displayAmount >= 0;
-  const formattedAmount = `${isPositive ? '+' : ''}${formatCurrency(displayAmount, currency)}`;
+  const formattedAmount = isBalanceHidden
+    ? '••••'
+    : `${isPositive ? '+' : ''}${formatCurrency(displayAmount, currency)}`;
 
   return (
     <View style={styles.outerContainer}>

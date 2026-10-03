@@ -6,6 +6,7 @@ import {
     ScrollView,
     Alert,
     TouchableOpacity,
+    Platform,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -150,6 +151,7 @@ export default function AccountSettingsScreen() {
     const currencyObj = getCurrencyByCode(selectedCurrency);
 
     return (
+        <View style={styles.root}>
         <ScrollView style={styles.container} contentContainerStyle={styles.content}>
             <Input
                 label="Account Name"
@@ -246,7 +248,9 @@ export default function AccountSettingsScreen() {
                 </View>
             </View>
 
-            <View style={styles.footer}>
+        </ScrollView>
+
+            <View style={styles.floatingButtonWrap}>
                 <Button
                     title="Save Changes"
                     onPress={handleSave}
@@ -254,7 +258,7 @@ export default function AccountSettingsScreen() {
                     disabled={loading || !name.trim()}
                 />
             </View>
-        </ScrollView>
+        </View>
     );
 }
 
@@ -274,8 +278,19 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
             ...typography.body,
             color: themeColors.textSecondary,
         },
+        root: {
+            flex: 1,
+            backgroundColor: themeColors.background,
+        },
         content: {
             padding: spacing.lg,
+            paddingBottom: 120,
+        },
+        floatingButtonWrap: {
+            position: 'absolute',
+            left: 20,
+            right: 20,
+            bottom: Platform.OS === 'ios' ? 24 : 16,
         },
         section: {
             marginTop: spacing.lg,

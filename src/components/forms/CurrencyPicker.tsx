@@ -73,7 +73,6 @@ export const CurrencyPicker: React.FC<CurrencyPickerProps> = ({
                     <Text style={styles.currencyCode}>{item.code}</Text>
                     <Text style={styles.currencyName}>{item.name}</Text>
                 </View>
-                <Text style={styles.currencySymbol}>{item.symbol}</Text>
                 {isSelected && (
                     <Icon name="check-circle" size={20} color={themeColors.primary} />
                 )}
@@ -102,7 +101,7 @@ export const CurrencyPicker: React.FC<CurrencyPickerProps> = ({
                         <>
                             <Text style={styles.selectedFlag}>{selectedCurrencyObj.flag}</Text>
                             <Text style={styles.selectedCurrency}>
-                                {selectedCurrencyObj.code} - {selectedCurrencyObj.symbol}
+                                {selectedCurrencyObj.code}
                             </Text>
                         </>
                     ) : (

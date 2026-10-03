@@ -20,6 +20,7 @@ import {
   Switch,
   SafeAreaView,
   StatusBar,
+  Platform,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -611,6 +612,17 @@ export default function CreateCategoryScreen() {
           </TouchableOpacity>
         )}
       </ScrollView>
+
+      <TouchableOpacity
+        activeOpacity={0.8}
+        onPress={handleSave}
+        disabled={saving}
+        style={[styles.floatingButton, { backgroundColor: themeColors.text }]}
+      >
+        <Text style={[styles.floatingButtonText, { color: themeColors.background }]}>
+          {saving ? 'SAVING…' : isEditMode ? 'UPDATE CATEGORY' : 'CREATE CATEGORY'}
+        </Text>
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }
@@ -665,8 +677,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   scrollContent: {
-    paddingVertical: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: 120,
     gap: spacing.lg,
+  },
+  floatingButton: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    bottom: Platform.OS === 'ios' ? 24 : 16,
+    height: 52,
+    borderRadius: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  floatingButtonText: {
+    fontSize: 12,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 1,
   },
   sectionBlock: {
     gap: spacing.xs,

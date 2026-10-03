@@ -11,12 +11,14 @@ interface RecurringTickerProps {
   item?: UpcomingRecurringItem | null;
   currency: string;
   onPress: () => void;
+  isBalanceHidden?: boolean;
 }
 
 export const RecurringTicker: React.FC<RecurringTickerProps> = ({
   item,
   currency,
   onPress,
+  isBalanceHidden = false,
 }) => {
   const themeColors = useThemeColors();
 
@@ -31,7 +33,7 @@ export const RecurringTicker: React.FC<RecurringTickerProps> = ({
       ? 'due tomorrow'
       : `in ${item.daysUntil} days`;
 
-  const amountStr = formatCurrency(item.amount, currency);
+  const amountStr = isBalanceHidden ? '••••' : formatCurrency(item.amount, currency);
 
   return (
     <View style={styles.outerContainer}>

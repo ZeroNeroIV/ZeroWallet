@@ -22,6 +22,7 @@ import {
   ScrollView,
   Alert,
   TouchableOpacity,
+  Platform,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -239,152 +240,155 @@ export default function AddSubscriptionScreen() {
   const billingDays = Array.from({ length: 31 }, (_, i) => i + 1);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Subscription Name */}
-      <Input
-        label="Subscription Name"
-        placeholder="e.g., Netflix, Spotify, Gym Membership"
-        value={name}
-        onChangeText={(text) => {
-          setName(text);
-          setErrors({});
-        }}
-        error={errors.name}
-        leftIcon="repeat"
-        autoFocus={!isEditMode}
-      />
-
-      {/* Amount */}
-      <AmountInput
-        label="Monthly Amount"
-        value={amount}
-        onChangeText={(text) => {
-          setAmount(text);
-          setErrors({});
-        }}
-        error={errors.amount}
-      />
-
-      {/* Category */}
-      <View style={styles.section}>
-        <CategoryPicker
-          categories={categories}
-          selectedCategory={selectedCategory ?? undefined}
-          onSelectCategory={(category: Category) => setSelectedCategory(category)}
-          type="expense"
-          label="Category"
+    <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.content}>
+        {/* Subscription Name */}
+        <Input
+          label="Subscription Name"
+          placeholder="e.g., Netflix, Spotify, Gym Membership"
+          value={name}
+          onChangeText={(text) => {
+            setName(text);
+            setErrors({});
+          }}
+          error={errors.name}
+          leftIcon="repeat"
+          autoFocus={!isEditMode}
         />
-      </View>
 
-      {/* Billing Day */}
-      <View style={styles.section}>
-        <Text style={styles.label}>Billing Day</Text>
-        <TouchableOpacity
-          style={styles.picker}
-          onPress={() => setShowBillingDayPicker(!showBillingDayPicker)}
-        >
-          <Text style={styles.pickerText}>
-            {billingDay}
-            {getOrdinalSuffix(billingDay)} of every month
-          </Text>
-          <Icon name="chevron-down" size={24} color={themeColors.textSecondary} />
-        </TouchableOpacity>
+        {/* Amount */}
+        <AmountInput
+          label="Monthly Amount"
+          value={amount}
+          onChangeText={(text) => {
+            setAmount(text);
+            setErrors({});
+          }}
+          error={errors.amount}
+        />
 
-        {/* Billing Day Grid */}
-        {showBillingDayPicker && (
-          <View style={styles.dayGrid}>
-            {billingDays.map((day) => (
+        {/* Category */}
+        <View style={styles.section}>
+          <CategoryPicker
+            categories={categories}
+            selectedCategory={selectedCategory ?? undefined}
+            onSelectCategory={(category: Category) => setSelectedCategory(category)}
+            type="expense"
+            label="Category"
+          />
+        </View>
+
+        {/* Billing Day */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Billing Day</Text>
+          <TouchableOpacity
+            style={styles.picker}
+            onPress={() => setShowBillingDayPicker(!showBillingDayPicker)}
+          >
+            <Text style={styles.pickerText}>
+              {billingDay}
+              {getOrdinalSuffix(billingDay)} of every month
+            </Text>
+            <Icon name="chevron-down" size={24} color={themeColors.textSecondary} />
+          </TouchableOpacity>
+
+          {/* Billing Day Grid */}
+          {showBillingDayPicker && (
+            <View style={styles.dayGrid}>
+              {billingDays.map((day) => (
+                <TouchableOpacity
+                  key={day}
+                  style={[
+                    styles.dayButton,
+                    billingDay === day && styles.dayButtonSelected,
+                  ]}
+                  onPress={() => {
+                    setBillingDay(day);
+                    setShowBillingDayPicker(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.dayText,
+                      billingDay === day && styles.dayTextSelected,
+                    ]}
+                  >
+                    {day}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+
+        {/* Vault Selection */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Deduct From</Text>
+          <View style={styles.vaultGrid}>
+            {VAULT_OPTIONS.map((vault) => (
               <TouchableOpacity
-                key={day}
+                key={vault.value}
                 style={[
-                  styles.dayButton,
-                  billingDay === day && styles.dayButtonSelected,
+                  styles.vaultOption,
+                  selectedVault === vault.value && styles.vaultOptionSelected,
                 ]}
-                onPress={() => {
-                  setBillingDay(day);
-                  setShowBillingDayPicker(false);
-                }}
+                onPress={() => setSelectedVault(vault.value)}
               >
+                <Icon
+                  name={vault.icon}
+                  size={24}
+                  color={
+                    selectedVault === vault.value
+                      ? colors.primary.main
+                      : themeColors.textSecondary
+                  }
+                />
                 <Text
                   style={[
-                    styles.dayText,
-                    billingDay === day && styles.dayTextSelected,
+                    styles.vaultText,
+                    selectedVault === vault.value && styles.vaultTextSelected,
                   ]}
                 >
-                  {day}
+                  {vault.label}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
-        )}
-      </View>
+        </View>
 
-      {/* Vault Selection */}
-      <View style={styles.section}>
-        <Text style={styles.label}>Deduct From</Text>
-        <View style={styles.vaultGrid}>
-          {VAULT_OPTIONS.map((vault) => (
-            <TouchableOpacity
-              key={vault.value}
-              style={[
-                styles.vaultOption,
-                selectedVault === vault.value && styles.vaultOptionSelected,
-              ]}
-              onPress={() => setSelectedVault(vault.value)}
-            >
-              <Icon
-                name={vault.icon}
-                size={24}
-                color={
-                  selectedVault === vault.value
-                    ? colors.primary.main
-                    : themeColors.textSecondary
-                }
-              />
-              <Text
-                style={[
-                  styles.vaultText,
-                  selectedVault === vault.value && styles.vaultTextSelected,
-                ]}
-              >
-                {vault.label}
+        {/* Active Toggle */}
+        <TouchableOpacity
+          style={styles.activeToggle}
+          onPress={() => setIsActive(!isActive)}
+        >
+          <View style={styles.activeToggleLeft}>
+            <Icon
+              name={isActive ? 'check-circle' : 'close-circle'}
+              size={24}
+              color={isActive ? colors.semantic.success : themeColors.textSecondary}
+            />
+            <View>
+              <Text style={styles.activeToggleTitle}>
+                {isActive ? 'Active' : 'Inactive'}
               </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      {/* Active Toggle */}
-      <TouchableOpacity
-        style={styles.activeToggle}
-        onPress={() => setIsActive(!isActive)}
-      >
-        <View style={styles.activeToggleLeft}>
-          <Icon
-            name={isActive ? 'check-circle' : 'close-circle'}
-            size={24}
-            color={isActive ? colors.semantic.success : themeColors.textSecondary}
-          />
-          <View>
-            <Text style={styles.activeToggleTitle}>
-              {isActive ? 'Active' : 'Inactive'}
-            </Text>
-            <Text style={styles.activeToggleSubtitle}>
-              {isActive
-                ? 'Will be charged automatically'
-                : 'Paused, will not be charged'}
-            </Text>
+              <Text style={styles.activeToggleSubtitle}>
+                {isActive
+                  ? 'Will be charged automatically'
+                  : 'Paused, will not be charged'}
+              </Text>
+            </View>
           </View>
-        </View>
-        <Icon
-          name={isActive ? 'toggle-switch' : 'toggle-switch-off'}
-          size={32}
-          color={isActive ? colors.primary.main : themeColors.textSecondary}
-        />
-      </TouchableOpacity>
+          <Icon
+            name={isActive ? 'toggle-switch' : 'toggle-switch-off'}
+            size={32}
+            color={isActive ? colors.primary.main : themeColors.textSecondary}
+          />
+        </TouchableOpacity>
 
-      {/* Save Button */}
-      <View style={styles.footer}>
+      </ScrollView>
+
+      {/* Save Button — floating */}
+      <View style={styles.floatingButtonWrap}>
         <Button
           title={isEditMode ? 'Update Subscription' : 'Create Subscription'}
           onPress={handleSave}
@@ -392,8 +396,7 @@ export default function AddSubscriptionScreen() {
           leftIcon={<Icon name={isEditMode ? 'check' : 'plus'} size={20} color="#FFF" />}
         />
       </View>
-
-    </ScrollView>
+    </View>
   );
 }
 
@@ -404,7 +407,7 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) => StyleSh
   },
   content: {
     padding: spacing.md,
-    paddingBottom: spacing.xxxl,
+    paddingBottom: 120,
   },
   section: {
     marginBottom: spacing.lg,
@@ -537,8 +540,11 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) => StyleSh
     color: themeColors.textSecondary,
     marginTop: 2,
   },
-  footer: {
-    marginTop: spacing.lg,
+  floatingButtonWrap: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    bottom: Platform.OS === 'ios' ? 24 : 16,
   },
   modalHeader: {
     flexDirection: 'row',
