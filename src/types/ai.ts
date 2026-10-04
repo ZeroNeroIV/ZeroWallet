@@ -131,7 +131,7 @@ export interface AIMessage {
   isError?: boolean; // Whether this is an error message
   functionCalls?: string[]; // Names of functions called (for debugging)
   pendingActionId?: string; // ID of pending action associated with this message
-  engineBadge?: 'system1' | 'system2'; // Which engine generated this response
+  engineBadge?: string; // Which engine/model generated this response (e.g., 'GEMINI 3.8 FLASH', 'LAYA (<20MS)')
   widgets?: FinancialWidget[]; // Interactive generative UI widgets (charts, proposals, gauges)
 }
 

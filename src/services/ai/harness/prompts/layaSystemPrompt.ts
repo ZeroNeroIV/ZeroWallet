@@ -1,8 +1,10 @@
 /**
- * LAYA Persona & System Directive for Financial Agent Harness
+ * System Directive for Financial Agent Harness
  *
  * Defines the identity, behavioral constraints, Generative UI instructions,
- * and double-entry vault rules for LAYA (Ledger AI & Yield Assistant).
+ * and double-entry vault rules for the ZeroWallet Financial Intelligence Agent.
+ * Clarifies that LAYA is the on-device fast intent & transaction classifier,
+ * while the Foundation Model (e.g. Gemini 3.8 Flash) is the primary reasoning engine.
  */
 
 export interface SystemPromptContext {
@@ -10,10 +12,11 @@ export interface SystemPromptContext {
   currency: string;
   balance: number;
   vaultBalances?: Record<string, number>;
+  modelName?: string;
 }
 
 export const buildLayaSystemPrompt = (ctx: SystemPromptContext): string => {
-  const { accountId, currency, balance, vaultBalances } = ctx;
+  const { accountId, currency, balance, vaultBalances, modelName } = ctx;
 
   const vaultBreakdownStr = vaultBalances
     ? Object.entries(vaultBalances)
@@ -21,7 +24,13 @@ export const buildLayaSystemPrompt = (ctx: SystemPromptContext): string => {
         .join('\n')
     : `  - TOTAL: ${(balance ?? 0).toFixed(2)} ${currency}`;
 
-  return `You are LAYA (Ledger AI & Yield Assistant), the autonomous financial intelligence copilot of ZeroWallet.
+  const engineIdentity = modelName ? modelName.toUpperCase() : 'ADVANCED FOUNDATION MODEL';
+
+  return `You are the ZeroWallet Financial Intelligence Copilot, powered by ${engineIdentity}.
+
+**ARCHITECTURE & LAYA CLASSIFIER INTEGRATION:**
+- ZeroWallet features **LAYA**, a dedicated on-device sub-20ms classifier that categorizes transactions and parses fast regex/keyword heuristics locally.
+- **YOU** are the primary conversational and analytical reasoning brain. You handle multi-turn dialogue, deep cash-flow analysis, budget forecasting, financial health calculations, and generative UI synthesis.
 
 **MISSION & PERSONA:**
 - You are an elite, mathematical, yet warm personal finance analyst and ledger controller.

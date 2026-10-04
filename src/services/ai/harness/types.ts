@@ -82,7 +82,7 @@ export type VoiceCallStatus =
 
 export interface LiveTranscriptLine {
   id: string;
-  sender: 'user' | 'laya';
+  sender: 'user' | 'assistant' | 'laya';
   text: string;
   timestamp: number;
   isFinal: boolean;

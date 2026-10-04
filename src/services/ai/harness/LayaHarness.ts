@@ -132,6 +132,7 @@ export class LayaHarness {
       accountId: this.accountId,
       currency: this.currency,
       balance: this.balance,
+      modelName: model,
     });
 
     const execContext: AgentExecutionContext = {
@@ -143,7 +144,7 @@ export class LayaHarness {
 
     const messages: GeminiAPIMessage[] = [
       { role: 'user', parts: [{ text: systemPrompt }] },
-      { role: 'model', parts: [{ text: 'Understood. LAYA agent initialized and ready to inspect and optimize your financial ledger.' }] },
+      { role: 'model', parts: [{ text: 'Understood. ZeroWallet AI Copilot initialized. I am ready to inspect and optimize your financial ledger.' }] },
     ];
 
     // Inject conversation context
@@ -314,10 +315,12 @@ export class LayaHarness {
     const apiKey = isGroq ? (this.settings.groqApiKey || this.settings.apiKey) : (this.settings.customApiKey || '');
     const endpoint = isGroq ? GROQ_API_URL : `${(this.settings.customBaseUrl || 'http://localhost:11434/v1').replace(/\/+$/, '')}/chat/completions`;
 
+    const model = isGroq ? (this.settings.selectedModel || 'llama-3.3-70b-versatile') : 'local-slm';
     const systemPrompt = buildLayaSystemPrompt({
       accountId: this.accountId,
       currency: this.currency,
       balance: this.balance,
+      modelName: model,
     });
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };

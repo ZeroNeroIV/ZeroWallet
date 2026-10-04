@@ -1,8 +1,8 @@
 /**
  * ChatInput — Simplizum Hairline Floating Command Bar
  *
- * 1px outlined input container with integrated engine indicator,
- * auto-expanding text field, and tactile send trigger.
+ * 1px outlined input container with auto-expanding text field,
+ * dynamic send trigger, and live voice call button.
  */
 
 import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
@@ -12,13 +12,12 @@ import {
   StyleSheet,
   TouchableOpacity,
   Platform,
-  Text,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { mediumHaptic, lightHaptic } from '../../services/haptics/hapticFeedback';
+import { mediumHaptic } from '../../services/haptics/hapticFeedback';
 
 interface ChatInputProps {
   onSend: (text: string) => void;
@@ -31,8 +30,7 @@ interface ChatInputProps {
 export const ChatInput: React.FC<ChatInputProps> = ({
   onSend,
   isLoading = false,
-  placeholder = 'Type financial query or mutation command...',
-  engineName = 'LAYA ⚡',
+  placeholder = 'Type financial query or command...',
   onStartVoiceCall,
 }) => {
   const themeColors = useThemeColors();
@@ -88,9 +86,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   return (
     <View style={styles.dock}>
       <View style={styles.inputContainer}>
-        {/* Engine Badge */}
-        <View style={styles.engineBadge}>
-          <Text style={styles.engineBadgeText}>{engineName}</Text>
+        {/* Terminal chevron prefix */}
+        <View style={styles.promptPrefix}>
+          <MaterialCommunityIcons name="chevron-right" size={16} color={themeColors.primary} />
         </View>
 
         <TextInput
@@ -145,8 +143,8 @@ const MAX_LINES = 4;
 const createStyles = (theme: any) =>
   StyleSheet.create({
     dock: {
-      paddingHorizontal: spacing.md,
-      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.sm + 4,
+      paddingVertical: spacing.xs + 2,
       backgroundColor: theme.background,
       borderTopWidth: 1,
       borderTopColor: theme.hairline || theme.border,
@@ -157,33 +155,22 @@ const createStyles = (theme: any) =>
       borderWidth: 1,
       borderColor: theme.hairline || theme.border,
       backgroundColor: theme.card || theme.surface,
-      borderRadius: 2,
-      paddingLeft: spacing.sm,
+      borderRadius: 4,
+      paddingLeft: 6,
       paddingRight: 4,
-      paddingVertical: 4,
-    },
-    engineBadge: {
-      borderWidth: 1,
-      borderColor: theme.hairline || theme.border,
-      borderRadius: 2,
-      paddingHorizontal: 6,
       paddingVertical: 3,
-      backgroundColor: theme.background,
-      marginRight: spacing.xs,
     },
-    engineBadgeText: {
-      ...typography.caption,
-      color: theme.textSecondary,
-      fontSize: 9,
-      fontWeight: '700',
-      letterSpacing: 0.5,
+    promptPrefix: {
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 2,
     },
     input: {
       flex: 1,
       ...typography.body,
       color: theme.text,
-      minHeight: LINE_HEIGHT + 16,
-      maxHeight: LINE_HEIGHT * MAX_LINES + 16,
+      minHeight: LINE_HEIGHT + 14,
+      maxHeight: LINE_HEIGHT * MAX_LINES + 14,
       paddingTop: Platform.OS === 'ios' ? spacing.xs : 2,
       paddingBottom: Platform.OS === 'ios' ? spacing.xs : 2,
       paddingHorizontal: spacing.xs,
@@ -197,11 +184,7 @@ const createStyles = (theme: any) =>
       backgroundColor: theme.text,
       justifyContent: 'center',
       alignItems: 'center',
-    },
-    sendButtonDisabled: {
-      backgroundColor: theme.card || theme.surface,
-      borderWidth: 1,
-      borderColor: theme.hairline || theme.border,
+      flexShrink: 0,
     },
     voiceButton: {
       width: 32,
@@ -212,5 +195,6 @@ const createStyles = (theme: any) =>
       borderColor: theme.primary + '50',
       justifyContent: 'center',
       alignItems: 'center',
+      flexShrink: 0,
     },
   });

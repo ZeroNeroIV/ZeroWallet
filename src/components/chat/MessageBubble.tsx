@@ -78,7 +78,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
         {/* Cell Header Tag */}
         <View style={styles.cellHeader}>
           <Text style={styles.cellSuper}>
-            {isUser ? `USER COMMAND · ${formattedTime}` : `LAYA INTELLIGENCE · ${formattedTime}`}
+            {isUser
+              ? `USER COMMAND · ${formattedTime}`
+              : message.engineBadge
+              ? `${message.engineBadge.toUpperCase()} · ${formattedTime}`
+              : `AI COPILOT · ${formattedTime}`}
           </Text>
         </View>
 
@@ -231,12 +235,12 @@ const createStyles = (theme: any) =>
     },
     pendingActionWrap: {
       width: '100%',
-      maxWidth: '92%',
+      maxWidth: '100%',
       marginTop: 4,
     },
     widgetsWrap: {
       width: '100%',
-      maxWidth: '96%',
+      maxWidth: '100%',
       marginTop: 6,
     },
   });

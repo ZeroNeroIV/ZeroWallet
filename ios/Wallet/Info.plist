@@ -36,6 +36,10 @@
 	<string></string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Authenticate with Face ID to securely access your wallet</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>ZeroWallet needs microphone access for live voice commands and conversation with your financial assistant.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>ZeroWallet needs speech recognition to transcribe your voice commands.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>

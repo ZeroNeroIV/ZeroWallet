@@ -1,9 +1,13 @@
 /**
  * LayaLiveCallModal — Immersive Live Voice Call Interface
  *
- * Full-screen architectural HUD for bidirectional real-time audio interaction with LAYA.
- * Features animated reactive soundwaves, live transcription stream, audio spectrum visualizer,
- * and quick-action financial chips.
+ * Full-screen architectural HUD for bidirectional real-time audio interaction with the AI Copilot.
+ * Features:
+ *  - Animated reactive soundwaves reacting to live mic input & speech
+ *  - Real-time live transcription stream
+ *  - Frequency audio spectrum visualizer
+ *  - Clear foundation model identity (Gemini 3.8 Flash / Groq)
+ *  - Quick financial prompt chips and push-to-talk controls
  */
 
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
@@ -66,14 +70,18 @@ export const LayaLiveCallModal: React.FC<LayaLiveCallModalProps> = ({
   const [transcript, setTranscript] = useState<LiveTranscriptLine[]>([]);
   const [isMuted, setIsMuted] = useState(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
-  const [frequencyBands, setFrequencyBands] = useState<number[]>([0.2, 0.4, 0.6, 0.4, 0.2]);
+  const [frequencyBands, setFrequencyBands] = useState<number[]>([0.15, 0.35, 0.5, 0.35, 0.15]);
 
   // Animated values for central sound orb
   const pulseScale = useSharedValue(1);
   const ringScale1 = useSharedValue(1);
   const ringScale2 = useSharedValue(1);
-  const ringOpacity1 = useSharedValue(0.6);
-  const ringOpacity2 = useSharedValue(0.3);
+  const ringOpacity1 = useSharedValue(0.5);
+  const ringOpacity2 = useSharedValue(0.25);
+
+  const modelBadgeText = useMemo(() => {
+    return voiceService?.getModelName() || 'GEMINI 3.8 FLASH';
+  }, [voiceService]);
 
   // Subscribe to voice service events
   useEffect(() => {
@@ -90,8 +98,8 @@ export const LayaLiveCallModal: React.FC<LayaLiveCallModalProps> = ({
 
     const unsubAudio = voiceService.addAudioLevelListener((level, bands) => {
       setFrequencyBands(bands);
-      // Animate pulsing scale based on voice intensity
-      pulseScale.value = withTiming(1 + level * 0.35, { duration: 80 });
+      // Animate pulsing scale based on real mic/speech intensity
+      pulseScale.value = withTiming(1 + level * 0.35, { duration: 75 });
     });
 
     return () => {
@@ -107,8 +115,8 @@ export const LayaLiveCallModal: React.FC<LayaLiveCallModalProps> = ({
 
     ringScale1.value = withRepeat(
       withSequence(
-        withTiming(1.4, { duration: 1800, easing: Easing.out(Easing.ease) }),
-        withTiming(1, { duration: 1800, easing: Easing.in(Easing.ease) })
+        withTiming(1.35, { duration: 1600, easing: Easing.out(Easing.ease) }),
+        withTiming(1, { duration: 1600, easing: Easing.in(Easing.ease) })
       ),
       -1,
       true
@@ -116,8 +124,8 @@ export const LayaLiveCallModal: React.FC<LayaLiveCallModalProps> = ({
 
     ringScale2.value = withRepeat(
       withSequence(
-        withTiming(1.8, { duration: 2400, easing: Easing.out(Easing.ease) }),
-        withTiming(1, { duration: 2400, easing: Easing.in(Easing.ease) })
+        withTiming(1.7, { duration: 2200, easing: Easing.out(Easing.ease) }),
+        withTiming(1, { duration: 2200, easing: Easing.in(Easing.ease) })
       ),
       -1,
       true
@@ -177,23 +185,21 @@ export const LayaLiveCallModal: React.FC<LayaLiveCallModalProps> = ({
   const statusLabel = useMemo(() => {
     switch (callStatus) {
       case 'connecting':
-        return 'CONNECTING TO LAYA...';
+        return 'CONNECTING TO AI COPILOT...';
       case 'connected':
-        return 'LAYA LIVE · ONLINE';
+        return 'VOICE SESSION ACTIVE';
       case 'listening':
-        return 'LISTENING TO YOUR VOICE...';
+        return 'LISTENING (SPEAK FREELY)...';
       case 'thinking':
         return 'ANALYZING FINANCIAL LEDGER...';
       case 'speaking':
-        return 'LAYA IS SPEAKING';
+        return 'AI IS SPEAKING';
       case 'muted':
         return 'MICROPHONE MUTED';
       default:
         return 'OFFLINE';
     }
   }, [callStatus]);
-
-  const latestTranscript = transcript.length > 0 ? transcript[transcript.length - 1] : null;
 
   return (
     <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={handleHangUp}>
@@ -202,12 +208,16 @@ export const LayaLiveCallModal: React.FC<LayaLiveCallModalProps> = ({
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <View style={[styles.statusDot, { backgroundColor: getStatusColor(callStatus, themeColors) }]} />
-            <Text style={styles.headerTitle}>LAYA LIVE CALL</Text>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              AI LIVE VOICE
+            </Text>
           </View>
 
           <View style={styles.modelBadge}>
-            <MaterialCommunityIcons name="google" size={12} color={themeColors.primary} />
-            <Text style={styles.modelBadgeText}>GEMINI 3.8 LIVE</Text>
+            <MaterialCommunityIcons name="lightning-bolt" size={11} color={themeColors.primary} />
+            <Text style={styles.modelBadgeText} numberOfLines={1}>
+              {modelBadgeText}
+            </Text>
           </View>
         </View>
 
@@ -220,13 +230,24 @@ export const LayaLiveCallModal: React.FC<LayaLiveCallModalProps> = ({
           <AnimatedView style={[styles.pulseRing, styles.pulseRing1, ring1AnimatedStyle]} />
 
           {/* Central Glowing Orb */}
-          <AnimatedView style={[styles.mainOrb, orbAnimatedStyle]}>
-            <MaterialCommunityIcons
-              name={callStatus === 'speaking' ? 'waveform' : callStatus === 'thinking' ? 'brain' : 'microphone'}
-              size={48}
-              color={themeColors.primary}
-            />
-          </AnimatedView>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => {
+              if (callStatus === 'speaking') {
+                handleToggleMute();
+              } else {
+                lightHaptic();
+              }
+            }}
+          >
+            <AnimatedView style={[styles.mainOrb, orbAnimatedStyle]}>
+              <MaterialCommunityIcons
+                name={callStatus === 'speaking' ? 'waveform' : callStatus === 'thinking' ? 'brain' : isMuted ? 'microphone-off' : 'microphone'}
+                size={44}
+                color={isMuted ? themeColors.error : themeColors.primary}
+              />
+            </AnimatedView>
+          </TouchableOpacity>
 
           {/* Frequency Equalizer Bars */}
           <View style={styles.equalizerRow}>
@@ -236,7 +257,7 @@ export const LayaLiveCallModal: React.FC<LayaLiveCallModalProps> = ({
                 style={[
                   styles.eqBar,
                   {
-                    height: Math.max(6, band * 36),
+                    height: Math.max(6, band * 32),
                     backgroundColor: callStatus === 'speaking' ? themeColors.primary : themeColors.textSecondary,
                   },
                 ]}
@@ -272,7 +293,7 @@ export const LayaLiveCallModal: React.FC<LayaLiveCallModalProps> = ({
                   ]}
                 >
                   <Text style={styles.transcriptSender}>
-                    {line.sender === 'user' ? 'YOU' : 'LAYA'}
+                    {line.sender === 'user' ? 'YOU' : 'AI'}
                   </Text>
                   <Text style={styles.transcriptBody}>{line.text}</Text>
                 </View>
@@ -292,7 +313,7 @@ export const LayaLiveCallModal: React.FC<LayaLiveCallModalProps> = ({
                 activeOpacity={0.7}
               >
                 <MaterialCommunityIcons name="chat-outline" size={12} color={themeColors.primary} />
-                <Text style={styles.chipText}>{chip}</Text>
+                <Text style={styles.chipText} numberOfLines={1}>{chip}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -308,7 +329,7 @@ export const LayaLiveCallModal: React.FC<LayaLiveCallModalProps> = ({
           >
             <MaterialCommunityIcons
               name={isMuted ? 'microphone-off' : 'microphone'}
-              size={22}
+              size={20}
               color={isMuted ? themeColors.error : themeColors.text}
             />
             <Text style={styles.controlLabel}>{isMuted ? 'UNMUTE' : 'MUTE'}</Text>
@@ -320,7 +341,7 @@ export const LayaLiveCallModal: React.FC<LayaLiveCallModalProps> = ({
             onPress={handleHangUp}
             activeOpacity={0.8}
           >
-            <MaterialCommunityIcons name="phone-hangup" size={28} color="#FFF" />
+            <MaterialCommunityIcons name="phone-hangup" size={26} color="#FFF" />
           </TouchableOpacity>
 
           {/* Speaker Button */}
@@ -331,10 +352,10 @@ export const LayaLiveCallModal: React.FC<LayaLiveCallModalProps> = ({
           >
             <MaterialCommunityIcons
               name={isSpeakerOn ? 'volume-high' : 'volume-off'}
-              size={22}
+              size={20}
               color={themeColors.text}
             />
-            <Text style={styles.controlLabel}>{isSpeakerOn ? 'SPEAKER' : 'EARPIECE'}</Text>
+            <Text style={styles.controlLabel}>{isSpeakerOn ? 'SPEAKER' : 'MUTE AUDIO'}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -352,8 +373,10 @@ const getStatusColor = (status: VoiceCallStatus, colors: any) => {
       return colors.warning;
     case 'muted':
       return colors.error;
-    default:
+    case 'connecting':
       return colors.textSecondary;
+    default:
+      return colors.border;
   }
 };
 
@@ -361,23 +384,23 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
   StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: '#0B0F19',
-      justifyContent: 'space-between',
+      backgroundColor: themeColors.background,
     },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: spacing.lg,
-      paddingTop: Platform.OS === 'android' ? spacing.md : spacing.xs,
-      paddingBottom: spacing.sm,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: '#1F293D',
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderBottomWidth: 1,
+      borderBottomColor: themeColors.hairline || themeColors.border,
     },
     headerLeft: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: spacing.xs + 2,
+      flex: 1,
+      minWidth: 0,
     },
     statusDot: {
       width: 8,
@@ -386,7 +409,7 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
     },
     headerTitle: {
       ...typography.caption,
-      color: '#FFFFFF',
+      color: themeColors.text,
       fontSize: 12,
       fontWeight: '800',
       letterSpacing: 1,
@@ -394,33 +417,37 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
     modelBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: '#162035',
-      borderColor: '#263554',
+      gap: 4,
       borderWidth: 1,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 6,
-      gap: 5,
+      borderColor: themeColors.hairline || themeColors.border,
+      paddingHorizontal: spacing.xs + 2,
+      paddingVertical: 3,
+      borderRadius: 2,
+      backgroundColor: themeColors.card || themeColors.surface,
+      flexShrink: 0,
+      maxWidth: 160,
     },
     modelBadgeText: {
-      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-      fontSize: 10,
-      color: themeColors.primary,
+      ...typography.caption,
+      color: themeColors.text,
+      fontSize: 9,
       fontWeight: '700',
       letterSpacing: 0.5,
+      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     },
     orbStage: {
       alignItems: 'center',
       justifyContent: 'center',
-      marginVertical: spacing.lg,
-      height: 220,
+      paddingVertical: spacing.md,
+      position: 'relative',
     },
     pulseRing: {
       position: 'absolute',
       width: 140,
       height: 140,
       borderRadius: 70,
-      borderWidth: 1.5,
+      borderWidth: 1,
+      borderColor: themeColors.primary + '30',
     },
     pulseRing1: {
       borderColor: themeColors.primary + '40',
@@ -429,126 +456,134 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
       borderColor: themeColors.primary + '20',
     },
     mainOrb: {
-      width: 100,
-      height: 100,
-      borderRadius: 50,
-      backgroundColor: '#162035',
-      borderColor: themeColors.primary,
-      borderWidth: 1.5,
+      width: 88,
+      height: 88,
+      borderRadius: 44,
+      backgroundColor: themeColors.card || themeColors.surface,
+      borderWidth: 1,
+      borderColor: themeColors.primary + '60',
       alignItems: 'center',
       justifyContent: 'center',
       shadowColor: themeColors.primary,
       shadowOffset: { width: 0, height: 0 },
-      shadowOpacity: 0.5,
-      shadowRadius: 18,
-      elevation: 12,
+      shadowOpacity: 0.35,
+      shadowRadius: 12,
+      elevation: 6,
     },
     equalizerRow: {
       flexDirection: 'row',
-      alignItems: 'flex-end',
-      justifyContent: 'center',
-      gap: 6,
-      height: 40,
-      marginTop: spacing.md,
+      alignItems: 'center',
+      gap: 5,
+      marginTop: spacing.sm,
+      height: 36,
     },
     eqBar: {
-      width: 5,
-      borderRadius: 3,
+      width: 4,
+      borderRadius: 2,
     },
     statusPill: {
-      marginTop: spacing.sm,
-      backgroundColor: '#162035',
-      paddingHorizontal: 12,
-      paddingVertical: 5,
-      borderRadius: 20,
+      marginTop: spacing.xs,
+      paddingHorizontal: spacing.sm + 4,
+      paddingVertical: 3,
+      borderRadius: 12,
+      backgroundColor: themeColors.card || themeColors.surface,
       borderWidth: 1,
-      borderColor: '#263554',
+      borderColor: themeColors.hairline || themeColors.border,
     },
     statusPillText: {
-      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-      fontSize: 10,
-      color: '#FFFFFF',
+      ...typography.caption,
+      fontSize: 9,
       fontWeight: '700',
-      letterSpacing: 0.5,
+      letterSpacing: 1,
+      color: themeColors.textSecondary,
+      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     },
     transcriptSection: {
       flex: 1,
-      marginHorizontal: spacing.lg,
-      backgroundColor: '#111726',
-      borderColor: '#1F293D',
+      marginHorizontal: spacing.md,
+      marginVertical: spacing.xs,
       borderWidth: 1,
-      borderRadius: 14,
-      padding: spacing.md,
-      maxHeight: 180,
+      borderColor: themeColors.hairline || themeColors.border,
+      borderRadius: 4,
+      backgroundColor: themeColors.card || themeColors.surface,
+      padding: spacing.sm,
+      minHeight: 120,
     },
     transcriptSuper: {
       ...typography.caption,
-      fontSize: 9,
+      fontSize: 8,
+      fontWeight: '800',
+      letterSpacing: 1.2,
       color: themeColors.textSecondary,
-      fontWeight: '700',
-      letterSpacing: 0.5,
-      marginBottom: 6,
+      marginBottom: spacing.xs,
     },
     transcriptScroll: {
       flex: 1,
     },
     transcriptContent: {
-      paddingBottom: spacing.xs,
+      paddingBottom: spacing.sm,
+      gap: spacing.xs + 2,
     },
     transcriptPlaceholder: {
-      ...typography.caption,
-      color: '#6B7280',
+      ...typography.body,
+      color: themeColors.textSecondary,
       fontSize: 11,
       lineHeight: 16,
       fontStyle: 'italic',
+      textAlign: 'center',
+      marginTop: spacing.lg,
+      paddingHorizontal: spacing.md,
     },
     transcriptRow: {
-      marginBottom: 6,
+      padding: spacing.xs + 2,
+      borderRadius: 3,
+      borderLeftWidth: 2,
     },
     transcriptRowUser: {
-      borderLeftWidth: 2,
-      borderLeftColor: '#38BDF8',
-      paddingLeft: 6,
+      borderLeftColor: themeColors.primary,
+      backgroundColor: themeColors.background,
     },
     transcriptRowLaya: {
-      borderLeftWidth: 2,
-      borderLeftColor: themeColors.primary,
-      paddingLeft: 6,
+      borderLeftColor: themeColors.text,
+      backgroundColor: themeColors.surface,
     },
     transcriptSender: {
-      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-      fontSize: 9,
+      ...typography.caption,
+      fontSize: 8,
       fontWeight: '800',
-      color: '#9CA3AF',
+      letterSpacing: 0.8,
+      color: themeColors.textSecondary,
+      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+      marginBottom: 2,
     },
     transcriptBody: {
       ...typography.body,
-      color: '#F3F4F6',
       fontSize: 12,
-      lineHeight: 16,
+      color: themeColors.text,
+      lineHeight: 17,
     },
     chipsSection: {
-      marginVertical: spacing.sm,
+      paddingVertical: 6,
     },
     chipsRow: {
-      paddingHorizontal: spacing.lg,
-      gap: 8,
+      paddingHorizontal: spacing.md,
+      gap: spacing.xs,
     },
     chip: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: '#162035',
-      borderColor: '#263554',
+      gap: 4,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 5,
+      borderRadius: 3,
+      backgroundColor: themeColors.card || themeColors.surface,
       borderWidth: 1,
-      paddingHorizontal: 12,
-      paddingVertical: 7,
-      borderRadius: 20,
-      gap: 6,
+      borderColor: themeColors.hairline || themeColors.border,
     },
     chipText: {
       ...typography.caption,
-      color: '#E5E7EB',
-      fontSize: 11,
+      fontSize: 10,
+      color: themeColors.text,
       fontWeight: '600',
     },
     controlsDock: {
@@ -556,44 +591,44 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
       alignItems: 'center',
       justifyContent: 'space-around',
       paddingHorizontal: spacing.xl,
-      paddingVertical: spacing.lg,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: '#1F293D',
-      backgroundColor: '#0E1322',
+      paddingVertical: spacing.md,
+      borderTopWidth: 1,
+      borderTopColor: themeColors.hairline || themeColors.border,
+      backgroundColor: themeColors.background,
     },
     controlBtn: {
       alignItems: 'center',
       justifyContent: 'center',
       width: 64,
-      height: 64,
-      borderRadius: 32,
-      backgroundColor: '#162035',
-      borderColor: '#263554',
+      paddingVertical: 6,
+      borderRadius: 4,
       borderWidth: 1,
+      borderColor: themeColors.hairline || themeColors.border,
+      backgroundColor: themeColors.card || themeColors.surface,
+      gap: 4,
     },
     controlBtnActive: {
-      backgroundColor: '#371B20',
-      borderColor: '#7F1D1D',
+      borderColor: themeColors.error,
+      backgroundColor: themeColors.error + '15',
     },
     controlLabel: {
       ...typography.caption,
       fontSize: 8,
-      color: '#9CA3AF',
       fontWeight: '700',
-      marginTop: 2,
       letterSpacing: 0.5,
+      color: themeColors.textSecondary,
     },
     hangUpBtn: {
-      width: 72,
-      height: 72,
-      borderRadius: 36,
-      backgroundColor: '#EF4444',
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: '#FF3B30',
       alignItems: 'center',
       justifyContent: 'center',
-      shadowColor: '#EF4444',
-      shadowOffset: { width: 0, height: 0 },
-      shadowOpacity: 0.6,
-      shadowRadius: 14,
-      elevation: 8,
+      shadowColor: '#FF3B30',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.4,
+      shadowRadius: 8,
+      elevation: 6,
     },
   });

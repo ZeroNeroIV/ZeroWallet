@@ -36,7 +36,7 @@ interface AIChatState {
     isError?: boolean,
     pendingActionId?: string,
     widgets?: FinancialWidget[],
-    engineBadge?: 'system1' | 'system2'
+    engineBadge?: string
   ) => void;
   clearMessages: () => void;
   setLoading: (loading: boolean) => void;

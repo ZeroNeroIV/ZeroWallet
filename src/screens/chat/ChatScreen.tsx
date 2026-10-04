@@ -1,13 +1,12 @@
 /**
- * ChatScreen — Simplizum Architectural Edition
+ * ChatScreen — Financial Intelligence Console
  *
- * Full-featured financial intelligence console:
- *  1. Laya System-1 Fast Decision Router (<20ms local heuristic)
- *  2. Foundation SLM/LLM Engine (Gemini 2.5 Flash, Groq Llama 3.3, Ollama)
- *  3. Architectural conversational ledger stream
- *  4. Inline actionable mutation tickets
- *  5. Horizontal micro-chips quick command bar
- *  6. Floating hairline command bar with live engine badge
+ * Full-featured autonomous financial assistant:
+ *  1. Foundation LLM Engine (Gemini 3.8 Flash, Groq Llama 3.3, Ollama) as the primary reasoning brain
+ *  2. LAYA System-1 Fast Classifier (<20ms local intent & categorization engine)
+ *  3. Interactive Generative UI (Gifted Charts, Ledger Mutation Tickets, Health Gauges)
+ *  4. Native Bidirectional Live Voice Call with real mic speech detection & voice synthesis
+ *  5. Fully responsive hairline layout with zero horizontal overflows
  */
 
 import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
@@ -89,6 +88,16 @@ export default function ChatScreen({ navigation }: any) {
     }
   }, [messages.length, isLoading]);
 
+  const providerName = useMemo(() => {
+    const model = aiSettings?.selectedModel || 'gemini-3.8-flash';
+    if (aiSettings?.provider === 'groq') return 'GROQ LLAMA 3.3';
+    if (aiSettings?.provider === 'custom_openai') return 'LOCAL SLM';
+    if (model.includes('3.8')) return 'GEMINI 3.8 FLASH';
+    if (model.includes('3.5')) return 'GEMINI 3.5';
+    if (model.includes('2.5')) return 'GEMINI 2.5 FLASH';
+    return 'GEMINI';
+  }, [aiSettings]);
+
   const voiceService = useMemo(() => {
     if (!currentAccountId || !currentUser?.id || !aiSettings) return null;
     const harness = new LayaHarness(
@@ -99,25 +108,22 @@ export default function ChatScreen({ navigation }: any) {
       totalBalance
     );
     const key = aiSettings?.geminiApiKey || aiSettings?.apiKey || '';
-    return new LayaVoiceService(harness, key);
-  }, [aiSettings, currentAccountId, currentUser?.id, accountCurrency, totalBalance]);
+    return new LayaVoiceService(harness, key, providerName);
+  }, [aiSettings, currentAccountId, currentUser?.id, accountCurrency, totalBalance, providerName]);
 
   const engineNameBadge = useMemo(() => {
     const isSys1 = aiSettings?.system1Enabled !== false;
-    const model = aiSettings?.selectedModel || 'gemini-3.8-flash';
-    const providerName =
-      aiSettings?.provider === 'groq'
-        ? 'GROQ'
-        : aiSettings?.provider === 'custom_openai'
-        ? 'LOCAL'
-        : model.includes('3.8')
+    const shortName =
+      providerName.includes('3.8')
         ? 'GEMINI 3.8'
-        : model.includes('3.5')
-        ? 'GEMINI 3.5'
+        : providerName.includes('GROQ')
+        ? 'GROQ'
+        : providerName.includes('LOCAL')
+        ? 'LOCAL'
         : 'GEMINI';
 
-    return isSys1 ? `⚡ LAYA + ${providerName}` : providerName;
-  }, [aiSettings]);
+    return isSys1 ? `⚡ ${shortName}` : shortName;
+  }, [aiSettings, providerName]);
 
   const handleSend = useCallback(
     async (text: string) => {
@@ -152,13 +158,15 @@ export default function ChatScreen({ navigation }: any) {
           pendingActionId = response.pendingActions[0].id;
         }
 
+        const badge = response.engineBadge === 'system1' ? 'LAYA CLASSIFIER (<20MS)' : providerName;
+
         addMessage(
           'assistant',
           response.text,
           false,
           pendingActionId,
           response.widgets,
-          response.engineBadge
+          badge
         );
 
         settingsStore.updateAISettings({
@@ -182,7 +190,7 @@ export default function ChatScreen({ navigation }: any) {
         setLoading(false);
       }
     },
-    [currentAccountId, currentUser, accountCurrency, totalBalance, aiSettings, messages, navigation, addMessage, addPendingAction, setLoading, setError, settingsStore]
+    [currentAccountId, currentUser, accountCurrency, totalBalance, aiSettings, messages, navigation, addMessage, addPendingAction, setLoading, setError, settingsStore, providerName]
   );
 
   const handleClearHistory = () => {
@@ -205,7 +213,7 @@ export default function ChatScreen({ navigation }: any) {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      {/* Architectural Header */}
+      {/* Responsive Architectural Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <TouchableOpacity
@@ -215,17 +223,23 @@ export default function ChatScreen({ navigation }: any) {
               navigation.goBack();
             }}
           >
-            <MaterialCommunityIcons name="arrow-left" size={18} color={themeColors.text} />
+            <MaterialCommunityIcons name="arrow-left" size={17} color={themeColors.text} />
           </TouchableOpacity>
-          <View>
-            <Text style={styles.headerSuper}>INTELLIGENCE AGENT</Text>
-            <Text style={styles.headerTitle}>LAYA CONSOLE</Text>
+          <View style={styles.headerTitleWrap}>
+            <Text style={styles.headerSuper} numberOfLines={1}>
+              FINANCIAL INTELLIGENCE
+            </Text>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              AI COPILOT
+            </Text>
           </View>
         </View>
 
         <View style={styles.headerRight}>
           <View style={styles.engineBadge}>
-            <Text style={styles.engineBadgeText}>{engineNameBadge}</Text>
+            <Text style={styles.engineBadgeText} numberOfLines={1}>
+              {engineNameBadge}
+            </Text>
           </View>
 
           {/* Live Voice Call Trigger */}
@@ -237,7 +251,7 @@ export default function ChatScreen({ navigation }: any) {
               voiceService?.startCall();
             }}
           >
-            <MaterialCommunityIcons name="phone-in-talk" size={17} color={themeColors.primary} />
+            <MaterialCommunityIcons name="phone-in-talk" size={16} color={themeColors.primary} />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -247,12 +261,12 @@ export default function ChatScreen({ navigation }: any) {
               navigation.navigate('AISettings');
             }}
           >
-            <MaterialCommunityIcons name="tune" size={18} color={themeColors.text} />
+            <MaterialCommunityIcons name="tune" size={16} color={themeColors.text} />
           </TouchableOpacity>
 
           {messages.length > 0 && (
             <TouchableOpacity style={styles.actionBtn} onPress={handleClearHistory}>
-              <MaterialCommunityIcons name="trash-can-outline" size={18} color={themeColors.textSecondary} />
+              <MaterialCommunityIcons name="trash-can-outline" size={16} color={themeColors.textSecondary} />
             </TouchableOpacity>
           )}
         </View>
@@ -268,30 +282,33 @@ export default function ChatScreen({ navigation }: any) {
             {/* System Specification Briefing */}
             <View style={styles.briefingCard}>
               <View style={styles.briefingHeader}>
-                <Text style={styles.briefingSuper}>AUTONOMOUS LEDGER COPILOT</Text>
-                <Text style={styles.briefingTitle}>ZERO WALLET · LAYA OS</Text>
+                <Text style={styles.briefingSuper} numberOfLines={1}>
+                  AUTONOMOUS FINANCIAL COPILOT
+                </Text>
+                <Text style={styles.briefingTitle} numberOfLines={1}>
+                  ZERO WALLET · AI AGENT
+                </Text>
               </View>
 
               <Text style={styles.briefingBody}>
-                Hybrid financial intelligence: Sub-20ms local intent classifier for instant transaction
-                logging + deep reasoning foundation models for cash flow planning.
+                Powered by {providerName} for conversational financial analysis, interactive generative charts, and cash flow planning — augmented by LAYA on-device classifier for instant (&lt;20ms) transaction categorization.
               </Text>
 
               {/* Specs Table */}
               <View style={styles.specsTable}>
                 <View style={styles.specRow}>
-                  <Text style={styles.specLabel}>SYSTEM-1 DISPATCH</Text>
-                  <Text style={styles.specVal}>&lt;20MS LOCAL</Text>
+                  <Text style={styles.specLabel}>PRIMARY BRAIN</Text>
+                  <Text style={styles.specVal} numberOfLines={1}>{providerName}</Text>
                 </View>
                 <View style={styles.specDivider} />
                 <View style={styles.specRow}>
-                  <Text style={styles.specLabel}>MUTATION SAFETY</Text>
-                  <Text style={styles.specVal}>EXPLICIT AUDIT TICKET</Text>
+                  <Text style={styles.specLabel}>FAST CLASSIFIER</Text>
+                  <Text style={styles.specVal} numberOfLines={1}>LAYA (&lt;20MS LOCAL)</Text>
                 </View>
                 <View style={styles.specDivider} />
                 <View style={styles.specRow}>
-                  <Text style={styles.specLabel}>REASONING ENGINE</Text>
-                  <Text style={styles.specVal}>GEMINI 2.5 / GROQ</Text>
+                  <Text style={styles.specLabel}>AUDIT SAFETY</Text>
+                  <Text style={styles.specVal} numberOfLines={1}>DOUBLE-ENTRY TICKET</Text>
                 </View>
               </View>
             </View>
@@ -308,8 +325,10 @@ export default function ChatScreen({ navigation }: any) {
                     handleSend(chip.text);
                   }}
                 >
-                  <Text style={styles.promptTileText}>{chip.label}</Text>
-                  <MaterialCommunityIcons name="arrow-top-right" size={14} color={themeColors.textSecondary} />
+                  <Text style={styles.promptTileText} numberOfLines={1}>
+                    {chip.label}
+                  </Text>
+                  <MaterialCommunityIcons name="arrow-top-right" size={13} color={themeColors.textSecondary} />
                 </TouchableOpacity>
               ))}
             </View>
@@ -346,7 +365,7 @@ export default function ChatScreen({ navigation }: any) {
                   handleSend(chip.text);
                 }}
               >
-                <Text style={styles.chipPillText}>{chip.label}</Text>
+                <Text style={styles.chipPillText} numberOfLines={1}>{chip.label}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -365,7 +384,7 @@ export default function ChatScreen({ navigation }: any) {
         }}
       />
 
-      {/* LAYA Live Voice Call Modal */}
+      {/* Live Voice Call Modal */}
       <LayaLiveCallModal
         visible={isVoiceCallVisible}
         voiceService={voiceService}
@@ -376,7 +395,8 @@ export default function ChatScreen({ navigation }: any) {
             'Interactive financial widget generated during voice session:',
             false,
             undefined,
-            [widget]
+            [widget],
+            providerName
           );
         }}
       />
@@ -394,33 +414,40 @@ const createStyles = (theme: any) =>
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingHorizontal: spacing.md,
-      paddingTop: spacing.xl,
-      paddingBottom: spacing.sm + 4,
+      paddingHorizontal: spacing.sm + 4,
+      paddingTop: Platform.OS === 'ios' ? spacing.xl : spacing.md + 4,
+      paddingBottom: spacing.sm + 2,
       borderBottomWidth: 1,
       borderBottomColor: theme.hairline || theme.border,
       backgroundColor: theme.card || theme.surface,
     },
     headerLeft: {
+      flex: 1,
+      minWidth: 0,
       flexDirection: 'row',
       alignItems: 'center',
-      gap: spacing.sm,
+      gap: spacing.xs + 2,
     },
     backButton: {
-      width: 32,
-      height: 32,
+      width: 30,
+      height: 30,
       borderWidth: 1,
       borderColor: theme.hairline || theme.border,
       borderRadius: 2,
       justifyContent: 'center',
       alignItems: 'center',
       backgroundColor: theme.background,
+      flexShrink: 0,
+    },
+    headerTitleWrap: {
+      flex: 1,
+      minWidth: 0,
     },
     headerSuper: {
       ...typography.caption,
       color: theme.textSecondary,
-      fontSize: 9,
-      letterSpacing: 1.5,
+      fontSize: 8,
+      letterSpacing: 1.2,
       fontWeight: '700',
     },
     headerTitle: {
@@ -428,31 +455,34 @@ const createStyles = (theme: any) =>
       color: theme.text,
       letterSpacing: 0.5,
       fontWeight: '700',
+      fontSize: 14,
     },
     headerRight: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: spacing.xs + 2,
+      gap: 4,
+      flexShrink: 0,
     },
     engineBadge: {
       borderWidth: 1,
       borderColor: theme.hairline || theme.border,
-      paddingHorizontal: spacing.xs + 2,
-      paddingVertical: 3,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
       borderRadius: 2,
       backgroundColor: theme.background,
+      maxWidth: 105,
     },
     engineBadgeText: {
       ...typography.caption,
       color: theme.text,
-      fontSize: 10,
+      fontSize: 9,
       fontWeight: '700',
       letterSpacing: 0.5,
-      fontFamily: 'monospace',
+      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     },
     actionBtn: {
-      width: 32,
-      height: 32,
+      width: 30,
+      height: 30,
       borderWidth: 1,
       borderColor: theme.hairline || theme.border,
       borderRadius: 2,
@@ -468,16 +498,16 @@ const createStyles = (theme: any) =>
       flex: 1,
     },
     emptySlate: {
-      padding: spacing.md,
-      paddingTop: spacing.lg,
+      padding: spacing.sm + 4,
+      paddingTop: spacing.md,
     },
     briefingCard: {
       borderWidth: 1,
       borderColor: theme.hairline || theme.border,
       backgroundColor: theme.card || theme.surface,
-      borderRadius: 2,
-      padding: spacing.md,
-      marginBottom: spacing.lg,
+      borderRadius: 4,
+      padding: spacing.sm + 4,
+      marginBottom: spacing.md,
     },
     briefingHeader: {
       marginBottom: spacing.xs,
@@ -485,7 +515,7 @@ const createStyles = (theme: any) =>
     briefingSuper: {
       ...typography.caption,
       color: theme.textSecondary,
-      fontSize: 9,
+      fontSize: 8,
       fontWeight: '700',
       letterSpacing: 1.2,
       marginBottom: 2,
@@ -495,23 +525,25 @@ const createStyles = (theme: any) =>
       color: theme.text,
       fontWeight: '700',
       letterSpacing: 0.5,
+      fontSize: 14,
     },
     briefingBody: {
       ...typography.body,
       color: theme.textSecondary,
-      fontSize: 12,
-      lineHeight: 18,
-      marginBottom: spacing.md,
+      fontSize: 11,
+      lineHeight: 16,
+      marginBottom: spacing.sm,
     },
     specsTable: {
       borderTopWidth: 1,
       borderTopColor: theme.hairline || theme.border,
-      paddingTop: spacing.xs,
+      paddingTop: 4,
     },
     specRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      paddingVertical: 5,
+      alignItems: 'center',
+      paddingVertical: 4,
     },
     specDivider: {
       borderTopWidth: 1,
@@ -520,22 +552,25 @@ const createStyles = (theme: any) =>
     specLabel: {
       ...typography.caption,
       color: theme.textSecondary,
-      fontSize: 10,
+      fontSize: 9,
       fontWeight: '700',
-      letterSpacing: 0.8,
+      letterSpacing: 0.6,
+      flexShrink: 0,
     },
     specVal: {
       ...typography.caption,
       color: theme.text,
-      fontSize: 10,
+      fontSize: 9,
       fontWeight: '700',
       letterSpacing: 0.5,
-      fontFamily: 'monospace',
+      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+      flexShrink: 1,
+      textAlign: 'right',
     },
     emptyPromptsTitle: {
       ...typography.caption,
       color: theme.textSecondary,
-      fontSize: 10,
+      fontSize: 9,
       fontWeight: '700',
       letterSpacing: 1.2,
       marginBottom: spacing.xs,
@@ -551,32 +586,34 @@ const createStyles = (theme: any) =>
       borderColor: theme.hairline || theme.border,
       backgroundColor: theme.card || theme.surface,
       borderRadius: 2,
-      paddingHorizontal: spacing.md,
-      paddingVertical: spacing.sm + 2,
+      paddingHorizontal: spacing.sm + 4,
+      paddingVertical: spacing.sm,
     },
     promptTileText: {
       ...typography.caption,
       color: theme.text,
       fontWeight: '700',
-      fontSize: 11,
+      fontSize: 10,
       letterSpacing: 0.5,
+      flex: 1,
+      marginRight: spacing.xs,
     },
     messagesScroll: {
       flex: 1,
     },
     messagesContent: {
-      paddingHorizontal: spacing.md,
-      paddingTop: spacing.md,
-      paddingBottom: spacing.md,
+      paddingHorizontal: spacing.sm + 4,
+      paddingTop: spacing.sm + 4,
+      paddingBottom: spacing.sm + 4,
     },
     chipsBar: {
       borderTopWidth: 1,
       borderTopColor: theme.hairline || theme.border,
       backgroundColor: theme.background,
-      paddingVertical: 6,
+      paddingVertical: 5,
     },
     chipsScroll: {
-      paddingHorizontal: spacing.md,
+      paddingHorizontal: spacing.sm + 4,
       gap: spacing.xs,
     },
     chipPill: {
