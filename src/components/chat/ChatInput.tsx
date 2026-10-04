@@ -25,6 +25,7 @@ interface ChatInputProps {
   isLoading?: boolean;
   placeholder?: string;
   engineName?: string;
+  onStartVoiceCall?: () => void;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -32,6 +33,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   isLoading = false,
   placeholder = 'Type financial query or mutation command...',
   engineName = 'LAYA ⚡',
+  onStartVoiceCall,
 }) => {
   const themeColors = useThemeColors();
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
@@ -61,6 +63,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       inputRef.current?.focus();
     }, 100);
   }, [text, canSend, onSend]);
+
+  const handleVoiceCallPress = useCallback(() => {
+    mediumHaptic();
+    if (onStartVoiceCall) {
+      onStartVoiceCall();
+    }
+  }, [onStartVoiceCall]);
 
   const handleContentSizeChange = useCallback((event: any) => {
     const { height } = event.nativeEvent.contentSize;
@@ -99,17 +108,32 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           blurOnSubmit={false}
         />
 
-        <TouchableOpacity
-          style={[styles.sendButton, !canSend ? styles.sendButtonDisabled : null]}
-          onPress={handleSend}
-          disabled={!canSend}
-        >
-          <MaterialCommunityIcons
-            name="arrow-up"
-            size={18}
-            color={canSend ? themeColors.background : themeColors.textSecondary}
-          />
-        </TouchableOpacity>
+        {/* Action Trigger: Send or Live Voice Call */}
+        {canSend ? (
+          <TouchableOpacity
+            style={styles.sendButton}
+            onPress={handleSend}
+            activeOpacity={0.8}
+          >
+            <MaterialCommunityIcons
+              name="arrow-up"
+              size={18}
+              color={themeColors.background}
+            />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.voiceButton}
+            onPress={handleVoiceCallPress}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons
+              name="microphone"
+              size={18}
+              color={themeColors.primary}
+            />
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -178,5 +202,15 @@ const createStyles = (theme: any) =>
       backgroundColor: theme.card || theme.surface,
       borderWidth: 1,
       borderColor: theme.hairline || theme.border,
+    },
+    voiceButton: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: theme.card || theme.surface,
+      borderWidth: 1,
+      borderColor: theme.primary + '50',
+      justifyContent: 'center',
+      alignItems: 'center',
     },
   });

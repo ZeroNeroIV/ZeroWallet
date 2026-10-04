@@ -18,36 +18,47 @@ import { ModelInfo } from '../types/ai';
  */
 export const GEMINI_MODELS: ModelInfo[] = [
   {
-    id: 'gemini-1.5-flash',
-    name: '1.5 Flash',
-    description: 'Fast and efficient with good accuracy',
+    id: 'gemini-3.8-flash',
+    name: 'Gemini 3.8 Flash',
+    description: 'Flagship agentic model with fast reasoning, 1M context, and native tool execution',
     speed: 3,
-    accuracy: 2,
-    tokensPerMinute: 4000000, // 4M TPM
+    accuracy: 4,
+    tokensPerMinute: 4000000,
     maxOutputTokens: 8192,
-    bestFor: 'Quick questions and simple queries',
+    bestFor: 'Autonomous financial analysis, tool calling, and chart generation',
+    recommended: true,
+  },
+  {
+    id: 'gemini-3.5-flash-lite',
+    name: 'Gemini 3.5 Flash Lite',
+    description: 'Ultra-fast low-latency execution for mobile instant ledger updates',
+    speed: 3,
+    accuracy: 3,
+    tokensPerMinute: 4000000,
+    maxOutputTokens: 8192,
+    bestFor: 'Rapid mobile responses and high-frequency queries',
+    recommended: false,
+  },
+  {
+    id: 'gemini-3.1-pro-preview',
+    name: 'Gemini 3.1 Pro',
+    description: 'Deep mathematical reasoning and multi-month portfolio planning',
+    speed: 1,
+    accuracy: 4,
+    tokensPerMinute: 2000000,
+    maxOutputTokens: 8192,
+    bestFor: 'Complex financial audits, runway modeling, and debt strategies',
     recommended: false,
   },
   {
     id: 'gemini-2.5-flash',
-    name: '2.5 Flash (Latest)',
-    description: 'Latest model with best balance of speed and accuracy',
+    name: 'Gemini 2.5 Flash',
+    description: 'Balanced speed and accuracy fallback',
     speed: 2,
     accuracy: 3,
-    tokensPerMinute: 4000000, // 4M TPM
+    tokensPerMinute: 4000000,
     maxOutputTokens: 8192,
-    bestFor: 'Most financial questions and insights',
-    recommended: true, // Recommended option
-  },
-  {
-    id: 'gemini-1.5-pro',
-    name: '1.5 Pro',
-    description: 'More accurate and detailed responses',
-    speed: 1,
-    accuracy: 4,
-    tokensPerMinute: 2000000, // 2M TPM
-    maxOutputTokens: 8192,
-    bestFor: 'Complex analysis and detailed breakdowns',
+    bestFor: 'General financial queries and transaction summaries',
     recommended: false,
   },
 ];

@@ -24,6 +24,9 @@ import { useThemeColors } from '../../hooks/useThemeColors';
 import { lightHaptic } from '../../services/haptics/hapticFeedback';
 import { useAIChatStore } from '../../store/aiChatStore';
 import { PendingActionCard } from './PendingActionCard';
+import { InteractiveChartWidget } from './widgets/InteractiveChartWidget';
+import { InteractiveTransactionWidget } from './widgets/InteractiveTransactionWidget';
+import { FinancialInsightWidget } from './widgets/FinancialInsightWidget';
 
 interface MessageBubbleProps {
   message: AIMessage;
@@ -95,16 +98,63 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
         )}
       </TouchableOpacity>
 
-      {/* Pending Action Card */}
-      {pendingAction && pendingAction.status === 'pending' && !isUser && (
-        <View style={styles.pendingActionWrap}>
-          <PendingActionCard
-            action={pendingAction}
-            onConfirm={handleConfirmAction}
-            onCancel={cancelAction}
-          />
+      {/* Generative UI Widgets */}
+      {message.widgets && message.widgets.length > 0 && !isUser && (
+        <View style={styles.widgetsWrap}>
+          {message.widgets.map((widget, idx) => {
+            if (widget.type === 'chart') {
+              return (
+                <InteractiveChartWidget
+                  key={`chart-${idx}`}
+                  chartType={widget.chartType}
+                  title={widget.title}
+                  data={widget.data}
+                  summary={widget.summary}
+                  total={widget.total}
+                  currency={widget.currency}
+                />
+              );
+            }
+            if (widget.type === 'transaction_proposal') {
+              return (
+                <InteractiveTransactionWidget
+                  key={`tx-${idx}`}
+                  transaction={widget.transaction}
+                  pendingActionId={widget.pendingActionId}
+                />
+              );
+            }
+            if (widget.type === 'health_score') {
+              return (
+                <FinancialInsightWidget
+                  key={`health-${idx}`}
+                  score={widget.score}
+                  grade={widget.grade}
+                  runwayMonths={widget.runwayMonths}
+                  savingsRate={widget.savingsRate}
+                  burnRate={widget.burnRate}
+                  recommendations={widget.recommendations}
+                />
+              );
+            }
+            return null;
+          })}
         </View>
       )}
+
+      {/* Fallback Pending Action Card if no transaction widget already rendered */}
+      {pendingAction &&
+        pendingAction.status === 'pending' &&
+        !isUser &&
+        !message.widgets?.some((w) => w.type === 'transaction_proposal') && (
+          <View style={styles.pendingActionWrap}>
+            <PendingActionCard
+              action={pendingAction}
+              onConfirm={handleConfirmAction}
+              onCancel={cancelAction}
+            />
+          </View>
+        )}
     </View>
   );
 };
@@ -183,5 +233,10 @@ const createStyles = (theme: any) =>
       width: '100%',
       maxWidth: '92%',
       marginTop: 4,
+    },
+    widgetsWrap: {
+      width: '100%',
+      maxWidth: '96%',
+      marginTop: 6,
     },
   });

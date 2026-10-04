@@ -12,12 +12,65 @@
 export type AIProvider = 'gemini' | 'groq' | 'custom_openai';
 
 /**
- * Available Gemini model identifiers
+ * Available Gemini model identifiers (including latest Gemini 3.8 and 3.5 series)
  */
 export type GeminiModel =
-  | 'gemini-1.5-flash'
+  | 'gemini-3.8-flash'
+  | 'gemini-3.5-flash-lite'
+  | 'gemini-3.1-pro-preview'
   | 'gemini-2.5-flash'
+  | 'gemini-1.5-flash'
   | 'gemini-1.5-pro';
+
+/**
+ * Interactive financial generative UI widgets
+ */
+export type FinancialWidget =
+  | {
+      type: 'chart';
+      chartType: 'donut' | 'pie' | 'bar' | 'line';
+      title: string;
+      data: Array<{
+        label: string;
+        value: number;
+        color?: string;
+        secondaryValue?: number;
+      }>;
+      summary?: string;
+      total?: number;
+      currency?: string;
+    }
+  | {
+      type: 'transaction_proposal';
+      transaction: {
+        type: 'income' | 'expense';
+        amount: number;
+        currency: string;
+        categoryName: string;
+        vaultType: string;
+        date: string;
+        description: string;
+      };
+      pendingActionId?: string;
+    }
+  | {
+      type: 'health_score';
+      score: number; // 0 - 100
+      grade: 'EXCELLENT' | 'STABLE' | 'NEEDS_ATTENTION' | 'CRITICAL';
+      runwayMonths: number;
+      savingsRate: number;
+      burnRate: number;
+      recommendations: string[];
+    }
+  | {
+      type: 'budget_gauge';
+      categoryName: string;
+      spent: number;
+      limit: number;
+      remaining: number;
+      percentage: number;
+      currency?: string;
+    };
 
 /**
  * Available Groq SLM/LLM model identifiers
@@ -79,6 +132,7 @@ export interface AIMessage {
   functionCalls?: string[]; // Names of functions called (for debugging)
   pendingActionId?: string; // ID of pending action associated with this message
   engineBadge?: 'system1' | 'system2'; // Which engine generated this response
+  widgets?: FinancialWidget[]; // Interactive generative UI widgets (charts, proposals, gauges)
 }
 
 /**

@@ -25,11 +25,13 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { useAIChatStore } from '../../store/aiChatStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useAuthStore } from '../../store/authStore';
+import { useAccountStore } from '../../store/accountStore';
 import { MessageBubble } from '../../components/chat/MessageBubble';
 import { ChatInput } from '../../components/chat/ChatInput';
 import { TypingIndicator } from '../../components/chat/TypingIndicator';
-import { LayaSystem1Router } from '../../services/ai/layaSystem1';
-import { AIProviderService } from '../../services/ai/aiProviderService';
+import { LayaHarness } from '../../services/ai/harness/LayaHarness';
+import { LayaVoiceService } from '../../services/ai/harness/voice/layaVoiceService';
+import { LayaLiveCallModal } from '../../components/chat/LayaLiveCallModal';
 import { ChatContextManager } from '../../services/ai/chatContextManager';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -39,6 +41,8 @@ import { AccountRepository } from '../../database/repositories/AccountRepository
 
 const QUICK_COMMAND_CHIPS = [
   { label: 'SPENT $15 ON LUNCH', text: 'Spent 15 on lunch' },
+  { label: 'SHOW SPENDING CHART', text: 'Generate an interactive chart of my spending this month' },
+  { label: 'FINANCIAL HEALTH AUDIT', text: 'Audit my financial health, calculate runway and health score' },
   { label: 'CHECK RUNWAY & BALANCES', text: "What's my current balance and runway?" },
   { label: 'MONTHLY EXPENSE BREAKDOWN', text: 'How much did I spend this month and what are the top categories?' },
   { label: 'UPCOMING BILLS & DUES', text: 'What are my upcoming bills and recurring commitments?' },
@@ -64,7 +68,11 @@ export default function ChatScreen({ navigation }: any) {
   const { currentAccountId, currentUser } = useAuthStore();
 
   const [accountCurrency, setAccountCurrency] = useState<string>('USD');
+  const [isVoiceCallVisible, setIsVoiceCallVisible] = useState<boolean>(false);
   const scrollViewRef = useRef<ScrollView>(null);
+
+  const accountBalances = useAccountStore((s) => (currentAccountId ? s.balances[currentAccountId] : undefined));
+  const totalBalance = accountBalances?.totalBalance ?? 0;
 
   useEffect(() => {
     if (!currentAccountId) return;
@@ -81,13 +89,31 @@ export default function ChatScreen({ navigation }: any) {
     }
   }, [messages.length, isLoading]);
 
+  const voiceService = useMemo(() => {
+    if (!currentAccountId || !currentUser?.id || !aiSettings) return null;
+    const harness = new LayaHarness(
+      aiSettings,
+      currentAccountId,
+      currentUser.id,
+      accountCurrency,
+      totalBalance
+    );
+    const key = aiSettings?.geminiApiKey || aiSettings?.apiKey || '';
+    return new LayaVoiceService(harness, key);
+  }, [aiSettings, currentAccountId, currentUser?.id, accountCurrency, totalBalance]);
+
   const engineNameBadge = useMemo(() => {
     const isSys1 = aiSettings?.system1Enabled !== false;
+    const model = aiSettings?.selectedModel || 'gemini-3.8-flash';
     const providerName =
       aiSettings?.provider === 'groq'
         ? 'GROQ'
         : aiSettings?.provider === 'custom_openai'
         ? 'LOCAL'
+        : model.includes('3.8')
+        ? 'GEMINI 3.8'
+        : model.includes('3.5')
+        ? 'GEMINI 3.5'
         : 'GEMINI';
 
     return isSys1 ? `⚡ LAYA + ${providerName}` : providerName;
@@ -108,30 +134,15 @@ export default function ChatScreen({ navigation }: any) {
       setError(null);
 
       try {
-        // Step 1: Laya System-1 Fast Router
-        if (aiSettings?.system1Enabled !== false) {
-          const system1 = new LayaSystem1Router(currentAccountId, currentUser.id, accountCurrency);
-          const s1Result = await system1.route(promptText);
-
-          if (s1Result.handled) {
-            let pendingActionId: string | undefined;
-            if (s1Result.pendingActions && s1Result.pendingActions.length > 0) {
-              s1Result.pendingActions.forEach((act) => {
-                addPendingAction(act);
-              });
-              pendingActionId = s1Result.pendingActions[0].id;
-            }
-
-            addMessage('assistant', s1Result.text, false, pendingActionId);
-            setLoading(false);
-            return;
-          }
-        }
-
-        // Step 2: System-2 Multi-Provider Deep Reasoning
-        const providerService = new AIProviderService(aiSettings, currentAccountId, currentUser.id);
+        const harness = new LayaHarness(
+          aiSettings,
+          currentAccountId,
+          currentUser.id,
+          accountCurrency,
+          totalBalance
+        );
         const context = await ChatContextManager.buildContext(messages, currentAccountId);
-        const response = await providerService.sendMessage(promptText, context);
+        const response = await harness.processMessage(promptText, context);
 
         let pendingActionId: string | undefined;
         if (response.pendingActions && response.pendingActions.length > 0) {
@@ -141,7 +152,14 @@ export default function ChatScreen({ navigation }: any) {
           pendingActionId = response.pendingActions[0].id;
         }
 
-        addMessage('assistant', response.text, false, pendingActionId);
+        addMessage(
+          'assistant',
+          response.text,
+          false,
+          pendingActionId,
+          response.widgets,
+          response.engineBadge
+        );
 
         settingsStore.updateAISettings({
           conversationCount: (aiSettings?.conversationCount || 0) + 1,
@@ -164,7 +182,7 @@ export default function ChatScreen({ navigation }: any) {
         setLoading(false);
       }
     },
-    [currentAccountId, currentUser, accountCurrency, aiSettings, messages, navigation]
+    [currentAccountId, currentUser, accountCurrency, totalBalance, aiSettings, messages, navigation, addMessage, addPendingAction, setLoading, setError, settingsStore]
   );
 
   const handleClearHistory = () => {
@@ -209,6 +227,18 @@ export default function ChatScreen({ navigation }: any) {
           <View style={styles.engineBadge}>
             <Text style={styles.engineBadgeText}>{engineNameBadge}</Text>
           </View>
+
+          {/* Live Voice Call Trigger */}
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.liveCallHeaderBtn]}
+            onPress={() => {
+              mediumHaptic();
+              setIsVoiceCallVisible(true);
+              voiceService?.startCall();
+            }}
+          >
+            <MaterialCommunityIcons name="phone-in-talk" size={17} color={themeColors.primary} />
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.actionBtn}
@@ -328,6 +358,27 @@ export default function ChatScreen({ navigation }: any) {
         onSend={handleSend}
         isLoading={isLoading}
         engineName={engineNameBadge}
+        onStartVoiceCall={() => {
+          mediumHaptic();
+          setIsVoiceCallVisible(true);
+          voiceService?.startCall();
+        }}
+      />
+
+      {/* LAYA Live Voice Call Modal */}
+      <LayaLiveCallModal
+        visible={isVoiceCallVisible}
+        voiceService={voiceService}
+        onClose={() => setIsVoiceCallVisible(false)}
+        onWidgetGenerated={(widget) => {
+          addMessage(
+            'assistant',
+            'Interactive financial widget generated during voice session:',
+            false,
+            undefined,
+            [widget]
+          );
+        }}
       />
     </KeyboardAvoidingView>
   );
@@ -408,6 +459,10 @@ const createStyles = (theme: any) =>
       justifyContent: 'center',
       alignItems: 'center',
       backgroundColor: theme.background,
+    },
+    liveCallHeaderBtn: {
+      borderColor: theme.primary + '80',
+      backgroundColor: theme.primary + '10',
     },
     streamContainer: {
       flex: 1,

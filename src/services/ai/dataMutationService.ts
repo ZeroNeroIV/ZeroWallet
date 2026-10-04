@@ -166,7 +166,7 @@ export class DataMutationService {
   ): Promise<PendingAction> {
     try {
       const validated = await validate(params);
-      return this.createPendingAction(funcName, 'create', entityType, params, validated as any, buildSummary(validated));
+      return this.createPendingAction(funcName, 'create', entityType, params as any, validated as any, buildSummary(validated));
     } catch (error) {
       throw this.handleError(error, `create ${entityType}`);
     }
@@ -197,7 +197,7 @@ export class DataMutationService {
   ): Promise<PendingAction> {
     try {
       await this.validator.validateEntityExists(entityType, entityId);
-      return this.createPendingAction(funcName, 'update', entityType, params, params as any, buildSummary());
+      return this.createPendingAction(funcName, 'update', entityType, params as any, params as any, buildSummary());
     } catch (error) {
       throw this.handleError(error, `update ${entityType}`);
     }
@@ -706,8 +706,8 @@ export class DataMutationService {
       const balances = calculateVaultBalances(transactions);
       const accountStore = useAccountStore.getState();
       accountStore.updateBalance(this.accountId, balances);
-    } catch (error) {
-      logger.error('[DataMutationService] Failed to sync balance:', error);
+    } catch (error: any) {
+      logger.error('[DataMutationService] Failed to sync balance:', error?.message || String(error));
     }
   }
 

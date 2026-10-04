@@ -61,7 +61,7 @@ export default function AISettingsScreen({ navigation }: any) {
     aiSettings?.customBaseUrl || 'http://localhost:11434/v1'
   );
   const [selectedModel, setSelectedModel] = useState<string>(
-    aiSettings?.selectedModel || (provider === 'groq' ? 'llama-3.2-3b-preview' : 'gemini-2.5-flash')
+    aiSettings?.selectedModel || (provider === 'groq' ? 'llama-3.2-3b-preview' : 'gemini-3.8-flash')
   );
 
   const [showKey, setShowKey] = useState<boolean>(false);

@@ -13,7 +13,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { mmkvStorage } from './middleware/mmkvStorage';
-import type { AIMessage, AIConversationContext } from '../types/ai';
+import type { AIMessage, AIConversationContext, FinancialWidget } from '../types/ai';
 import type { PendingAction, ActionResult } from '../types/aiMutations';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -30,7 +30,14 @@ interface AIChatState {
   pendingActions: PendingAction[];
 
   // Message Actions
-  addMessage: (role: 'user' | 'assistant', content: string, isError?: boolean, pendingActionId?: string) => void;
+  addMessage: (
+    role: 'user' | 'assistant',
+    content: string,
+    isError?: boolean,
+    pendingActionId?: string,
+    widgets?: FinancialWidget[],
+    engineBadge?: 'system1' | 'system2'
+  ) => void;
   clearMessages: () => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
@@ -64,7 +71,7 @@ export const useAIChatStore = create<AIChatState>()(
       /**
        * Add a message to the conversation
        */
-      addMessage: (role, content, isError = false, pendingActionId?: string) => {
+      addMessage: (role, content, isError = false, pendingActionId?: string, widgets?: FinancialWidget[], engineBadge?: 'system1' | 'system2') => {
         const message: AIMessage = {
           id: uuidv4(),
           role,
@@ -72,6 +79,8 @@ export const useAIChatStore = create<AIChatState>()(
           timestamp: Date.now(),
           isError,
           pendingActionId, // Link message to pending action
+          widgets,
+          engineBadge,
         };
 
         set((state) => {

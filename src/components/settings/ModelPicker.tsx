@@ -103,7 +103,7 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
               styles.modelCard,
               isSelected && styles.modelCardSelected,
             ]}
-            onPress={() => handleSelectModel(model.id)}
+            onPress={() => handleSelectModel(model.id as GeminiModel)}
             activeOpacity={0.7}
           >
             {/* Radio Button & Name Row */}
@@ -138,7 +138,7 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({
 
             {/* Tokens Info */}
             <Text style={styles.tokensInfo}>
-              Max output: {(model.maxOutputTokens / 1000).toFixed(0)}K tokens
+              Max output: {((model.maxOutputTokens || 8192) / 1000).toFixed(0)}K tokens
             </Text>
 
             {/* Best For */}

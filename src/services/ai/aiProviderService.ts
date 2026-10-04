@@ -80,7 +80,7 @@ export class AIProviderService {
         apiKey,
         this.accountId,
         this.userId,
-        (this.settings.selectedModel as any) || 'gemini-2.5-flash'
+        (this.settings.selectedModel as any) || 'gemini-3.8-flash'
       );
       const res = await geminiService.sendMessage(message, context);
       return {
