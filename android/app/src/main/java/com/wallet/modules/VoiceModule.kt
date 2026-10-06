@@ -143,16 +143,16 @@ class VoiceModule(private val reactContext: ReactApplicationContext) :
 
                     override fun onRmsChanged(rmsdB: Float) {
                         // Normalize rmsdB (-2 to 10 typical) to 0.0 .. 1.0 range
-                        val normalized = ((rmsdB + 2.0f) / 12.0f).coerceIn(0.05f, 1.0f)
+                        val normalized = ((rmsdB + 2.0f) / 12.0f).coerceIn(0.05f, 1.0f).toDouble()
                         val bands = Arguments.createArray().apply {
-                            pushDouble((normalized * 0.85).toDouble())
-                            pushDouble((normalized * 1.05).coerceAtMost(1.0f).toDouble())
-                            pushDouble(normalized.toDouble())
-                            pushDouble((normalized * 0.95).toDouble())
-                            pushDouble((normalized * 0.75).toDouble())
+                            pushDouble(normalized * 0.85)
+                            pushDouble((normalized * 1.05).coerceAtMost(1.0))
+                            pushDouble(normalized)
+                            pushDouble(normalized * 0.95)
+                            pushDouble(normalized * 0.75)
                         }
                         val map = Arguments.createMap().apply {
-                            putDouble("level", normalized.toDouble())
+                            putDouble("level", normalized)
                             putArray("bands", bands)
                         }
                         sendEvent("onSpeechVolume", map)
