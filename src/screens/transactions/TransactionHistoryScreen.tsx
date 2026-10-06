@@ -10,6 +10,7 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -17,7 +18,9 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { format, isToday, isYesterday, subDays, startOfMonth } from 'date-fns';
 import type { MainStackParamList } from '../../types/navigation';
 import type { Transaction, Category, Wallet } from '../../types/models';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../store/authStore';
+import { useUIStore } from '../../store/uiStore';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { TransactionRepository } from '../../database/repositories/TransactionRepository';
 import { CategoryRepository } from '../../database/repositories/CategoryRepository';
@@ -25,6 +28,7 @@ import { WalletRepository } from '../../database/repositories/WalletRepository';
 import { AccountRepository } from '../../database/repositories/AccountRepository';
 import { formatCurrency } from '../../utils/currencyFormatter';
 import { triggerHaptic } from '../../services/haptics/hapticFeedback';
+import { QuickAddSheet, type QuickAddAction } from '../../components/navigation/QuickAddSheet';
 import { borderRadius } from '../../theme/spacing';
 
 type Nav = StackNavigationProp<MainStackParamList, 'TransactionHistory'>;
@@ -40,14 +44,32 @@ type DateFilter = 'all' | '30days' | 'thisMonth';
 
 export const TransactionHistoryScreen: React.FC = () => {
   const navigation = useNavigation<Nav>();
+  const insets = useSafeAreaInsets();
   const { currentAccountId, currentUser } = useAuthStore();
   const themeColors = useThemeColors();
+  const isBalanceHidden = useUIStore((s) => s.isBalanceHidden);
+  const toggleBalanceHidden = useUIStore((s) => s.toggleBalanceHidden);
 
   const [transactions, setTransactions] = useState<TransactionWithCategory[]>([]);
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [accountCurrency, setAccountCurrency] = useState('USD');
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+
+  const handleQuickAdd = useCallback(
+    (action: QuickAddAction) => {
+      setShowQuickAdd(false);
+      if (action === 'expense') {
+        navigation.navigate('AddTransaction', { type: 'expense' });
+      } else if (action === 'income') {
+        navigation.navigate('AddTransaction', { type: 'income' });
+      } else {
+        navigation.navigate('Transfer');
+      }
+    },
+    [navigation]
+  );
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -196,6 +218,99 @@ export const TransactionHistoryScreen: React.FC = () => {
 
   return (
     <View style={[styles.root, { backgroundColor: themeColors.background }]}>
+      <QuickAddSheet
+        visible={showQuickAdd}
+        onClose={() => setShowQuickAdd(false)}
+        onSelect={handleQuickAdd}
+      />
+
+      {/* Simplizum Activity Command Header */}
+      <View
+        style={[
+          styles.topHeader,
+          {
+            paddingTop: Math.max(insets.top, 14),
+            borderBottomColor: themeColors.hairline,
+            backgroundColor: themeColors.background,
+          },
+        ]}
+      >
+        <View style={styles.headerLeft}>
+          {navigation.canGoBack() && (
+            <TouchableOpacity
+              onPress={() => {
+                triggerHaptic('impactLight');
+                navigation.goBack();
+              }}
+              style={[
+                styles.headerBackBtn,
+                {
+                  borderColor: themeColors.hairline,
+                  backgroundColor: themeColors.surface,
+                },
+              ]}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel="Back"
+            >
+              <MaterialCommunityIcons name="arrow-left" size={18} color={themeColors.text} />
+            </TouchableOpacity>
+          )}
+          <View>
+            <Text style={[styles.headerSuper, { color: themeColors.textMuted }]}>
+              ZERO WALLET · LEDGER
+            </Text>
+            <Text style={[styles.headerTitle, { color: themeColors.text }]}>
+              ACTIVITY
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={[
+              styles.headerActionBtn,
+              {
+                borderColor: themeColors.hairline,
+                backgroundColor: themeColors.surface,
+              },
+            ]}
+            onPress={() => {
+              triggerHaptic('selection');
+              toggleBalanceHidden();
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            activeOpacity={0.7}
+            accessibilityLabel="Toggle Number Visibility"
+          >
+            <MaterialCommunityIcons
+              name={isBalanceHidden ? 'eye-off-outline' : 'eye-outline'}
+              size={18}
+              color={themeColors.text}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.headerActionBtn,
+              styles.headerAddBtn,
+              {
+                borderColor: themeColors.primary,
+                backgroundColor: themeColors.primary,
+              },
+            ]}
+            onPress={() => {
+              triggerHaptic('selection');
+              setShowQuickAdd(true);
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            activeOpacity={0.8}
+            accessibilityLabel="Add Transaction or Transfer"
+          >
+            <MaterialCommunityIcons name="plus" size={18} color={themeColors.onPrimary} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
       {/* 1. Instant Floating Search & Filter Bar */}
       <View
         style={[
@@ -332,7 +447,7 @@ export const TransactionHistoryScreen: React.FC = () => {
             INFLOW
           </Text>
           <Text style={[styles.summaryValue, { color: themeColors.success }]}>
-            +{formatCurrency(stats.inflow, accountCurrency)}
+            {isBalanceHidden ? '••••' : `+${formatCurrency(stats.inflow, accountCurrency)}`}
           </Text>
         </View>
 
@@ -343,7 +458,7 @@ export const TransactionHistoryScreen: React.FC = () => {
             OUTFLOW
           </Text>
           <Text style={[styles.summaryValue, { color: themeColors.text }]}>
-            -{formatCurrency(stats.outflow, accountCurrency)}
+            {isBalanceHidden ? '••••' : `-${formatCurrency(stats.outflow, accountCurrency)}`}
           </Text>
         </View>
 
@@ -359,7 +474,9 @@ export const TransactionHistoryScreen: React.FC = () => {
               { color: stats.net >= 0 ? themeColors.success : themeColors.error },
             ]}
           >
-            {stats.net >= 0 ? '+' : ''}{formatCurrency(stats.net, accountCurrency)}
+            {isBalanceHidden
+              ? '••••'
+              : `${stats.net >= 0 ? '+' : ''}${formatCurrency(stats.net, accountCurrency)}`}
           </Text>
         </View>
       </View>
@@ -500,12 +617,13 @@ export const TransactionHistoryScreen: React.FC = () => {
                             },
                           ]}
                         >
-                          {isTransfer ? '⇄ ' : isIncome ? '+' : '-'}
-                          {formatCurrency(baseAmount, accountCurrency)}
+                          {isBalanceHidden
+                            ? '••••'
+                            : `${isTransfer ? '⇄ ' : isIncome ? '+' : '-'}${formatCurrency(baseAmount, accountCurrency)}`}
                         </Text>
 
                         {/* Dual Currency Subtitle */}
-                        {hasForeignCurrency && (
+                        {hasForeignCurrency && !isBalanceHidden && (
                           <Text style={[styles.foreignSubtext, { color: themeColors.textMuted }]}>
                             {formatCurrency(tx.originalAmount!, tx.currency)}
                           </Text>
@@ -526,6 +644,55 @@ export const TransactionHistoryScreen: React.FC = () => {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+  },
+  topHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerBackBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 2,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerSuper: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 1,
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerActionBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 2,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerAddBtn: {
+    borderWidth: 0,
   },
   filterHeader: {
     paddingTop: 12,
@@ -603,7 +770,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: Platform.OS === 'ios' ? 120 : 100,
   },
   centerLoading: {
     paddingVertical: 40,

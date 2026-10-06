@@ -16,6 +16,7 @@ import { spacing, borderRadius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { formatCurrency } from '../../utils/currencyFormatter';
 import { triggerHaptic } from '../../services/haptics/hapticFeedback';
+import { useUIStore } from '../../store/uiStore';
 import type { Goal } from '../../types/models';
 
 interface GoalArchitecturalCardProps {
@@ -32,6 +33,7 @@ export const GoalArchitecturalCard = memo(function GoalArchitecturalCard({
   onEditPress,
 }: GoalArchitecturalCardProps) {
   const themeColors = useThemeColors();
+  const isBalanceHidden = useUIStore((s) => s.isBalanceHidden);
 
   const target = goal.targetAmount || 0;
   const current = goal.currentAmount || 0;
@@ -132,7 +134,7 @@ export const GoalArchitecturalCard = memo(function GoalArchitecturalCard({
             CURRENT SAVED
           </Text>
           <Text style={[styles.savedAmount, { color: themeColors.text }]}>
-            {formatCurrency(current, currency)}
+            {isBalanceHidden ? '••••' : formatCurrency(current, currency)}
           </Text>
         </View>
 
@@ -142,7 +144,7 @@ export const GoalArchitecturalCard = memo(function GoalArchitecturalCard({
               TARGET AMOUNT
             </Text>
             <Text style={[styles.targetAmount, { color: themeColors.textSecondary }]}>
-              {formatCurrency(target, currency)}
+              {isBalanceHidden ? '••••' : formatCurrency(target, currency)}
             </Text>
           </View>
         )}
@@ -172,7 +174,7 @@ export const GoalArchitecturalCard = memo(function GoalArchitecturalCard({
             <Text style={[styles.remainingText, { color: themeColors.textMuted }]}>
               {goal.isCompleted
                 ? 'Target achieved!'
-                : `${formatCurrency(remaining, currency)} remaining`}
+                : `${isBalanceHidden ? '••••' : formatCurrency(remaining, currency)} remaining`}
             </Text>
             <Text style={[styles.percentageText, { color: gaugeColor }]}>
               {Math.round(percentage)}%

@@ -55,12 +55,10 @@ export const InteractiveChartWidget: React.FC<InteractiveChartWidgetProps> = ({
     }
   }, [measuredWidth]);
 
-  // Available inner canvas width
+  // Available inner canvas width strictly bounded to avoid horizontal overflows
   const canvasWidth = useMemo(() => {
-    if (measuredWidth > 0) {
-      return Math.max(180, measuredWidth - 28);
-    }
-    return Math.max(180, Math.min(SCREEN_WIDTH - 64, 320));
+    const available = measuredWidth > 0 ? measuredWidth - 28 : SCREEN_WIDTH - 64;
+    return Math.max(150, Math.min(available, SCREEN_WIDTH - 64));
   }, [measuredWidth]);
 
   const calculatedTotal = useMemo(() => {

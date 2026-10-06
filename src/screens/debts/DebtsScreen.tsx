@@ -29,6 +29,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { useAuthStore } from '../../store/authStore';
 import { useAccountStore } from '../../store/accountStore';
+import { useUIStore } from '../../store/uiStore';
 import { spacing, borderRadius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { formatCurrency } from '../../utils/currencyFormatter';
@@ -49,6 +50,8 @@ export default function DebtsScreen() {
 
   const currentUser = useAuthStore((s) => s.currentUser);
   const currentAccountId = useAuthStore((s) => s.currentAccountId) || useAccountStore((s) => s.currentAccountId);
+  const isBalanceHidden = useUIStore((s) => s.isBalanceHidden);
+  const toggleBalanceHidden = useUIStore((s) => s.toggleBalanceHidden);
 
   const [activeTab, setActiveTab] = useState<'borrowed' | 'lent'>('borrowed');
   const [borrowedDebts, setBorrowedDebts] = useState<Debt[]>([]);
@@ -155,22 +158,40 @@ export default function DebtsScreen() {
           </Text>
         </View>
 
-        <TouchableOpacity
-          onPress={handleOpenAdd}
-          style={[
-            styles.createButton,
-            {
-              backgroundColor: themeColors.surfaceElevated,
-              borderColor: themeColors.border,
-            },
-          ]}
-          activeOpacity={0.7}
-        >
-          <Icon name="plus" size={14} color={themeColors.text} />
-          <Text style={[styles.createButtonText, { color: themeColors.text }]}>
-            NEW
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.headerRightGroup}>
+          <TouchableOpacity
+            onPress={() => {
+              triggerHaptic('selection');
+              toggleBalanceHidden();
+            }}
+            style={[styles.headerNavButton, { borderColor: themeColors.borderSubtle }]}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityLabel="Toggle Balance Visibility"
+          >
+            <Icon
+              name={isBalanceHidden ? 'eye-off-outline' : 'eye-outline'}
+              size={17}
+              color={themeColors.text}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={handleOpenAdd}
+            style={[
+              styles.createButton,
+              {
+                backgroundColor: themeColors.surfaceElevated,
+                borderColor: themeColors.border,
+              },
+            ]}
+            activeOpacity={0.7}
+          >
+            <Icon name="plus" size={14} color={themeColors.text} />
+            <Text style={[styles.createButtonText, { color: themeColors.text }]}>
+              NEW
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -212,8 +233,9 @@ export default function DebtsScreen() {
                   },
                 ]}
               >
-                {summary.netPosition >= 0 ? '+' : ''}
-                {formatCurrency(summary.netPosition, summary.currency)}
+                {isBalanceHidden
+                  ? '••••'
+                  : `${summary.netPosition >= 0 ? '+' : ''}${formatCurrency(summary.netPosition, summary.currency)}`}
               </Text>
             </View>
 
@@ -243,7 +265,9 @@ export default function DebtsScreen() {
                 I OWE (BORROWED)
               </Text>
               <Text style={[styles.kpiValue, { color: themeColors.error }]}>
-                {formatCurrency(summary.totalBorrowedOutstanding, summary.currency)}
+                {isBalanceHidden
+                  ? '••••'
+                  : formatCurrency(summary.totalBorrowedOutstanding, summary.currency)}
               </Text>
               <Text style={[styles.kpiSubmeta, { color: themeColors.textMuted }]}>
                 {summary.pendingBorrowedCount} active obligations
@@ -262,7 +286,9 @@ export default function DebtsScreen() {
                 OWED TO ME (LENT)
               </Text>
               <Text style={[styles.kpiValue, { color: themeColors.success }]}>
-                {formatCurrency(summary.totalLentOutstanding, summary.currency)}
+                {isBalanceHidden
+                  ? '••••'
+                  : formatCurrency(summary.totalLentOutstanding, summary.currency)}
               </Text>
               <Text style={[styles.kpiSubmeta, { color: themeColors.textMuted }]}>
                 {summary.pendingLentCount} active receivables
@@ -449,6 +475,11 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.bold,
     letterSpacing: -0.3,
     marginTop: 1,
+  },
+  headerRightGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   createButton: {
     flexDirection: 'row',

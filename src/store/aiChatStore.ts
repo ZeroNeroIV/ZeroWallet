@@ -71,7 +71,7 @@ export const useAIChatStore = create<AIChatState>()(
       /**
        * Add a message to the conversation
        */
-      addMessage: (role, content, isError = false, pendingActionId?: string, widgets?: FinancialWidget[], engineBadge?: 'system1' | 'system2') => {
+      addMessage: (role, content, isError = false, pendingActionId?: string, widgets?: FinancialWidget[], engineBadge?: string) => {
         const message: AIMessage = {
           id: uuidv4(),
           role,

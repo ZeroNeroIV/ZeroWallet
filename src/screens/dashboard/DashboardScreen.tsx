@@ -27,6 +27,7 @@ import { RecurringTicker } from '../../components/dashboard/RecurringTicker';
 import { ActionDuo } from '../../components/dashboard/ActionDuo';
 import { CashFlowTrend } from '../../components/dashboard/CashFlowTrend';
 import { ChronologicalMovements } from '../../components/dashboard/ChronologicalMovements';
+import { GoalsDebtsPreview } from '../../components/dashboard/GoalsDebtsPreview';
 import { useNavigationTabStore } from '../../store/navigationTabStore';
 
 type NavProp = StackNavigationProp<MainStackParamList, 'Dashboard'>;
@@ -163,7 +164,7 @@ export const DashboardScreen: React.FC = () => {
                 wallets={activeWallets}
                 walletBalances={derivedBalances}
                 onSelectWallet={(wallet) => navigation.navigate('WalletDetails', { walletId: wallet.id })}
-                onCreateWallet={() => useNavigationTabStore.getState().scrollToTab(1)}
+                onCreateWallet={() => navigation.navigate('Wallets')}
               />
 
               {/* Upcoming Recurring Ticker (1-line) */}
@@ -178,6 +179,19 @@ export const DashboardScreen: React.FC = () => {
               <ActionDuo
                 onLogTransaction={() => navigation.navigate('AddTransaction', { type: 'expense' })}
                 onTransfer={() => navigation.navigate('Transfer')}
+              />
+
+              {/* Financial Horizons: Goals & Debts commitments */}
+              <GoalsDebtsPreview
+                activeGoals={data.activeGoals}
+                goalsCount={data.goalsCount}
+                activeDebts={data.activeDebts}
+                debtsStats={data.debtsStats}
+                currency={data.currency}
+                isBalanceHidden={isBalanceHidden}
+                onViewAll={() => navigation.navigate('GoalsDebtsHub')}
+                onSelectGoals={() => navigation.navigate('GoalsDebtsHub', { initialTab: 'goals' })}
+                onSelectDebts={() => navigation.navigate('GoalsDebtsHub', { initialTab: 'debts' })}
               />
 
               {/* 30-Day Cash Flow Hairline Trend Chart */}

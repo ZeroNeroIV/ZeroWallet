@@ -236,11 +236,13 @@ const createStyles = (theme: any) =>
     pendingActionWrap: {
       width: '100%',
       maxWidth: '100%',
+      alignSelf: 'stretch',
       marginTop: 4,
     },
     widgetsWrap: {
       width: '100%',
       maxWidth: '100%',
+      alignSelf: 'stretch',
       marginTop: 6,
     },
   });

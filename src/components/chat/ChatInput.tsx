@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -33,8 +34,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   placeholder = 'Type financial query or command...',
   onStartVoiceCall,
 }) => {
+  const insets = useSafeAreaInsets();
   const themeColors = useThemeColors();
-  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
+  const styles = useMemo(() => createStyles(themeColors, insets), [themeColors, insets]);
 
   const [text, setText] = useState('');
   const [inputHeight, setInputHeight] = useState(0);
@@ -140,11 +142,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 const LINE_HEIGHT = 20;
 const MAX_LINES = 4;
 
-const createStyles = (theme: any) =>
+const createStyles = (theme: any, insets: any) =>
   StyleSheet.create({
     dock: {
       paddingHorizontal: spacing.sm + 4,
-      paddingVertical: spacing.xs + 2,
+      paddingTop: spacing.xs + 2,
+      paddingBottom: Math.max(insets?.bottom || 0, 10),
       backgroundColor: theme.background,
       borderTopWidth: 1,
       borderTopColor: theme.hairline || theme.border,

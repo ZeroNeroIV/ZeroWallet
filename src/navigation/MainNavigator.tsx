@@ -21,6 +21,7 @@ import SalarySettingsScreen from '../screens/settings/SalarySettingsScreen';
 import SmartNudgesScreen from '../screens/settings/SmartNudgesScreen';
 import WalletsScreen from '../screens/settings/WalletsScreen';
 import SecuritySettingsScreen from '../screens/security/SecuritySettingsScreen';
+import { GoalsDebtsHubScreen } from '../screens/goals/GoalsDebtsHubScreen';
 import GoalsScreen from '../screens/goals/GoalsScreen';
 import CreateGoalScreen from '../screens/goals/CreateGoalScreen';
 import DebtsScreen from '../screens/debts/DebtsScreen';
@@ -196,8 +197,8 @@ export function MainNavigator() {
       />
       <Stack.Screen
         name="Wallets"
-        component={WalletsTabRedirect}
-        options={{ headerShown: false, animation: 'none' }}
+        component={WalletsScreen}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="WalletDetails"
@@ -207,6 +208,11 @@ export function MainNavigator() {
       <Stack.Screen
         name="SecuritySettings"
         component={SecuritySettingsScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="GoalsDebtsHub"
+        component={GoalsDebtsHubScreen}
         options={{ headerShown: false }}
       />
       <Stack.Screen

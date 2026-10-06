@@ -20,6 +20,7 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAIChatStore } from '../../store/aiChatStore';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -49,8 +50,9 @@ const QUICK_COMMAND_CHIPS = [
 ];
 
 export default function ChatScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const themeColors = useThemeColors();
-  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
+  const styles = useMemo(() => createStyles(themeColors, insets), [themeColors, insets]);
 
   const {
     messages,
@@ -404,7 +406,7 @@ export default function ChatScreen({ navigation }: any) {
   );
 }
 
-const createStyles = (theme: any) =>
+const createStyles = (theme: any, insets: any) =>
   StyleSheet.create({
     root: {
       flex: 1,
@@ -415,7 +417,7 @@ const createStyles = (theme: any) =>
       justifyContent: 'space-between',
       alignItems: 'center',
       paddingHorizontal: spacing.sm + 4,
-      paddingTop: Platform.OS === 'ios' ? spacing.xl : spacing.md + 4,
+      paddingTop: Math.max(insets?.top || 0, 12),
       paddingBottom: spacing.sm + 2,
       borderBottomWidth: 1,
       borderBottomColor: theme.hairline || theme.border,

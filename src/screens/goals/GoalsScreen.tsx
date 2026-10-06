@@ -28,6 +28,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { useAuthStore } from '../../store/authStore';
 import { useAccountStore } from '../../store/accountStore';
+import { useUIStore } from '../../store/uiStore';
 import { spacing, borderRadius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { formatCurrency } from '../../utils/currencyFormatter';
@@ -49,6 +50,8 @@ export default function GoalsScreen() {
 
   const currentUser = useAuthStore((s) => s.currentUser);
   const currentAccountId = useAuthStore((s) => s.currentAccountId) || useAccountStore((s) => s.currentAccountId);
+  const isBalanceHidden = useUIStore((s) => s.isBalanceHidden);
+  const toggleBalanceHidden = useUIStore((s) => s.toggleBalanceHidden);
 
   const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
   const [activeGoals, setActiveGoals] = useState<Goal[]>([]);
@@ -168,22 +171,40 @@ export default function GoalsScreen() {
           </Text>
         </View>
 
-        <TouchableOpacity
-          onPress={() => navigation.navigate('CreateGoal')}
-          style={[
-            styles.createButton,
-            {
-              backgroundColor: themeColors.surfaceElevated,
-              borderColor: themeColors.border,
-            },
-          ]}
-          activeOpacity={0.7}
-        >
-          <Icon name="plus" size={14} color={themeColors.text} />
-          <Text style={[styles.createButtonText, { color: themeColors.text }]}>
-            NEW
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.headerRightGroup}>
+          <TouchableOpacity
+            onPress={() => {
+              triggerHaptic('selection');
+              toggleBalanceHidden();
+            }}
+            style={[styles.headerNavButton, { borderColor: themeColors.borderSubtle }]}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityLabel="Toggle Balance Visibility"
+          >
+            <Icon
+              name={isBalanceHidden ? 'eye-off-outline' : 'eye-outline'}
+              size={17}
+              color={themeColors.text}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => navigation.navigate('CreateGoal')}
+            style={[
+              styles.createButton,
+              {
+                backgroundColor: themeColors.surfaceElevated,
+                borderColor: themeColors.border,
+              },
+            ]}
+            activeOpacity={0.7}
+          >
+            <Icon name="plus" size={14} color={themeColors.text} />
+            <Text style={[styles.createButtonText, { color: themeColors.text }]}>
+              NEW
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -213,7 +234,7 @@ export default function GoalsScreen() {
                 TOTAL TARGET
               </Text>
               <Text style={[styles.kpiValue, { color: themeColors.text }]}>
-                {formatCurrency(summary.totalTarget, summary.currency)}
+                {isBalanceHidden ? '••••' : formatCurrency(summary.totalTarget, summary.currency)}
               </Text>
             </View>
 
@@ -229,7 +250,7 @@ export default function GoalsScreen() {
                 TOTAL SAVED
               </Text>
               <Text style={[styles.kpiValue, { color: themeColors.success }]}>
-                {formatCurrency(summary.totalSaved, summary.currency)}
+                {isBalanceHidden ? '••••' : formatCurrency(summary.totalSaved, summary.currency)}
               </Text>
             </View>
 
@@ -245,7 +266,7 @@ export default function GoalsScreen() {
                 REMAINING
               </Text>
               <Text style={[styles.kpiValue, { color: themeColors.accent }]}>
-                {formatCurrency(summary.totalRemaining, summary.currency)}
+                {isBalanceHidden ? '••••' : formatCurrency(summary.totalRemaining, summary.currency)}
               </Text>
             </View>
           </View>
@@ -470,6 +491,11 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.bold,
     letterSpacing: -0.3,
     marginTop: 1,
+  },
+  headerRightGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   createButton: {
     flexDirection: 'row',

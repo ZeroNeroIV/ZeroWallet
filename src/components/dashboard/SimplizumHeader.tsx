@@ -4,6 +4,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { format } from 'date-fns';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { useUIStore } from '../../store/uiStore';
 import { triggerHaptic } from '../../services/haptics/hapticFeedback';
 
 interface SimplizumHeaderProps {
@@ -18,6 +19,8 @@ export const SimplizumHeader: React.FC<SimplizumHeaderProps> = ({
   onLockPress,
 }) => {
   const themeColors = useThemeColors();
+  const isBalanceHidden = useUIStore((s) => s.isBalanceHidden);
+  const toggleBalanceHidden = useUIStore((s) => s.toggleBalanceHidden);
   const todayStr = format(new Date(), 'MMMM d').toUpperCase();
 
   const handlePress = (callback: () => void) => {
@@ -37,6 +40,23 @@ export const SimplizumHeader: React.FC<SimplizumHeaderProps> = ({
       </View>
 
       <View style={styles.actionGroup}>
+        <TouchableOpacity
+          style={[styles.iconButton, { borderColor: themeColors.hairline }]}
+          onPress={() => {
+            triggerHaptic('selection');
+            toggleBalanceHidden();
+          }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          activeOpacity={0.7}
+          accessibilityLabel="Toggle Balance Visibility"
+        >
+          <MaterialCommunityIcons
+            name={isBalanceHidden ? 'eye-off-outline' : 'eye-outline'}
+            size={18}
+            color={themeColors.text}
+          />
+        </TouchableOpacity>
+
         <TouchableOpacity
           style={[styles.iconButton, { borderColor: themeColors.hairline }]}
           onPress={() => handlePress(onSearchPress)}

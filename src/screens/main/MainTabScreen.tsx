@@ -9,7 +9,7 @@ import {
   NativeScrollEvent,
 } from 'react-native';
 import { DashboardScreen } from '../dashboard/DashboardScreen';
-import WalletsScreen from '../settings/WalletsScreen';
+import { TransactionHistoryScreen } from '../transactions/TransactionHistoryScreen';
 import RecurringHubScreen from '../recurring/RecurringHubScreen';
 import SettingsScreen from '../settings/SettingsScreen';
 import { BottomNavigation } from '../../components/navigation/BottomNavigation';
@@ -88,7 +88,7 @@ export const MainTabScreen: React.FC<MainTabScreenProps> = ({ navigation }) => {
           <DashboardScreen />
         </View>
         <View style={[styles.page, { width: screenWidth }]}>
-          <WalletsScreen />
+          <TransactionHistoryScreen />
         </View>
         <View style={[styles.page, { width: screenWidth }]}>
           <RecurringHubScreen />

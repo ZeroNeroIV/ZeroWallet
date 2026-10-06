@@ -16,6 +16,7 @@ import type { StackNavigationProp } from '@react-navigation/stack';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import type { MainStackParamList } from '../../types/navigation';
 import { useAuthStore } from '../../store/authStore';
+import { useUIStore } from '../../store/uiStore';
 import { useNavigationTabStore } from '../../store/navigationTabStore';
 import { WalletRepository } from '../../database/repositories/WalletRepository';
 import { AccountRepository } from '../../database/repositories/AccountRepository';
@@ -37,6 +38,8 @@ export default function WalletsScreen() {
   const themeColors = useThemeColors();
   const currentUser = useAuthStore((s) => s.currentUser);
   const currentAccountId = useAuthStore((s) => s.currentAccountId);
+  const isBalanceHidden = useUIStore((s) => s.isBalanceHidden);
+  const toggleBalanceHidden = useUIStore((s) => s.toggleBalanceHidden);
 
   const { wallets, refresh } = useWallets();
   const [derivedBalances, setDerivedBalances] = useState<Record<string, number>>({});
@@ -259,34 +262,79 @@ export default function WalletsScreen() {
           },
         ]}
       >
-        <View>
-          <Text style={[styles.headerSuper, { color: themeColors.textMuted }]}>
-            ZERO WALLET · LEDGER
-          </Text>
-          <Text style={[styles.headerTitle, { color: themeColors.text }]}>
-            WALLETS
-          </Text>
+        <View style={styles.headerLeftGroup}>
+          {navigation.canGoBack() && (
+            <TouchableOpacity
+              onPress={() => {
+                triggerHaptic('impactLight');
+                navigation.goBack();
+              }}
+              style={[
+                styles.headerBackBtn,
+                {
+                  borderColor: themeColors.hairline,
+                  backgroundColor: themeColors.surface,
+                },
+              ]}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel="Back"
+            >
+              <MaterialCommunityIcons name="arrow-left" size={18} color={themeColors.text} />
+            </TouchableOpacity>
+          )}
+          <View>
+            <Text style={[styles.headerSuper, { color: themeColors.textMuted }]}>
+              ZERO WALLET · LEDGER
+            </Text>
+            <Text style={[styles.headerTitle, { color: themeColors.text }]}>
+              WALLETS
+            </Text>
+          </View>
         </View>
 
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={() => {
-            triggerHaptic('selection');
-            setEditingWallet(null);
-            setFormModalVisible(true);
-          }}
-          style={[
-            styles.headerAddBtn,
-            {
-              borderColor: themeColors.hairline,
-              backgroundColor: themeColors.surface,
-            },
-          ]}
-          accessibilityLabel="Add New Wallet"
-          accessibilityRole="button"
-        >
-          <MaterialCommunityIcons name="plus" size={18} color={themeColors.text} />
-        </TouchableOpacity>
+        <View style={styles.headerRightGroup}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => {
+              triggerHaptic('selection');
+              toggleBalanceHidden();
+            }}
+            style={[
+              styles.headerActionBtn,
+              {
+                borderColor: themeColors.hairline,
+                backgroundColor: themeColors.surface,
+              },
+            ]}
+            accessibilityLabel="Toggle Balance Visibility"
+          >
+            <MaterialCommunityIcons
+              name={isBalanceHidden ? 'eye-off-outline' : 'eye-outline'}
+              size={18}
+              color={themeColors.text}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => {
+              triggerHaptic('selection');
+              setEditingWallet(null);
+              setFormModalVisible(true);
+            }}
+            style={[
+              styles.headerActionBtn,
+              {
+                borderColor: themeColors.hairline,
+                backgroundColor: themeColors.surface,
+              },
+            ]}
+            accessibilityLabel="Add New Wallet"
+            accessibilityRole="button"
+          >
+            <MaterialCommunityIcons name="plus" size={18} color={themeColors.text} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -324,7 +372,7 @@ export default function WalletsScreen() {
           </View>
 
           <Text style={[styles.commandAmountText, { color: themeColors.text }]}>
-            {formatCurrency(totalNetWorth, currency)}
+            {isBalanceHidden ? '••••••••' : formatCurrency(totalNetWorth, currency)}
           </Text>
 
           {/* Transfer Action */}
@@ -372,6 +420,7 @@ export default function WalletsScreen() {
               wallet={wallet}
               balance={derivedBalances[wallet.id] ?? 0}
               currency={currency}
+              isBalanceHidden={isBalanceHidden}
               onPress={() => handleWalletPress(wallet)}
               onLongPress={() => handleWalletLongPress(wallet)}
             />
@@ -403,6 +452,32 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     borderBottomWidth: 1,
   },
+  headerLeftGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerBackBtn: {
+    width: 32,
+    height: 32,
+    borderWidth: 1,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerRightGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerActionBtn: {
+    width: 32,
+    height: 32,
+    borderWidth: 1,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   headerSuper: {
     fontSize: 10,
     letterSpacing: 1.5,
@@ -415,14 +490,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     fontWeight: '800',
     textTransform: 'uppercase',
-  },
-  headerAddBtn: {
-    width: 30,
-    height: 30,
-    borderWidth: 1,
-    borderRadius: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   scroll: {
     flex: 1,

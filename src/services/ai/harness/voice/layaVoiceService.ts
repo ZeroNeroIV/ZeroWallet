@@ -317,6 +317,9 @@ export class LayaVoiceService {
       this.stopSpeakingAudioWave();
       if (this.isCallActive) {
         this.setStatus(this.isMuted ? 'muted' : 'listening');
+        if (!this.isMuted) {
+          this.startNativeListening();
+        }
       }
     }, duration);
   }
@@ -326,13 +329,14 @@ export class LayaVoiceService {
    */
   async sendVoicePrompt(spokenText: string): Promise<AgentResponse> {
     const clean = spokenText.trim();
-    if (!clean) return { text: '', engineBadge: 'system1' };
+    if (!clean) return { text: '', engineBadge: 'system2' };
 
     this.stopNativeListening();
     this.setStatus('thinking');
 
     try {
-      const response = await this.harness.processMessage(clean);
+      // Voice calls always leverage System-2 (Gemini / Groq Foundation LLM)
+      const response = await this.harness.processMessage(clean, undefined, { forceSystem2: true });
 
       this.addTranscriptLine('assistant', response.text, true);
 

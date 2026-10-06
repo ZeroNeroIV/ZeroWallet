@@ -65,6 +65,11 @@ export type MainStackParamList = {
     walletId: string;
   };
   SecuritySettings: undefined;
+  GoalsDebtsHub:
+    | {
+        initialTab?: 'goals' | 'debts';
+      }
+    | undefined;
   GoalsScreen: undefined;
   CreateGoal: { goalId?: string } | undefined;
   EditGoal: {

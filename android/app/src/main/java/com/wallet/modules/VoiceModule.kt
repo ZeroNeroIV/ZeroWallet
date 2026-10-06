@@ -30,10 +30,13 @@ class VoiceModule(private val reactContext: ReactApplicationContext) :
     private var isListening = false
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    private data class PendingSpeak(val text: String, val utteranceId: String, val promise: Promise)
+    private val pendingSpeaks = mutableListOf<PendingSpeak>()
+
     init {
         mainHandler.post {
             try {
-                textToSpeech = TextToSpeech(reactContext, this)
+                textToSpeech = TextToSpeech(reactContext.applicationContext, this)
             } catch (e: Exception) {
                 android.util.Log.e(TAG, "Failed to initialize TextToSpeech", e)
             }
@@ -73,8 +76,22 @@ class VoiceModule(private val reactContext: ReactApplicationContext) :
                 }
             })
             isTtsInitialized = true
+
+            // Flush any speech requests queued while TTS was initializing
+            synchronized(pendingSpeaks) {
+                for (pending in pendingSpeaks) {
+                    executeSpeak(pending.text, pending.utteranceId, pending.promise)
+                }
+                pendingSpeaks.clear()
+            }
         } else {
             android.util.Log.e(TAG, "TTS Initialization failed with status: $status")
+            synchronized(pendingSpeaks) {
+                for (pending in pendingSpeaks) {
+                    pending.promise.reject("TTS_FAILED", "TTS initialization failed with code $status")
+                }
+                pendingSpeaks.clear()
+            }
         }
     }
 
@@ -94,11 +111,6 @@ class VoiceModule(private val reactContext: ReactApplicationContext) :
     fun startListening(options: ReadableMap?, promise: Promise) {
         mainHandler.post {
             try {
-                if (!SpeechRecognizer.isRecognitionAvailable(reactContext)) {
-                    promise.reject("UNAVAILABLE", "Speech recognition is not available on this device")
-                    return@post
-                }
-
                 if (speechRecognizer != null) {
                     try {
                         speechRecognizer?.cancel()
@@ -107,7 +119,18 @@ class VoiceModule(private val reactContext: ReactApplicationContext) :
                     speechRecognizer = null
                 }
 
-                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(reactContext)
+                try {
+                    speechRecognizer = SpeechRecognizer.createSpeechRecognizer(reactContext)
+                } catch (e: Exception) {
+                    promise.reject("UNAVAILABLE", "Speech recognizer creation failed: ${e.message}")
+                    return@post
+                }
+
+                if (speechRecognizer == null) {
+                    promise.reject("UNAVAILABLE", "Speech recognition service could not be instantiated")
+                    return@post
+                }
+
                 speechRecognizer?.setRecognitionListener(object : RecognitionListener {
                     override fun onReadyForSpeech(params: Bundle?) {
                         isListening = true
@@ -190,7 +213,9 @@ class VoiceModule(private val reactContext: ReactApplicationContext) :
                 val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                     putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
+                    putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, reactContext.packageName)
+                    putExtra("android.speech.extra.DICTATION_MODE", true)
                     val lang = options?.getString("language") ?: Locale.getDefault().toLanguageTag()
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang)
                 }
@@ -230,42 +255,46 @@ class VoiceModule(private val reactContext: ReactApplicationContext) :
         }
     }
 
+    private fun executeSpeak(text: String, utteranceId: String, promise: Promise) {
+        try {
+            if (isListening) {
+                try {
+                    speechRecognizer?.cancel()
+                    isListening = false
+                } catch (e: Exception) {}
+            }
+
+            val params = Bundle().apply {
+                putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId)
+            }
+
+            val result = textToSpeech?.speak(
+                text,
+                TextToSpeech.QUEUE_FLUSH,
+                params,
+                utteranceId
+            )
+
+            if (result == TextToSpeech.SUCCESS) {
+                promise.resolve(true)
+            } else {
+                promise.reject("TTS_FAILED", "Failed to start speech synthesis, code: $result")
+            }
+        } catch (e: Exception) {
+            promise.reject("ERROR", e.message, e)
+        }
+    }
+
     @ReactMethod
     fun speak(text: String, utteranceId: String, promise: Promise) {
         mainHandler.post {
-            try {
-                if (textToSpeech == null || !isTtsInitialized) {
-                    promise.reject("TTS_NOT_READY", "TextToSpeech engine is not initialized yet")
-                    return@post
+            if (!isTtsInitialized || textToSpeech == null) {
+                synchronized(pendingSpeaks) {
+                    pendingSpeaks.add(PendingSpeak(text, utteranceId, promise))
                 }
-
-                // Stop listening to prevent echo while speaking
-                if (isListening) {
-                    try {
-                        speechRecognizer?.cancel()
-                        isListening = false
-                    } catch (e: Exception) {}
-                }
-
-                val params = Bundle().apply {
-                    putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId)
-                }
-
-                val result = textToSpeech?.speak(
-                    text,
-                    TextToSpeech.QUEUE_FLUSH,
-                    params,
-                    utteranceId
-                )
-
-                if (result == TextToSpeech.SUCCESS) {
-                    promise.resolve(true)
-                } else {
-                    promise.reject("TTS_FAILED", "Failed to start speech synthesis, code: $result")
-                }
-            } catch (e: Exception) {
-                promise.reject("ERROR", e.message, e)
+                return@post
             }
+            executeSpeak(text, utteranceId, promise)
         }
     }
 

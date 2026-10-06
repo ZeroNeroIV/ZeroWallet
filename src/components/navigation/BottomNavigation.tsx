@@ -33,7 +33,7 @@ interface TabConfig {
 
 const tabs: TabConfig[] = [
   { id: 'dashboard', icon: 'view-dashboard-outline', pageIndex: 0 },
-  { id: 'wallets', icon: 'wallet-outline', pageIndex: 1 },
+  { id: 'history', icon: 'receipt-text-outline', pageIndex: 1 },
   { id: 'add', icon: 'plus', isCenter: true },
   { id: 'recurring', icon: 'calendar-clock-outline', pageIndex: 2 },
   { id: 'settings', icon: 'cog-outline', pageIndex: 3 },

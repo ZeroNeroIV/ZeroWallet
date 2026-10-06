@@ -59,18 +59,21 @@ export class LayaHarness {
    */
   async processMessage(
     userPrompt: string,
-    conversationContext?: AIConversationContext
+    conversationContext?: AIConversationContext,
+    options?: { forceSystem2?: boolean }
   ): Promise<AgentResponse> {
     const cleanPrompt = userPrompt.trim();
 
     // ──────────────────────────────────────────────────────────
-    // 1. SYSTEM-1: Instant Reflex Classifier (<15ms)
+    // 1. SYSTEM-1: Fast Intent Classifier (<15ms)
+    // Only used for instant reflex transaction logging (e.g., "spent 15 on lunch")
+    // Conversational, analytical, and voice queries pass directly to System-2 LLM
     // ──────────────────────────────────────────────────────────
-    if (this.settings.system1Enabled !== false) {
+    if (!options?.forceSystem2 && this.settings.system1Enabled !== false) {
       const system1Router = new LayaSystem1Router(this.accountId, this.userId, this.currency);
       const s1Result = await system1Router.route(cleanPrompt);
 
-      if (s1Result.handled) {
+      if (s1Result.handled && s1Result.intent === 'CREATE_TRANSACTION') {
         const widgets: FinancialWidget[] = [];
         const pendingActions: PendingAction[] = s1Result.pendingActions || [];
 

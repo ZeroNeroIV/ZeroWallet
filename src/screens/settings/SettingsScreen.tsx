@@ -302,7 +302,7 @@ export default function SettingsScreen({ navigation }: any) {
             style={styles.row}
             onPress={() => {
               lightHaptic();
-              useNavigationTabStore.getState().scrollToTab(1);
+              navigation.navigate('Wallets');
             }}
           >
             <View style={styles.rowLeft}>

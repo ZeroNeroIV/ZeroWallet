@@ -17,6 +17,7 @@ import { spacing, borderRadius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { formatCurrency } from '../../utils/currencyFormatter';
 import { triggerHaptic } from '../../services/haptics/hapticFeedback';
+import { useUIStore } from '../../store/uiStore';
 import type { Debt } from '../../types/models';
 
 interface DebtArchitecturalCardProps {
@@ -33,6 +34,7 @@ export const DebtArchitecturalCard = memo(function DebtArchitecturalCard({
   onPress,
 }: DebtArchitecturalCardProps) {
   const themeColors = useThemeColors();
+  const isBalanceHidden = useUIStore((s) => s.isBalanceHidden);
 
   const total = debt.amount || 0;
   const paid = debt.amountPaid || 0;
@@ -159,7 +161,7 @@ export const DebtArchitecturalCard = memo(function DebtArchitecturalCard({
               },
             ]}
           >
-            {isPaid ? 'PAID' : formatCurrency(remaining, currency)}
+            {isPaid ? 'PAID' : isBalanceHidden ? '••••' : formatCurrency(remaining, currency)}
           </Text>
           <Text style={[styles.remainingSubtext, { color: themeColors.textMuted }]}>
             {isPaid ? 'Closed' : 'outstanding'}
@@ -202,7 +204,9 @@ export const DebtArchitecturalCard = memo(function DebtArchitecturalCard({
 
         <View style={styles.gaugeFooter}>
           <Text style={[styles.gaugeFooterText, { color: themeColors.textMuted }]}>
-            {formatCurrency(paid, currency)} paid of {formatCurrency(total, currency)}
+            {isBalanceHidden
+              ? '•••• paid of ••••'
+              : `${formatCurrency(paid, currency)} paid of ${formatCurrency(total, currency)}`}
           </Text>
           <Text style={[styles.gaugeFooterText, { color: themeColors.textMuted }]}>
             {Math.round(percentage)}%

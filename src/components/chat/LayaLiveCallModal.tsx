@@ -19,9 +19,9 @@ import {
   TouchableOpacity,
   ScrollView,
   Dimensions,
-  SafeAreaView,
   Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -63,6 +63,7 @@ export const LayaLiveCallModal: React.FC<LayaLiveCallModalProps> = ({
   onClose,
   onWidgetGenerated,
 }) => {
+  const insets = useSafeAreaInsets();
   const themeColors = useThemeColors();
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
 
@@ -203,7 +204,7 @@ export const LayaLiveCallModal: React.FC<LayaLiveCallModalProps> = ({
 
   return (
     <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={handleHangUp}>
-      <SafeAreaView style={styles.container}>
+      <View style={[styles.container, { paddingTop: Math.max(insets.top, 12), paddingBottom: Math.max(insets.bottom, 12) }]}>
         {/* Architectural Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
@@ -243,7 +244,7 @@ export const LayaLiveCallModal: React.FC<LayaLiveCallModalProps> = ({
             <AnimatedView style={[styles.mainOrb, orbAnimatedStyle]}>
               <MaterialCommunityIcons
                 name={callStatus === 'speaking' ? 'waveform' : callStatus === 'thinking' ? 'brain' : isMuted ? 'microphone-off' : 'microphone'}
-                size={44}
+                size={36}
                 color={isMuted ? themeColors.error : themeColors.primary}
               />
             </AnimatedView>
@@ -358,7 +359,7 @@ export const LayaLiveCallModal: React.FC<LayaLiveCallModalProps> = ({
             <Text style={styles.controlLabel}>{isSpeakerOn ? 'SPEAKER' : 'MUTE AUDIO'}</Text>
           </TouchableOpacity>
         </View>
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 };
@@ -438,14 +439,14 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
     orbStage: {
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: spacing.md,
+      paddingVertical: spacing.xs + 2,
       position: 'relative',
     },
     pulseRing: {
       position: 'absolute',
-      width: 140,
-      height: 140,
-      borderRadius: 70,
+      width: 114,
+      height: 114,
+      borderRadius: 57,
       borderWidth: 1,
       borderColor: themeColors.primary + '30',
     },
@@ -456,9 +457,9 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
       borderColor: themeColors.primary + '20',
     },
     mainOrb: {
-      width: 88,
-      height: 88,
-      borderRadius: 44,
+      width: 72,
+      height: 72,
+      borderRadius: 36,
       backgroundColor: themeColors.card || themeColors.surface,
       borderWidth: 1,
       borderColor: themeColors.primary + '60',
@@ -467,15 +468,15 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
       shadowColor: themeColors.primary,
       shadowOffset: { width: 0, height: 0 },
       shadowOpacity: 0.35,
-      shadowRadius: 12,
-      elevation: 6,
+      shadowRadius: 10,
+      elevation: 5,
     },
     equalizerRow: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 5,
-      marginTop: spacing.sm,
-      height: 36,
+      marginTop: spacing.xs + 2,
+      height: 28,
     },
     eqBar: {
       width: 4,
@@ -507,7 +508,7 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
       borderRadius: 4,
       backgroundColor: themeColors.card || themeColors.surface,
       padding: spacing.sm,
-      minHeight: 120,
+      minHeight: 80,
     },
     transcriptSuper: {
       ...typography.caption,
