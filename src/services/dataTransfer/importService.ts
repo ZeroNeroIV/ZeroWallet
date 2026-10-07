@@ -40,6 +40,7 @@ interface ExportPayload {
     notificationSettings?: any;
     appSettings?: any;
     securitySettings?: any;
+    googleDriveSettings?: any;
   };
 }
 
@@ -80,31 +81,20 @@ function normalizeBackupPayload(raw: any): ExportPayload {
       appSettings: data.appSettings && typeof data.appSettings === 'object' ? data.appSettings : null,
       securitySettings:
         data.securitySettings && typeof data.securitySettings === 'object' ? data.securitySettings : null,
+      googleDriveSettings:
+        data.googleDriveSettings && typeof data.googleDriveSettings === 'object' ? data.googleDriveSettings : null,
     },
   };
 }
 
-export async function pickAndImportData(
+export async function importBackupFromFile(
+  filePath: string,
   currentAccountId: string,
   currentUserId: string,
 ): Promise<{
   imported: Record<string, number>;
 }> {
-  const [result] = await pick({ allowMultiSelection: false });
-
-  // Copy to local cache so RNFS can access it
-  const [localCopy] = await keepLocalCopy({
-    files: [{ uri: result.uri, fileName: result.name ?? 'backup' }],
-    destination: 'cachesDirectory',
-  });
-
-  if (localCopy.status === 'error') {
-    throw new Error(localCopy.copyError ?? 'Failed to copy file');
-  }
-
-  const filePath = decodeURIComponent(localCopy.localUri.replace('file://', ''));
-  const isZip = (result.name ?? filePath).toLowerCase().endsWith('.zip') ||
-    (result.type ?? '').includes('zip');
+  const isZip = filePath.toLowerCase().endsWith('.zip');
 
   let rawPayload: any;
 
@@ -156,6 +146,28 @@ export async function pickAndImportData(
   const imported = await importPayload(rawPayload, currentAccountId, currentUserId, null);
 
   return { imported };
+}
+
+export async function pickAndImportData(
+  currentAccountId: string,
+  currentUserId: string,
+): Promise<{
+  imported: Record<string, number>;
+}> {
+  const [result] = await pick({ allowMultiSelection: false });
+
+  // Copy to local cache so RNFS can access it
+  const [localCopy] = await keepLocalCopy({
+    files: [{ uri: result.uri, fileName: result.name ?? 'backup' }],
+    destination: 'cachesDirectory',
+  });
+
+  if (localCopy.status === 'error') {
+    throw new Error(localCopy.copyError ?? 'Failed to copy file');
+  }
+
+  const filePath = decodeURIComponent(localCopy.localUri.replace('file://', ''));
+  return importBackupFromFile(filePath, currentAccountId, currentUserId);
 }
 
 type ImageResolver = ((fileName: string) => Promise<string | null>) | null;

@@ -435,3 +435,44 @@ export async function cancelAllNotifications(): Promise<void> {
     console.error('[NotificationService] Failed to cancel notifications:', error);
   }
 }
+
+// ============================================
+// Show Cloud Backup Notification
+// ============================================
+
+/**
+ * Purpose: Display cloud backup status notification
+ */
+export async function showBackupNotification(
+  status: 'success' | 'failed',
+  details?: string
+): Promise<string | void> {
+  try {
+    const hasPermission = await checkNotificationPermission();
+    if (!hasPermission) return;
+
+    const isSuccess = status === 'success';
+
+    return await notifee.displayNotification({
+      title: isSuccess ? '☁️ Google Drive Backup' : '⚠️ Cloud Backup Failed',
+      body:
+        details ||
+        (isSuccess
+          ? 'Your ZeroWallet records were successfully backed up to Google Drive.'
+          : 'Google Drive backup could not be completed. Check settings.'),
+      android: {
+        channelId: CHANNEL_IDS.GENERAL,
+        color: isSuccess ? '#06D6A0' : '#EF476F',
+        pressAction: {
+          id: 'default',
+        },
+      },
+      ios: {
+        sound: 'default',
+      },
+    });
+  } catch (error) {
+    console.error('[NotificationService] Failed to show backup notification:', error);
+  }
+}
+

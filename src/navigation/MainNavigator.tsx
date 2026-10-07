@@ -20,6 +20,7 @@ import SettingsScreen from '../screens/settings/SettingsScreen';
 import SalarySettingsScreen from '../screens/settings/SalarySettingsScreen';
 import SmartNudgesScreen from '../screens/settings/SmartNudgesScreen';
 import WalletsScreen from '../screens/settings/WalletsScreen';
+import GoogleDriveBackupScreen from '../screens/settings/GoogleDriveBackupScreen';
 import SecuritySettingsScreen from '../screens/security/SecuritySettingsScreen';
 import { GoalsDebtsHubScreen } from '../screens/goals/GoalsDebtsHubScreen';
 import GoalsScreen from '../screens/goals/GoalsScreen';
@@ -208,6 +209,11 @@ export function MainNavigator() {
       <Stack.Screen
         name="SecuritySettings"
         component={SecuritySettingsScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="GoogleDriveBackup"
+        component={GoogleDriveBackupScreen}
         options={{ headerShown: false }}
       />
       <Stack.Screen

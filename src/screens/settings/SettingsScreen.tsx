@@ -65,12 +65,30 @@ function smartNudgesSummary(notificationSettings: {
   return active.length > 0 ? active.join(' · ') : 'All notifications off';
 }
 
+function getGoogleDriveSummary(settings: any): string {
+  if (!settings?.isConnected) {
+    return 'Automated scheduled snapshots & cloud restores';
+  }
+  if (settings.isEnabled) {
+    const freq = (settings.frequency || 'daily').toUpperCase();
+    return `Auto-sync (${freq}) at ${settings.backupTime || '02:00'} · ${settings.accountEmail || 'Connected'}`;
+  }
+  return `Linked to ${settings.accountEmail || 'Google Drive'} · Manual backups`;
+}
+
+function getGoogleDriveBadge(settings: any): string {
+  if (!settings?.isConnected) return 'NOT LINKED';
+  if (settings.isEnabled) return (settings.frequency || 'DAILY').toUpperCase();
+  return 'LINKED';
+}
+
 export default function SettingsScreen({ navigation }: any) {
   const {
     salarySettings,
     notificationSettings,
     appSettings,
     securitySettings,
+    googleDriveSettings,
     aiSettings,
     updateAppSettings,
   } = useSettingsStore();
@@ -476,6 +494,47 @@ export default function SettingsScreen({ navigation }: any) {
           <View style={styles.groupHeader}>
             <Text style={styles.groupTitle}>DATA VAULT & PORTABILITY</Text>
           </View>
+
+          <TouchableOpacity
+            style={styles.row}
+            onPress={() => {
+              lightHaptic();
+              navigation.navigate('GoogleDriveBackup');
+            }}
+          >
+            <View style={styles.rowLeft}>
+              <Text style={styles.rowLabel}>Google Drive Cloud Backup</Text>
+              <Text style={styles.rowDesc}>{getGoogleDriveSummary(googleDriveSettings)}</Text>
+            </View>
+            <View style={styles.rowRight}>
+              <View
+                style={[
+                  styles.badge,
+                  googleDriveSettings?.isConnected && googleDriveSettings?.isEnabled
+                    ? styles.badgeActive
+                    : googleDriveSettings?.isConnected
+                    ? styles.badge
+                    : styles.badgeDanger,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.badgeText,
+                    googleDriveSettings?.isConnected && googleDriveSettings?.isEnabled
+                      ? styles.badgeActiveText
+                      : googleDriveSettings?.isConnected
+                      ? styles.badgeText
+                      : styles.badgeDangerText,
+                  ]}
+                >
+                  {getGoogleDriveBadge(googleDriveSettings)}
+                </Text>
+              </View>
+              <MaterialCommunityIcons name="chevron-right" size={18} color={themeColors.textSecondary} />
+            </View>
+          </TouchableOpacity>
+
+          <View style={styles.divider} />
 
           <TouchableOpacity
             style={styles.row}

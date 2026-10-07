@@ -65,6 +65,7 @@ export type MainStackParamList = {
     walletId: string;
   };
   SecuritySettings: undefined;
+  GoogleDriveBackup: undefined;
   GoalsDebtsHub:
     | {
         initialTab?: 'goals' | 'debts';

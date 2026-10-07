@@ -3,6 +3,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import type { RootStackParamList } from '../types/navigation';
+import type { LinkingOptions } from '@react-navigation/native';
 import { AuthNavigator } from './AuthNavigator';
 import { MainNavigator } from './MainNavigator';
 import { useAuthStore } from '../store/authStore';
@@ -29,7 +30,7 @@ import { useThemeColors } from '../hooks/useThemeColors';
 const Stack = createStackNavigator<RootStackParamList>();
 
 // Deep linking configuration
-const linking = {
+const linking: LinkingOptions<RootStackParamList> = {
   prefixes: ['wallet://'],
   config: {
     screens: {
@@ -41,6 +42,7 @@ const linking = {
               type: (type: string) => type as 'income' | 'expense' | 'transfer',
             },
           },
+          GoogleDriveBackup: 'oauth/google',
         },
       },
       Auth: {

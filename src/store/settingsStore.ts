@@ -4,6 +4,7 @@ import { persist } from 'zustand/middleware';
 import { mmkvStorage } from './middleware/mmkvStorage';
 import type { SettingsState } from '../types/store';
 import type { AISettings } from '../types/ai';
+import type { GoogleDriveSettings } from '../types/models';
 
 // ============================================
 // Default Settings
@@ -53,6 +54,26 @@ const defaultSecuritySettings = {
   lockoutUntil: null,
 };
 
+export const defaultGoogleDriveSettings: GoogleDriveSettings = {
+  isEnabled: false,
+  isConnected: false,
+  accountEmail: null,
+  accountName: null,
+  accountPicture: null,
+  accessToken: null,
+  refreshToken: null,
+  tokenExpiresAt: null,
+  clientId: null,
+  frequency: 'daily',
+  backupTime: '02:00',
+  keepBackupCount: 5,
+  wifiOnly: false,
+  notifyOnBackup: true,
+  lastBackupTime: null,
+  lastBackupStatus: 'idle',
+  lastBackupError: null,
+};
+
 const defaultAISettings: AISettings = {
   provider: 'groq',
   apiKey: null,
@@ -90,6 +111,7 @@ export const useSettingsStore = create<SettingsState>()(
       notificationSettings: defaultNotificationSettings,
       appSettings: defaultAppSettings,
       securitySettings: defaultSecuritySettings,
+      googleDriveSettings: defaultGoogleDriveSettings,
       aiSettings: defaultAISettings,
       hasSeenIntro: false,
 
@@ -140,6 +162,28 @@ export const useSettingsStore = create<SettingsState>()(
         console.log('[SettingsStore] Security settings updated:', settings);
       },
 
+      updateGoogleDriveSettings: (settings) => {
+        set((state) => ({
+          googleDriveSettings: {
+            ...state.googleDriveSettings,
+            ...settings,
+          },
+        }));
+
+        console.log('[SettingsStore] Google Drive settings updated:', settings);
+      },
+
+      disconnectGoogleDrive: () => {
+        set((state) => ({
+          googleDriveSettings: {
+            ...defaultGoogleDriveSettings,
+            clientId: state.googleDriveSettings.clientId,
+          },
+        }));
+
+        console.log('[SettingsStore] Google Drive disconnected');
+      },
+
       updateAISettings: (settings) => {
         set((state) => ({
           aiSettings: {
@@ -161,6 +205,7 @@ export const useSettingsStore = create<SettingsState>()(
           notificationSettings: defaultNotificationSettings,
           appSettings: defaultAppSettings,
           securitySettings: defaultSecuritySettings,
+          googleDriveSettings: defaultGoogleDriveSettings,
           aiSettings: defaultAISettings,
         });
 
@@ -170,8 +215,14 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: 'settings-storage',
       storage: mmkvStorage,
-      version: 4,
+      version: 5,
       migrate: (persistedState: any, version: number) => {
+        // v5: googleDriveSettings
+        if (version < 5) {
+          if (!persistedState?.googleDriveSettings) {
+            persistedState.googleDriveSettings = defaultGoogleDriveSettings;
+          }
+        }
         // v4: salary payTime (arrival time e.g. "15:00")
         if (version < 4) {
           if (persistedState?.salarySettings && !persistedState.salarySettings.payTime) {

@@ -70,6 +70,10 @@ export async function runAllBackgroundTasks(accountId: string): Promise<void> {
     await scheduleDueReminders(accountId);
     await scheduleSalaryReminder();
 
+    // 5. Check and run scheduled Google Drive backup if due
+    const { checkAndProcessGoogleDriveBackup } = await import('./googleDriveBackupTask');
+    await checkAndProcessGoogleDriveBackup(accountId);
+
     console.log('[BackgroundTasks] All tasks completed successfully');
   } catch (error) {
     console.error('[BackgroundTasks] Error running background tasks:', error);
@@ -110,6 +114,10 @@ export async function runMissedTasks(accountId: string): Promise<void> {
     const { scheduleDueReminders, scheduleSalaryReminder } = await import('../notifications/scheduleNudges');
     await scheduleDueReminders(accountId);
     await scheduleSalaryReminder();
+
+    // 5. Check missed Google Drive backup
+    const { checkAndProcessGoogleDriveBackup } = await import('./googleDriveBackupTask');
+    await checkAndProcessGoogleDriveBackup(accountId);
 
     console.log('[BackgroundTasks] Missed tasks check completed');
   } catch (error) {

@@ -7,6 +7,7 @@ import type {
   NotificationSettings,
   AppSettings,
   SecuritySettings,
+  GoogleDriveSettings,
   AISettings,
   VaultType,
 } from './models';
@@ -80,6 +81,7 @@ export interface SettingsState {
   notificationSettings: NotificationSettings;
   appSettings: AppSettings;
   securitySettings: SecuritySettings;
+  googleDriveSettings: GoogleDriveSettings;
   aiSettings: AISettings;
   hasSeenIntro: boolean;
 
@@ -91,6 +93,8 @@ export interface SettingsState {
   ) => void;
   updateAppSettings: (settings: Partial<AppSettings>) => void;
   updateSecuritySettings: (settings: Partial<SecuritySettings>) => void;
+  updateGoogleDriveSettings: (settings: Partial<GoogleDriveSettings>) => void;
+  disconnectGoogleDrive: () => void;
   updateAISettings: (settings: Partial<AISettings>) => void;
   resetSettings: () => void;
 }

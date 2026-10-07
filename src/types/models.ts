@@ -271,6 +271,29 @@ export interface SecuritySettings {
   lockoutUntil: number | null; // Unix timestamp when lockout expires
 }
 
+// Google Drive Backup Settings (MMKV)
+export type BackupFrequency = 'daily' | 'weekly' | 'monthly' | 'manual';
+
+export interface GoogleDriveSettings {
+  isEnabled: boolean; // Master toggle for automated cloud backup
+  isConnected: boolean; // Whether authorized with Google Drive
+  accountEmail: string | null; // Authorized user email
+  accountName: string | null; // Authorized user name
+  accountPicture: string | null; // Authorized user profile picture
+  accessToken: string | null; // OAuth2 Access Token
+  refreshToken: string | null; // OAuth2 Refresh Token
+  tokenExpiresAt: number | null; // Expiration timestamp ms
+  clientId: string | null; // Optional custom Google Cloud OAuth2 Client ID
+  frequency: BackupFrequency; // Schedule frequency
+  backupTime: string; // Time of day for auto-backup in 24h "HH:MM" (default "02:00")
+  keepBackupCount: number; // Number of historic cloud backups to retain (default: 5)
+  wifiOnly: boolean; // Only perform cloud upload when connected to Wi-Fi
+  notifyOnBackup: boolean; // Display notification upon backup completion
+  lastBackupTime: number | null; // Unix timestamp ms of last successful backup
+  lastBackupStatus: 'idle' | 'success' | 'failed';
+  lastBackupError: string | null;
+}
+
 // Re-export AI types from ai.ts
 export type { AISettings } from './ai';
 

@@ -15,12 +15,29 @@ export const EXPORT_VERSION = '1.2';
 
 const IMAGES_DIR = `${RNFS.DocumentDirectoryPath}/transaction-images`;
 
-export async function exportAllData(accountId: string, userId: string): Promise<void> {
+export interface BackupZipResult {
+  zipPath: string;
+  fileName: string;
+  size: number;
+}
+
+/**
+ * Creates a self-contained ZIP archive containing all application records,
+ * transaction receipt photos, configuration metadata, and a manifest README.
+ */
+export async function createBackupZip(accountId: string, userId: string): Promise<BackupZipResult> {
   const dateStr = new Date().toISOString().split('T')[0];
-  const zipPath = `${RNFS.CachesDirectoryPath}/wallet-backup-${dateStr}.zip`;
+  const fileName = `wallet-backup-${dateStr}-${Date.now()}.zip`;
+  const zipPath = `${RNFS.CachesDirectoryPath}/${fileName}`;
 
   // ── 1. Fetch all data ────────────────────────────────────────────────────
-  const { salarySettings, notificationSettings, appSettings, securitySettings } = useSettingsStore.getState();
+  const {
+    salarySettings,
+    notificationSettings,
+    appSettings,
+    securitySettings,
+    googleDriveSettings,
+  } = useSettingsStore.getState();
 
   const [account, categories, transactions, subscriptions, recurringExpenses, goals, debts, wallets, budgets] =
     await Promise.all([
@@ -47,6 +64,13 @@ export async function exportAllData(accountId: string, userId: string): Promise<
   // ── 2. Build ZIP in memory ───────────────────────────────────────────────
   const zip = new JSZip();
 
+  // Strip sensitive OAuth tokens from exported snapshot
+  const sanitizedDriveSettings = {
+    ...googleDriveSettings,
+    accessToken: null,
+    refreshToken: null,
+  };
+
   const exportData = {
     version: EXPORT_VERSION,
     exportedAt: new Date().toISOString(),
@@ -64,6 +88,7 @@ export async function exportAllData(accountId: string, userId: string): Promise<
       notificationSettings,
       appSettings,
       securitySettings,
+      googleDriveSettings: sanitizedDriveSettings,
     },
   };
 
@@ -87,9 +112,9 @@ export async function exportAllData(accountId: string, userId: string): Promise<
   for (const imgPath of allImagePaths) {
     const cleanPath = imgPath.replace('file://', '');
     if (await RNFS.exists(cleanPath)) {
-      const fileName = cleanPath.split('/').pop()!;
+      const imgFileName = cleanPath.split('/').pop()!;
       const base64 = await RNFS.readFile(cleanPath, 'base64');
-      zip.file(`images/${fileName}`, base64, { base64: true });
+      zip.file(`images/${imgFileName}`, base64, { base64: true });
       copiedCount++;
     }
   }
@@ -105,7 +130,7 @@ export async function exportAllData(accountId: string, userId: string): Promise<
     '  data.json        — All account data (transactions, categories, goals, debts, subscriptions)',
     `  images/          — ${copiedCount} transaction receipt image(s)`,
     '',
-    'To restore: use the Import Data option in Settings.',
+    'To restore: use the Import Data option in Settings or Cloud Restore.',
   ].join('\n');
 
   zip.file('README.txt', readme);
@@ -115,17 +140,31 @@ export async function exportAllData(accountId: string, userId: string): Promise<
   if (await RNFS.exists(zipPath)) await RNFS.unlink(zipPath);
   await RNFS.writeFile(zipPath, zipBase64, 'base64');
 
-  // ── 6. Share the zip ─────────────────────────────────────────────────────
-  await Share.open({
-    url: `file://${zipPath}`,
-    type: 'application/zip',
-    filename: `wallet-backup-${dateStr}.zip`,
-    title: 'Export Wallet Backup',
-    failOnCancel: false,
-  });
+  const stat = await RNFS.stat(zipPath);
 
-  // ── 7. Clean up ──────────────────────────────────────────────────────────
-  try { await RNFS.unlink(zipPath); } catch {}
+  return {
+    zipPath,
+    fileName,
+    size: Number(stat.size) || 0,
+  };
+}
+
+export async function exportAllData(accountId: string, userId: string): Promise<void> {
+  const { zipPath, fileName } = await createBackupZip(accountId, userId);
+
+  try {
+    // ── 6. Share the zip ─────────────────────────────────────────────────────
+    await Share.open({
+      url: `file://${zipPath}`,
+      type: 'application/zip',
+      filename: fileName,
+      title: 'Export Wallet Backup',
+      failOnCancel: false,
+    });
+  } finally {
+    // ── 7. Clean up ──────────────────────────────────────────────────────────
+    try { await RNFS.unlink(zipPath); } catch {}
+  }
 }
 
 export async function exportTransactionsCSV(accountId: string, userId: string): Promise<void> {
