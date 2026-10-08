@@ -52,6 +52,14 @@ const COMMAND_ITEMS: CommandItem[] = [
     onPress: () => useNavigationTabStore.getState().scrollToTab(2),
   },
   {
+    id: 'calendar',
+    title: 'Calendar',
+    subtitle: 'Month view & schedule',
+    icon: 'calendar-month-outline',
+    color: '#3B82F6',
+    onPress: (nav) => nav.navigate('Calendar'),
+  },
+  {
     id: 'transfer',
     title: 'Transfer',
     subtitle: 'Between wallets',

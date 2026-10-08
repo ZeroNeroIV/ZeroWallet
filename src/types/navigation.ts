@@ -101,4 +101,9 @@ export type MainStackParamList = {
     | undefined;
   AccountsList: undefined;
   CreateAccount: undefined;
+  Calendar:
+    | {
+        initialDate?: number;
+      }
+    | undefined;
 };

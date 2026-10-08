@@ -362,25 +362,50 @@ export default function RecurringHubScreen() {
           </Text>
         </View>
 
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={() => {
-            triggerHaptic('selection');
-            setEditingItem(null);
-            setFormModalVisible(true);
-          }}
-          style={[
-            styles.headerAddBtn,
-            {
-              borderColor: themeColors.hairline,
-              backgroundColor: themeColors.surface,
-            },
-          ]}
-          accessibilityLabel="Add New Commitment"
-          accessibilityRole="button"
-        >
-          <MaterialCommunityIcons name="plus" size={18} color={themeColors.text} />
-        </TouchableOpacity>
+        <View style={styles.headerRightActions}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => {
+              triggerHaptic('selection');
+              navigation.navigate('Calendar');
+            }}
+            style={[
+              styles.headerAddBtn,
+              {
+                borderColor: themeColors.hairline,
+                backgroundColor: themeColors.surface,
+              },
+            ]}
+            accessibilityLabel="Financial Calendar"
+            accessibilityRole="button"
+          >
+            <MaterialCommunityIcons
+              name="calendar-month-outline"
+              size={18}
+              color={themeColors.text}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => {
+              triggerHaptic('selection');
+              setEditingItem(null);
+              setFormModalVisible(true);
+            }}
+            style={[
+              styles.headerAddBtn,
+              {
+                borderColor: themeColors.hairline,
+                backgroundColor: themeColors.surface,
+              },
+            ]}
+            accessibilityLabel="Add New Commitment"
+            accessibilityRole="button"
+          >
+            <MaterialCommunityIcons name="plus" size={18} color={themeColors.text} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -671,6 +696,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     fontWeight: '800',
     textTransform: 'uppercase',
+  },
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   headerAddBtn: {
     width: 30,

@@ -292,6 +292,29 @@ export const TransactionHistoryScreen: React.FC = () => {
           <TouchableOpacity
             style={[
               styles.headerActionBtn,
+              {
+                borderColor: themeColors.hairline,
+                backgroundColor: themeColors.surface,
+              },
+            ]}
+            onPress={() => {
+              triggerHaptic('selection');
+              navigation.navigate('Calendar');
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            activeOpacity={0.7}
+            accessibilityLabel="Financial Calendar"
+          >
+            <MaterialCommunityIcons
+              name="calendar-month-outline"
+              size={18}
+              color={themeColors.text}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.headerActionBtn,
               styles.headerAddBtn,
               {
                 borderColor: themeColors.primary,

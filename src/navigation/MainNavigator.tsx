@@ -34,6 +34,7 @@ import AllSectionsScreen from '../screens/sections/AllSectionsScreen';
 import TransferScreen from '../screens/accounts/TransferScreen';
 import WalletDetailScreen from '../screens/wallets/WalletDetailScreen';
 import { AnalyticsScreen } from '../screens/analytics/AnalyticsScreen';
+import { CalendarScreen } from '../screens/calendar/CalendarScreen';
 import { useThemeColors } from '../hooks/useThemeColors';
 
 const Stack = createStackNavigator<MainStackParamList>();
@@ -288,6 +289,11 @@ export function MainNavigator() {
         name="Transfer"
         component={TransferScreen}
         options={{ title: 'Transfer', presentation: 'modal' }}
+      />
+      <Stack.Screen
+        name="Calendar"
+        component={CalendarScreen}
+        options={{ headerShown: false }}
       />
     </Stack.Navigator>
   );

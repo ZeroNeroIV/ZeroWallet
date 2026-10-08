@@ -47,6 +47,14 @@ export const AllSectionsScreen: React.FC = () => {
       route: 'Analytics',
     },
     {
+      id: 'calendar',
+      title: 'Calendar',
+      description: 'Month view of transactions, bills & subscriptions',
+      icon: 'calendar-month-outline',
+      iconColor: '#3b82f6',
+      route: 'Calendar',
+    },
+    {
       id: 'wallets',
       title: 'Wallets',
       description: 'Add, rename and organize wallets',
