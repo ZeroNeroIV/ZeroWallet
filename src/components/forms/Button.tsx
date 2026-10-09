@@ -89,6 +89,8 @@ export function Button({
       ]}
       disabled={isDisabled}
       activeOpacity={0.7}
+      delayPressIn={0}
+      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
       {...props}
       onPress={handlePress}
     >

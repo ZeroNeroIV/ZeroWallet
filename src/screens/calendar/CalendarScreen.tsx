@@ -209,16 +209,19 @@ export const CalendarScreen: React.FC = () => {
               triggerHaptic('selection');
               navigation.goBack();
             }}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            delayPressIn={0}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             accessibilityLabel="Back"
           >
             <MaterialCommunityIcons name="arrow-left" size={18} color={themeColors.text} />
           </TouchableOpacity>
-          <View>
-            <Text style={[styles.headerSuper, { color: themeColors.textMuted }]}>
+          <View style={styles.headerTitleCol}>
+            <Text style={[styles.headerSuper, { color: themeColors.textMuted }]} numberOfLines={1}>
               ZERO WALLET · SCHEDULE
             </Text>
-            <Text style={[styles.headerTitle, { color: themeColors.text }]}>CALENDAR</Text>
+            <Text style={[styles.headerTitle, { color: themeColors.text }]} numberOfLines={1}>
+              CALENDAR
+            </Text>
           </View>
         </View>
 
@@ -234,6 +237,8 @@ export const CalendarScreen: React.FC = () => {
                 },
               ]}
               onPress={handleJumpToToday}
+              delayPressIn={0}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               activeOpacity={0.7}
             >
               <Text style={[styles.todayPillText, { color: themeColors.primary }]}>TODAY</Text>
@@ -253,7 +258,8 @@ export const CalendarScreen: React.FC = () => {
               triggerHaptic('selection');
               toggleBalanceHidden();
             }}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            delayPressIn={0}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             activeOpacity={0.7}
             accessibilityLabel="Toggle Balance Visibility"
           >
@@ -275,7 +281,8 @@ export const CalendarScreen: React.FC = () => {
               },
             ]}
             onPress={handleAddTransactionOnDate}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            delayPressIn={0}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             activeOpacity={0.8}
             accessibilityLabel="Add Transaction"
           >
@@ -347,7 +354,12 @@ export const CalendarScreen: React.FC = () => {
           >
             <View style={styles.summaryItem}>
               <Text style={[styles.summaryLabel, { color: themeColors.textMuted }]}>INCOME</Text>
-              <Text style={[styles.summaryValue, { color: '#10B981' }]}>
+              <Text
+                style={[styles.summaryValue, { color: '#10B981' }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.75}
+              >
                 {isBalanceHidden
                   ? '••••'
                   : `+${formatCurrency(monthData.totalIncome, monthData.currency)}`}
@@ -358,7 +370,12 @@ export const CalendarScreen: React.FC = () => {
 
             <View style={styles.summaryItem}>
               <Text style={[styles.summaryLabel, { color: themeColors.textMuted }]}>EXPENSES</Text>
-              <Text style={[styles.summaryValue, { color: themeColors.error }]}>
+              <Text
+                style={[styles.summaryValue, { color: themeColors.error }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.75}
+              >
                 {isBalanceHidden
                   ? '••••'
                   : `-${formatCurrency(monthData.totalExpense, monthData.currency)}`}
@@ -369,7 +386,12 @@ export const CalendarScreen: React.FC = () => {
 
             <View style={styles.summaryItem}>
               <Text style={[styles.summaryLabel, { color: themeColors.textMuted }]}>UPCOMING</Text>
-              <Text style={[styles.summaryValue, { color: '#F59E0B' }]}>
+              <Text
+                style={[styles.summaryValue, { color: '#F59E0B' }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.75}
+              >
                 {isBalanceHidden
                   ? '••••'
                   : formatCurrency(monthData.totalUpcomingCommitments, monthData.currency)}
@@ -389,6 +411,9 @@ export const CalendarScreen: React.FC = () => {
                     color: monthData.projectedNet >= 0 ? '#10B981' : themeColors.error,
                   },
                 ]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.75}
               >
                 {isBalanceHidden
                   ? '••••'
@@ -438,6 +463,7 @@ export const CalendarScreen: React.FC = () => {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          nestedScrollEnabled={true}
           contentContainerStyle={styles.filterChipsScroll}
         >
           {(
@@ -454,6 +480,8 @@ export const CalendarScreen: React.FC = () => {
               <TouchableOpacity
                 key={chip.key}
                 activeOpacity={0.7}
+                delayPressIn={0}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                 onPress={() => {
                   triggerHaptic('selection');
                   setFilterType(chip.key);
@@ -766,9 +794,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   headerLeft: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    marginRight: 8,
+  },
+  headerTitleCol: {
+    flex: 1,
   },
   headerSuper: {
     fontSize: 9,

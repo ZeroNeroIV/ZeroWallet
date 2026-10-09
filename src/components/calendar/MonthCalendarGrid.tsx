@@ -27,10 +27,6 @@ export const MonthCalendarGrid: React.FC<MonthCalendarGridProps> = memo(
       [onSelectDay]
     );
 
-    // Grid container padding: 16 on each side
-    const availableWidth = screenWidth - 32;
-    const cellWidth = Math.floor(availableWidth / 7);
-
     return (
       <View
         style={[
@@ -52,7 +48,7 @@ export const MonthCalendarGrid: React.FC<MonthCalendarGridProps> = memo(
           ]}
         >
           {WEEKDAYS.map((day) => (
-            <View key={day} style={[styles.weekdayCell, { width: cellWidth }]}>
+            <View key={day} style={styles.weekdayCell}>
               <Text style={[styles.weekdayText, { color: themeColors.textMuted }]}>{day}</Text>
             </View>
           ))}
@@ -78,7 +74,6 @@ export const MonthCalendarGrid: React.FC<MonthCalendarGridProps> = memo(
                 key={day.dateKey}
                 style={[
                   styles.dayCell,
-                  { width: cellWidth },
                   isSelected && [
                     styles.selectedCell,
                     {
@@ -95,6 +90,7 @@ export const MonthCalendarGrid: React.FC<MonthCalendarGridProps> = memo(
                     ],
                 ]}
                 activeOpacity={0.7}
+                delayPressIn={0}
                 onPress={() => handleDayPress(day)}
                 accessibilityLabel={`${day.dayNumber} ${day.isCurrentMonth ? '' : 'outside month'}`}
                 accessibilityRole="button"
@@ -187,6 +183,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   weekdayCell: {
+    width: '14.2857%',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -201,6 +198,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   dayCell: {
+    width: '14.2857%',
     height: 52,
     alignItems: 'center',
     justifyContent: 'center',

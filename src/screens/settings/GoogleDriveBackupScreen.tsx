@@ -378,13 +378,14 @@ export default function GoogleDriveBackupScreen({ navigation }: any) {
               lightHaptic();
               navigation.goBack();
             }}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            delayPressIn={0}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
             <MaterialCommunityIcons name="chevron-left" size={28} color={themeColors.text} />
           </TouchableOpacity>
-          <View>
-            <Text style={styles.headerSuper}>ZERO WALLET · CLOUD PORTABILITY</Text>
-            <Text style={styles.headerTitle}>GOOGLE DRIVE BACKUP</Text>
+          <View style={styles.headerTitleCol}>
+            <Text style={styles.headerSuper} numberOfLines={1}>ZERO WALLET · CLOUD PORTABILITY</Text>
+            <Text style={styles.headerTitle} numberOfLines={1}>GOOGLE DRIVE BACKUP</Text>
           </View>
         </View>
 
@@ -405,7 +406,11 @@ export default function GoogleDriveBackupScreen({ navigation }: any) {
         </View>
       </View>
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* GROUP 1: GOOGLE ACCOUNT LINKAGE */}
         <View style={styles.groupCard}>
           <View style={styles.groupHeader}>
@@ -835,8 +840,13 @@ const createStyles = (themeColors: any) =>
       backgroundColor: themeColors.surface,
     },
     headerLeft: {
+      flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
+      marginRight: spacing.sm,
+    },
+    headerTitleCol: {
+      flex: 1,
     },
     backButton: {
       marginRight: spacing.sm,

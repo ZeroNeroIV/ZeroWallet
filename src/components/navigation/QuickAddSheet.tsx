@@ -21,6 +21,7 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { spacing, borderRadius } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -40,8 +41,9 @@ export const QuickAddSheet: React.FC<QuickAddSheetProps> = ({
   onClose,
   onSelect,
 }) => {
+  const insets = useSafeAreaInsets();
   const themeColors = useThemeColors();
-  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
+  const styles = useMemo(() => createStyles(themeColors, insets.bottom), [themeColors, insets.bottom]);
 
   const handleSelect = (action: QuickAddAction) => {
     lightHaptic();
@@ -59,6 +61,8 @@ export const QuickAddSheet: React.FC<QuickAddSheetProps> = ({
       style={styles.option}
       onPress={() => handleSelect(action)}
       activeOpacity={0.7}
+      delayPressIn={0}
+      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
     >
       <View style={[styles.iconCircle, { backgroundColor: `${iconColor}20` }]}>
         <MaterialCommunityIcons name={icon as any} size={24} color={iconColor} />
@@ -91,7 +95,12 @@ export const QuickAddSheet: React.FC<QuickAddSheetProps> = ({
               {renderOption('expense', 'arrow-top-right', 'Expense', 'Log money you spent', themeColors.error)}
               {renderOption('income', 'arrow-bottom-left', 'Income', 'Log money you received', themeColors.success)}
               {renderOption('transfer', 'bank-transfer', 'Transfer', 'Move money between wallets', themeColors.primary)}
-              <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={onClose}
+                activeOpacity={0.7}
+                delayPressIn={0}
+              >
                 <Text style={styles.cancelText}>Cancel</Text>
               </TouchableOpacity>
             </View>
@@ -102,7 +111,7 @@ export const QuickAddSheet: React.FC<QuickAddSheetProps> = ({
   );
 };
 
-const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
+const createStyles = (themeColors: ReturnType<typeof useThemeColors>, bottomInset: number) =>
   StyleSheet.create({
     overlay: {
       flex: 1,
@@ -115,7 +124,7 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
       borderTopRightRadius: 24,
       paddingHorizontal: spacing.lg,
       paddingTop: spacing.sm,
-      paddingBottom: spacing.xl,
+      paddingBottom: Math.max(bottomInset + 8, spacing.xl),
       gap: spacing.sm,
     },
     handle: {

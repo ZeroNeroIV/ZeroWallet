@@ -4,6 +4,10 @@
 
 // Polyfill for crypto.getRandomValues() - MUST be imported before uuid
 import 'react-native-get-random-values';
+import { enableScreens } from 'react-native-screens';
+
+// Optimize memory and transition performance with native fragment backing
+enableScreens(true);
 
 import { AppRegistry } from 'react-native';
 import notifee, { EventType } from '@notifee/react-native';

@@ -35,6 +35,7 @@ import { useAccountStore } from '../../store/accountStore';
 import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { ThemePickerModal } from '../../components/common/ThemePickerModal';
+import { ReleaseNotesModal } from '../../components/settings/ReleaseNotesModal';
 import { ThemeMode } from '../../contexts/ThemeContext';
 import { lightHaptic, mediumHaptic, heavyHaptic, errorHaptic } from '../../services/haptics/hapticFeedback';
 import { ordinalDay } from '../../utils/wallets';
@@ -98,6 +99,7 @@ export default function SettingsScreen({ navigation }: any) {
   const themeColors = useThemeColors();
 
   const [showThemePicker, setShowThemePicker] = useState(false);
+  const [showReleaseNotes, setShowReleaseNotes] = useState(false);
   const [currentAccountCurrency, setCurrentAccountCurrency] = useState<string>('USD');
   const [currentAccountName, setCurrentAccountName] = useState<string>('Primary');
   const [isExporting, setIsExporting] = useState<boolean>(false);
@@ -629,10 +631,28 @@ export default function SettingsScreen({ navigation }: any) {
 
         {/* System Build Info */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>ZEROWALLET · V1.0 ARCHITECTURAL RELEASE</Text>
+          <TouchableOpacity
+            style={styles.releaseNotesButton}
+            onPress={() => {
+              lightHaptic();
+              setShowReleaseNotes(true);
+            }}
+            delayPressIn={0}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons name="newspaper-variant-outline" size={15} color={themeColors.primary} />
+            <Text style={styles.releaseNotesButtonText}>VIEW RELEASE NOTES & CHANGELOG</Text>
+          </TouchableOpacity>
+          <Text style={styles.footerText}>ZEROWALLET · V1.0.35 ARCHITECTURAL RELEASE</Text>
           <Text style={styles.footerSubText}>OFFLINE-FIRST · MATHEMATICAL TRUTH ENGINE</Text>
         </View>
       </ScrollView>
+
+      {/* Release Notes Modal */}
+      <ReleaseNotesModal
+        visible={showReleaseNotes}
+        onClose={() => setShowReleaseNotes(false)}
+      />
 
       {/* Theme Picker Modal */}
       <ThemePickerModal
@@ -855,6 +875,25 @@ const createStyles = (theme: any) =>
     footer: {
       paddingVertical: spacing.lg,
       alignItems: 'center',
+    },
+    releaseNotesButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      borderWidth: 1,
+      borderColor: theme.primary + '50',
+      backgroundColor: theme.primary + '10',
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.xs + 3,
+      borderRadius: 2,
+      marginBottom: spacing.md,
+    },
+    releaseNotesButtonText: {
+      ...typography.caption,
+      color: theme.primary,
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 1,
     },
     footerText: {
       ...typography.caption,

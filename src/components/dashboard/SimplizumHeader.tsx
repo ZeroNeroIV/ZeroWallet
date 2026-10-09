@@ -31,10 +31,10 @@ export const SimplizumHeader: React.FC<SimplizumHeaderProps> = ({
   return (
     <View style={[styles.headerContainer, { borderBottomColor: themeColors.hairline, backgroundColor: themeColors.background }]}>
       <View style={styles.titleSection}>
-        <Text style={[styles.dateMicroCaps, { color: themeColors.textMuted }]}>
+        <Text style={[styles.dateMicroCaps, { color: themeColors.textMuted }]} numberOfLines={1}>
           {todayStr}
         </Text>
-        <Text style={[styles.brandTitle, { color: themeColors.text }]}>
+        <Text style={[styles.brandTitle, { color: themeColors.text }]} numberOfLines={1}>
           ZERO WALLET
         </Text>
       </View>
@@ -46,6 +46,7 @@ export const SimplizumHeader: React.FC<SimplizumHeaderProps> = ({
             triggerHaptic('selection');
             toggleBalanceHidden();
           }}
+          delayPressIn={0}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           activeOpacity={0.7}
           accessibilityLabel="Toggle Balance Visibility"
@@ -60,6 +61,7 @@ export const SimplizumHeader: React.FC<SimplizumHeaderProps> = ({
         <TouchableOpacity
           style={[styles.iconButton, { borderColor: themeColors.hairline }]}
           onPress={() => handlePress(onSearchPress)}
+          delayPressIn={0}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           activeOpacity={0.7}
         >
@@ -69,6 +71,7 @@ export const SimplizumHeader: React.FC<SimplizumHeaderProps> = ({
         <TouchableOpacity
           style={[styles.iconButton, { borderColor: themeColors.hairline }]}
           onPress={() => handlePress(onAIPress)}
+          delayPressIn={0}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           activeOpacity={0.7}
         >
@@ -78,6 +81,7 @@ export const SimplizumHeader: React.FC<SimplizumHeaderProps> = ({
         <TouchableOpacity
           style={[styles.iconButton, { borderColor: themeColors.hairline }]}
           onPress={() => handlePress(onLockPress)}
+          delayPressIn={0}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           activeOpacity={0.7}
         >
@@ -99,7 +103,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   titleSection: {
+    flex: 1,
     justifyContent: 'center',
+    marginRight: 10,
   },
   dateMicroCaps: {
     fontSize: 10,

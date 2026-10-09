@@ -64,6 +64,8 @@ export const GoalsDebtsPreview: React.FC<GoalsDebtsPreviewProps> = ({
           }}
           style={[styles.viewAllBtn, { borderColor: themeColors.hairline }]}
           activeOpacity={0.7}
+          delayPressIn={0}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <Text style={[styles.viewAllText, { color: themeColors.text }]}>
             VIEW ALL
@@ -88,6 +90,7 @@ export const GoalsDebtsPreview: React.FC<GoalsDebtsPreviewProps> = ({
             onSelectGoals();
           }}
           activeOpacity={0.8}
+          delayPressIn={0}
         >
           <View style={styles.cardHeader}>
             <View style={styles.badgeRow}>
@@ -96,21 +99,32 @@ export const GoalsDebtsPreview: React.FC<GoalsDebtsPreviewProps> = ({
                 size={13}
                 color={themeColors.goalGreen || themeColors.success}
               />
-              <Text style={[styles.cardTitle, { color: themeColors.textMuted }]}>
+              <Text
+                style={[styles.cardTitle, { color: themeColors.textMuted }]}
+                numberOfLines={1}
+              >
                 SAVINGS
               </Text>
             </View>
-            <Text style={[styles.countBadge, { color: themeColors.textMuted }]}>
+            <Text
+              style={[styles.countBadge, { color: themeColors.textMuted }]}
+              numberOfLines={1}
+            >
               {goalsCount.active} ACTIVE
             </Text>
           </View>
 
-          <Text style={[styles.primaryAmount, { color: themeColors.text }]}>
+          <Text
+            style={[styles.primaryAmount, { color: themeColors.text }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
+          >
             {isBalanceHidden ? '••••' : formatCurrency(totalSaved, currency)}
           </Text>
 
           <View style={styles.cardFooter}>
-            <Text style={[styles.submetaText, { color: themeColors.textMuted }]}>
+            <Text style={[styles.submetaText, { color: themeColors.textMuted }]} numberOfLines={1}>
               {totalTarget > 0
                 ? `${goalsProgress}% of target`
                 : `${goalsCount.completed} achieved`}
@@ -145,6 +159,7 @@ export const GoalsDebtsPreview: React.FC<GoalsDebtsPreviewProps> = ({
             onSelectDebts();
           }}
           activeOpacity={0.8}
+          delayPressIn={0}
         >
           <View style={styles.cardHeader}>
             <View style={styles.badgeRow}>
@@ -153,7 +168,10 @@ export const GoalsDebtsPreview: React.FC<GoalsDebtsPreviewProps> = ({
                 size={13}
                 color={netDebt >= 0 ? themeColors.success : themeColors.debtRed || themeColors.error}
               />
-              <Text style={[styles.cardTitle, { color: themeColors.textMuted }]}>
+              <Text
+                style={[styles.cardTitle, { color: themeColors.textMuted }]}
+                numberOfLines={1}
+              >
                 NET DEBTS
               </Text>
             </View>
@@ -164,6 +182,7 @@ export const GoalsDebtsPreview: React.FC<GoalsDebtsPreviewProps> = ({
                   color: netDebt >= 0 ? themeColors.success : themeColors.debtRed || themeColors.error,
                 },
               ]}
+              numberOfLines={1}
             >
               {netDebt >= 0 ? 'RECEIVABLE' : 'PAYABLE'}
             </Text>
@@ -179,6 +198,9 @@ export const GoalsDebtsPreview: React.FC<GoalsDebtsPreviewProps> = ({
                     : themeColors.debtRed || themeColors.error,
               },
             ]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
           >
             {isBalanceHidden
               ? '••••'
@@ -186,7 +208,7 @@ export const GoalsDebtsPreview: React.FC<GoalsDebtsPreviewProps> = ({
           </Text>
 
           <View style={styles.cardFooter}>
-            <Text style={[styles.submetaText, { color: themeColors.textMuted }]}>
+            <Text style={[styles.submetaText, { color: themeColors.textMuted }]} numberOfLines={1}>
               {activeDebts.length} active entries
             </Text>
           </View>
@@ -267,16 +289,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
+    flexShrink: 1,
   },
   cardTitle: {
     fontSize: 9,
     fontWeight: '800',
     letterSpacing: 0.8,
+    flexShrink: 1,
   },
   countBadge: {
     fontSize: 8.5,
     fontWeight: '700',
     letterSpacing: 0.5,
+    flexShrink: 1,
   },
   primaryAmount: {
     fontSize: 16,

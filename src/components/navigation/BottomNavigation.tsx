@@ -13,6 +13,7 @@
 
 import React, { useMemo, useCallback, useState } from 'react';
 import { View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -41,8 +42,10 @@ const tabs: TabConfig[] = [
 
 export const BottomNavigation: React.FC = React.memo(() => {
   const navigation = useNavigation<NavigationProp>();
+  const insets = useSafeAreaInsets();
   const themeColors = useThemeColors();
-  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
+  const bottomOffset = insets.bottom > 0 ? insets.bottom + 8 : Platform.OS === 'ios' ? 24 : 16;
+  const styles = useMemo(() => createStyles(themeColors, bottomOffset), [themeColors, bottomOffset]);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
 
   const activeTabIndex = useNavigationTabStore((s) => s.activeTabIndex);
@@ -91,6 +94,8 @@ export const BottomNavigation: React.FC = React.memo(() => {
               style={styles.centerButton}
               onPress={() => handleTabPress(tab)}
               activeOpacity={0.8}
+              delayPressIn={0}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               accessibilityLabel="Quick Add Transaction or Transfer"
               accessibilityRole="button"
             >
@@ -109,6 +114,8 @@ export const BottomNavigation: React.FC = React.memo(() => {
             style={styles.tab}
             onPress={() => handleTabPress(tab)}
             activeOpacity={0.7}
+            delayPressIn={0}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             accessibilityLabel={`${tab.id} tab`}
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
@@ -127,11 +134,11 @@ export const BottomNavigation: React.FC = React.memo(() => {
 
 BottomNavigation.displayName = 'BottomNavigation';
 
-const createStyles = (themeColors: ReturnType<typeof useThemeColors>) =>
+const createStyles = (themeColors: ReturnType<typeof useThemeColors>, bottomOffset: number) =>
   StyleSheet.create({
     container: {
       position: 'absolute',
-      bottom: Platform.OS === 'ios' ? 24 : 16,
+      bottom: bottomOffset,
       left: 20,
       right: 20,
       height: 54,

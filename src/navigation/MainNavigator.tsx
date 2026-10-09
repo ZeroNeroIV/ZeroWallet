@@ -1,6 +1,7 @@
 // Main Stack Navigator - All authenticated screens
 import React from 'react';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
+import { Easing } from 'react-native';
 import type { MainStackParamList } from '../types/navigation';
 import AccountSettingsScreen from '../screens/accounts/AccountSettingsScreen';
 import AccountsListScreen from '../screens/accounts/AccountsListScreen';
@@ -76,6 +77,26 @@ export function MainNavigator() {
     <Stack.Navigator
       screenOptions={{
         headerShown: true,
+        gestureEnabled: true,
+        gestureDirection: 'horizontal',
+        cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
+        transitionSpec: {
+          open: {
+            animation: 'timing',
+            config: {
+              duration: 220,
+              easing: Easing.out(Easing.poly(4)),
+            },
+          },
+          close: {
+            animation: 'timing',
+            config: {
+              duration: 180,
+              easing: Easing.out(Easing.poly(4)),
+            },
+          },
+        },
+        detachPreviousScreen: true,
         headerStyle: {
           backgroundColor: themeColors.surface,
           borderBottomWidth: 1,

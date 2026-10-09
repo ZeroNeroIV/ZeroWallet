@@ -68,6 +68,7 @@ export const SimplizumHero: React.FC<SimplizumHeroProps> = ({
       <View style={styles.stripWrapper}>
         <ScrollView
           horizontal
+          nestedScrollEnabled={true}
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.stripContent}
         >
@@ -91,6 +92,7 @@ export const SimplizumHero: React.FC<SimplizumHeroProps> = ({
                   onSelectWallet(wallet);
                 }}
                 activeOpacity={0.75}
+                delayPressIn={0}
               >
                 <View style={styles.walletHeader}>
                   <Text

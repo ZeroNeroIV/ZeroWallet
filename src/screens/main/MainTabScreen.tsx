@@ -31,18 +31,18 @@ export const MainTabScreen: React.FC<MainTabScreenProps> = ({ navigation }) => {
   const clearScrollTarget = useNavigationTabStore((s) => s.clearScrollTarget);
   const setActiveTabIndex = useNavigationTabStore((s) => s.setActiveTabIndex);
 
-  // Smooth horizontal scroll when a tab or programmatic trigger requests scrollToTab
+  // Instant horizontal scroll when a tab or programmatic trigger requests scrollToTab
   useEffect(() => {
     if (targetScrollIndex !== null && scrollViewRef.current) {
       scrollViewRef.current.scrollTo({
         x: targetScrollIndex * screenWidth,
-        animated: true,
+        animated: false,
       });
       clearScrollTarget();
     }
   }, [targetScrollIndex, screenWidth, clearScrollTarget]);
 
-  // Sync active tab indicator when user finishes a manual horizontal swipe
+  // Sync active tab indicator when user finishes a manual horizontal swipe (if programmatic)
   const handleMomentumScrollEnd = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const offsetX = e.nativeEvent.contentOffset.x;
@@ -54,9 +54,12 @@ export const MainTabScreen: React.FC<MainTabScreenProps> = ({ navigation }) => {
     [screenWidth, activeTabIndex, setActiveTabIndex]
   );
 
-  // Android hardware back button: returns to Dashboard (tab 0) if on a secondary tab
+  // Android hardware back button: returns to Dashboard (tab 0) ONLY if on a secondary tab AND screen is focused
   useEffect(() => {
     const onBackPress = () => {
+      if (!navigation.isFocused()) {
+        return false;
+      }
       const currentTab = useNavigationTabStore.getState().activeTabIndex;
       if (currentTab !== 0) {
         useNavigationTabStore.getState().scrollToTab(0);
@@ -67,7 +70,7 @@ export const MainTabScreen: React.FC<MainTabScreenProps> = ({ navigation }) => {
 
     const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => sub.remove();
-  }, []);
+  }, [navigation]);
 
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
 
@@ -76,6 +79,7 @@ export const MainTabScreen: React.FC<MainTabScreenProps> = ({ navigation }) => {
       <ScrollView
         ref={scrollViewRef}
         horizontal
+        scrollEnabled={false}
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         bounces={false}

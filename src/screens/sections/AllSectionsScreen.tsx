@@ -97,6 +97,7 @@ export const AllSectionsScreen: React.FC = () => {
       style={styles.sectionCard}
       onPress={() => handleSectionPress(item.route)}
       activeOpacity={0.7}
+      delayPressIn={0}
     >
       {/* Icon */}
       <View style={[styles.iconContainer, { backgroundColor: item.iconColor + '20' }]}>
@@ -152,6 +153,7 @@ const createStyles = (themeColors: ReturnType<typeof useThemeColors>) => StyleSh
   },
   listContent: {
     padding: spacing.lg,
+    paddingBottom: 110,
     gap: spacing.md,
   },
   header: {

@@ -242,6 +242,7 @@ export const TransactionHistoryScreen: React.FC = () => {
                 triggerHaptic('impactLight');
                 navigation.goBack();
               }}
+              delayPressIn={0}
               style={[
                 styles.headerBackBtn,
                 {
@@ -249,7 +250,7 @@ export const TransactionHistoryScreen: React.FC = () => {
                   backgroundColor: themeColors.surface,
                 },
               ]}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               accessibilityLabel="Back"
             >
               <MaterialCommunityIcons name="arrow-left" size={18} color={themeColors.text} />
@@ -381,6 +382,7 @@ export const TransactionHistoryScreen: React.FC = () => {
         {/* Horizontal Filter Chips Rail */}
         <ScrollView
           horizontal
+          nestedScrollEnabled={true}
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filterChipsScroll}
         >
@@ -391,6 +393,8 @@ export const TransactionHistoryScreen: React.FC = () => {
               <TouchableOpacity
                 key={tf}
                 activeOpacity={0.7}
+                delayPressIn={0}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                 onPress={() => {
                   triggerHaptic('selection');
                   setTypeFilter(tf);
@@ -427,6 +431,8 @@ export const TransactionHistoryScreen: React.FC = () => {
               <TouchableOpacity
                 key={df}
                 activeOpacity={0.7}
+                delayPressIn={0}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                 onPress={() => {
                   triggerHaptic('selection');
                   setDateFilter(df);
@@ -469,7 +475,12 @@ export const TransactionHistoryScreen: React.FC = () => {
           <Text style={[styles.summaryLabel, { color: themeColors.textMuted }]}>
             INFLOW
           </Text>
-          <Text style={[styles.summaryValue, { color: themeColors.success }]}>
+          <Text
+            style={[styles.summaryValue, { color: themeColors.success }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
+          >
             {isBalanceHidden ? '••••' : `+${formatCurrency(stats.inflow, accountCurrency)}`}
           </Text>
         </View>
@@ -480,7 +491,12 @@ export const TransactionHistoryScreen: React.FC = () => {
           <Text style={[styles.summaryLabel, { color: themeColors.textMuted }]}>
             OUTFLOW
           </Text>
-          <Text style={[styles.summaryValue, { color: themeColors.text }]}>
+          <Text
+            style={[styles.summaryValue, { color: themeColors.text }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
+          >
             {isBalanceHidden ? '••••' : `-${formatCurrency(stats.outflow, accountCurrency)}`}
           </Text>
         </View>
@@ -496,6 +512,9 @@ export const TransactionHistoryScreen: React.FC = () => {
               styles.summaryValue,
               { color: stats.net >= 0 ? themeColors.success : themeColors.error },
             ]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
           >
             {isBalanceHidden
               ? '••••'
