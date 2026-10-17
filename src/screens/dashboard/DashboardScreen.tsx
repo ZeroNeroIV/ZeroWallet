@@ -14,11 +14,16 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MainStackParamList } from '../../types/navigation';
 import { useAuthStore } from '../../store/authStore';
+import { useAccountStore } from '../../store/accountStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useUIStore } from '../../store/uiStore';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { DashboardService, type DashboardData } from '../../services/dashboardService';
-import { useWallets } from '../../hooks/useWallets';
+import {
+  DashboardService,
+  type DashboardData,
+  type TransactionWithCat,
+} from '../../services/dashboardService';
+import type { Wallet } from '../../types/models';
 
 // Simplizum Precision Components
 import { SimplizumHeader } from '../../components/dashboard/SimplizumHeader';
@@ -32,6 +37,9 @@ import { useNavigationTabStore } from '../../store/navigationTabStore';
 
 type NavProp = StackNavigationProp<MainStackParamList, 'Dashboard'>;
 
+const EMPTY_WALLETS: Wallet[] = [];
+const EMPTY_BALANCES: Record<string, number> = {};
+
 export const DashboardScreen: React.FC = () => {
   const navigation = useNavigation<NavProp>();
   const insets = useSafeAreaInsets();
@@ -39,13 +47,13 @@ export const DashboardScreen: React.FC = () => {
 
   const currentUser = useAuthStore((s) => s.currentUser);
   const currentAccountId = useAuthStore((s) => s.currentAccountId);
+  const dataRevision = useAccountStore((s) => s.dataRevision);
   const isBalanceHidden = useUIStore((s) => s.isBalanceHidden);
   const toggleBalanceHidden = useUIStore((s) => s.toggleBalanceHidden);
   const aiSettings = useSettingsStore((s) => s.aiSettings) || { isConfigured: false };
 
   const [refreshing, setRefreshing] = useState(false);
   const [data, setData] = useState<DashboardData | null>(null);
-  const { wallets } = useWallets();
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
@@ -60,15 +68,10 @@ export const DashboardScreen: React.FC = () => {
     try {
       const result = await svc.loadAll();
       setData(result);
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
     } catch (err) {
       console.error('[DashboardScreen] Failed to load dashboard data:', err);
     }
-  }, [getService, fadeAnim]);
+  }, [getService]);
 
   const checkTasks = useCallback(async () => {
     const svc = getService();
@@ -88,13 +91,13 @@ export const DashboardScreen: React.FC = () => {
     }, [currentAccountId, currentUser, loadData, checkTasks])
   );
 
-  // Reload when user switches to Dashboard tab
+  // Reload when user switches to Dashboard tab or when database mutations occur
   const activeTabIndex = useNavigationTabStore((s) => s.activeTabIndex);
   useEffect(() => {
     if (activeTabIndex === 0 && currentAccountId && currentUser) {
       loadData();
     }
-  }, [activeTabIndex, currentAccountId, currentUser, loadData]);
+  }, [activeTabIndex, currentAccountId, currentUser, dataRevision, loadData]);
 
   // Reload when app returns from background
   useEffect(() => {
@@ -106,13 +109,13 @@ export const DashboardScreen: React.FC = () => {
     return () => sub.remove();
   }, [loadData]);
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadData();
     setRefreshing(false);
-  };
+  }, [loadData]);
 
-  const handleAIPress = () => {
+  const handleAIPress = useCallback(() => {
     if (aiSettings.isConfigured) {
       navigation.navigate('ChatScreen');
     } else {
@@ -125,18 +128,64 @@ export const DashboardScreen: React.FC = () => {
         ]
       );
     }
-  };
+  }, [aiSettings.isConfigured, navigation]);
 
-  const activeWallets = data?.wallets && data.wallets.length > 0 ? data.wallets : wallets;
-  const derivedBalances = data?.derivedBalances || {};
+  const handleSearchPress = useCallback(
+    () => navigation.navigate('TransactionHistory'),
+    [navigation],
+  );
+  const handleLockPress = useCallback(
+    () => navigation.navigate('SecuritySettings'),
+    [navigation],
+  );
+  const handleSelectWallet = useCallback(
+    (wallet: Wallet) => navigation.navigate('WalletDetails', { walletId: wallet.id }),
+    [navigation],
+  );
+  const handleCreateWallet = useCallback(
+    () => navigation.navigate('Wallets'),
+    [navigation],
+  );
+  const handleRecurringPress = useCallback(
+    () => useNavigationTabStore.getState().scrollToTab(2),
+    [],
+  );
+  const handleLogTransaction = useCallback(
+    () => navigation.navigate('AddTransaction', { type: 'expense' }),
+    [navigation],
+  );
+  const handleTransfer = useCallback(
+    () => navigation.navigate('Transfer'),
+    [navigation],
+  );
+  const handleViewAllGoalsDebts = useCallback(
+    () => navigation.navigate('GoalsDebtsHub'),
+    [navigation],
+  );
+  const handleSelectGoals = useCallback(
+    () => navigation.navigate('GoalsDebtsHub', { initialTab: 'goals' }),
+    [navigation],
+  );
+  const handleSelectDebts = useCallback(
+    () => navigation.navigate('GoalsDebtsHub', { initialTab: 'debts' }),
+    [navigation],
+  );
+  const handleSelectTransaction = useCallback(
+    (tx: TransactionWithCat) =>
+      navigation.navigate('TransactionDetails', { transactionId: tx.id }),
+    [navigation],
+  );
+
+  const activeWallets = data?.wallets && data.wallets.length > 0 ? data.wallets : EMPTY_WALLETS;
+  const derivedBalances = data?.derivedBalances || EMPTY_BALANCES;
 
   return (
     <View style={[styles.root, { backgroundColor: themeColors.background, paddingTop: insets.top }]}>
       {/* 1. Command Header */}
       <SimplizumHeader
-        onSearchPress={() => navigation.navigate('TransactionHistory')}
+        onSearchPress={handleSearchPress}
         onAIPress={handleAIPress}
-        onLockPress={() => navigation.navigate('SecuritySettings')}
+        onLockPress={handleLockPress}
       />
 
       {/* 2. Main Editorial Core Scroll View */}
@@ -163,8 +212,8 @@ export const DashboardScreen: React.FC = () => {
                 onToggleHideBalance={toggleBalanceHidden}
                 wallets={activeWallets}
                 walletBalances={derivedBalances}
-                onSelectWallet={(wallet) => navigation.navigate('WalletDetails', { walletId: wallet.id })}
-                onCreateWallet={() => navigation.navigate('Wallets')}
+                onSelectWallet={handleSelectWallet}
+                onCreateWallet={handleCreateWallet}
               />
 
               {/* Upcoming Recurring Ticker (1-line) */}
@@ -172,13 +221,13 @@ export const DashboardScreen: React.FC = () => {
                 item={data.upcomingRecurring}
                 currency={data.currency}
                 isBalanceHidden={isBalanceHidden}
-                onPress={() => useNavigationTabStore.getState().scrollToTab(2)}
+                onPress={handleRecurringPress}
               />
 
               {/* Action Duo: Log & Transfer */}
               <ActionDuo
-                onLogTransaction={() => navigation.navigate('AddTransaction', { type: 'expense' })}
-                onTransfer={() => navigation.navigate('Transfer')}
+                onLogTransaction={handleLogTransaction}
+                onTransfer={handleTransfer}
               />
 
               {/* Financial Horizons: Goals & Debts commitments */}
@@ -189,9 +238,9 @@ export const DashboardScreen: React.FC = () => {
                 debtsStats={data.debtsStats}
                 currency={data.currency}
                 isBalanceHidden={isBalanceHidden}
-                onViewAll={() => navigation.navigate('GoalsDebtsHub')}
-                onSelectGoals={() => navigation.navigate('GoalsDebtsHub', { initialTab: 'goals' })}
-                onSelectDebts={() => navigation.navigate('GoalsDebtsHub', { initialTab: 'debts' })}
+                onViewAll={handleViewAllGoalsDebts}
+                onSelectGoals={handleSelectGoals}
+                onSelectDebts={handleSelectDebts}
               />
 
               {/* 30-Day Cash Flow Hairline Trend Chart */}
@@ -208,10 +257,8 @@ export const DashboardScreen: React.FC = () => {
                 wallets={activeWallets}
                 currency={data.currency}
                 isBalanceHidden={isBalanceHidden}
-                onSelectTransaction={(tx) =>
-                  navigation.navigate('TransactionDetails', { transactionId: tx.id })
-                }
-                onViewAll={() => navigation.navigate('TransactionHistory')}
+                onSelectTransaction={handleSelectTransaction}
+                onViewAll={handleSearchPress}
               />
             </>
           )}

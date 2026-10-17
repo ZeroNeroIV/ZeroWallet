@@ -18,7 +18,7 @@ interface ChronologicalMovementsProps {
   isBalanceHidden?: boolean;
 }
 
-export const ChronologicalMovements: React.FC<ChronologicalMovementsProps> = ({
+export const ChronologicalMovements: React.FC<ChronologicalMovementsProps> = React.memo(({
   transactions,
   wallets,
   currency,
@@ -69,9 +69,9 @@ export const ChronologicalMovements: React.FC<ChronologicalMovementsProps> = ({
             const walletId = tx.walletId || tx.vaultType || 'main';
             const walletName = walletMap.get(walletId) || walletId.toUpperCase();
             const isIncome = tx.type === 'income';
-            const isTransfer = tx.type === 'transfer';
+            const isTransfer = tx.type === 'transfer' || Boolean(tx.destinationWalletId);
             const amountVal = tx.convertedAmount ?? tx.amount;
-            const prefix = isTransfer ? '⇄ ' : isIncome ? '+' : '-';
+            const prefix = isTransfer ? (isIncome ? '⇄ +' : '⇄ -') : isIncome ? '+' : '-';
             const amountStr = isBalanceHidden
               ? '••••'
               : `${prefix}${formatCurrency(amountVal, currency)}`;
@@ -181,7 +181,7 @@ export const ChronologicalMovements: React.FC<ChronologicalMovementsProps> = ({
       )}
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

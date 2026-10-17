@@ -63,6 +63,7 @@ export const GoalsDebtsHubScreen: React.FC = () => {
   const currentUser = useAuthStore((s) => s.currentUser);
   const currentAccountId =
     useAuthStore((s) => s.currentAccountId) || useAccountStore((s) => s.currentAccountId);
+  const dataRevision = useAccountStore((s) => s.dataRevision);
   const isBalanceHidden = useUIStore((s) => s.isBalanceHidden);
   const toggleBalanceHidden = useUIStore((s) => s.toggleBalanceHidden);
 
@@ -129,7 +130,7 @@ export const GoalsDebtsHubScreen: React.FC = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [currentAccountId, service]);
+  }, [currentAccountId, service, dataRevision]);
 
   useEffect(() => {
     loadData();

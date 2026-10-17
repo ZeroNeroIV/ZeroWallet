@@ -14,7 +14,7 @@ interface RecurringTickerProps {
   isBalanceHidden?: boolean;
 }
 
-export const RecurringTicker: React.FC<RecurringTickerProps> = ({
+export const RecurringTicker: React.FC<RecurringTickerProps> = React.memo(({
   item,
   currency,
   onPress,
@@ -73,7 +73,7 @@ export const RecurringTicker: React.FC<RecurringTickerProps> = ({
       </TouchableOpacity>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   outerContainer: {

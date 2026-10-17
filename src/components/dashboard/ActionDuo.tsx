@@ -10,7 +10,7 @@ interface ActionDuoProps {
   onTransfer: () => void;
 }
 
-export const ActionDuo: React.FC<ActionDuoProps> = ({
+export const ActionDuo: React.FC<ActionDuoProps> = React.memo(({
   onLogTransaction,
   onTransfer,
 }) => {
@@ -71,7 +71,7 @@ export const ActionDuo: React.FC<ActionDuoProps> = ({
       </TouchableOpacity>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

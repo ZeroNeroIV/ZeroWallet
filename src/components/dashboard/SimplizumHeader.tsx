@@ -13,7 +13,7 @@ interface SimplizumHeaderProps {
   onLockPress: () => void;
 }
 
-export const SimplizumHeader: React.FC<SimplizumHeaderProps> = ({
+export const SimplizumHeader: React.FC<SimplizumHeaderProps> = React.memo(({
   onSearchPress,
   onAIPress,
   onLockPress,
@@ -90,7 +90,7 @@ export const SimplizumHeader: React.FC<SimplizumHeaderProps> = ({
       </View>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   headerContainer: {

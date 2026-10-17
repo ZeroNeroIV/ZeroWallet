@@ -1,5 +1,5 @@
 // Simplizum Cash Flow Trend — Hairline 30-Day Line Chart with interactive scrub
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, LayoutChangeEvent, PanResponder } from 'react-native';
 import Svg, { Path, Line, Circle } from 'react-native-svg';
 import { useThemeColors } from '../../hooks/useThemeColors';
@@ -14,7 +14,7 @@ interface CashFlowTrendProps {
   isBalanceHidden?: boolean;
 }
 
-export const CashFlowTrend: React.FC<CashFlowTrendProps> = ({
+export const CashFlowTrend: React.FC<CashFlowTrendProps> = React.memo(({
   data = [],
   netChange = 0,
   currency,
@@ -80,6 +80,23 @@ export const CashFlowTrend: React.FC<CashFlowTrendProps> = ({
     return { minVal: min, maxVal: max, pathD: d, points: pts, zeroY: zeroLineY };
   }, [data, chartWidth]);
 
+  const updateScrub = useCallback(
+    (touchX: number) => {
+      if (!points || points.length === 0) return;
+      let closestIdx = 0;
+      let minDiff = Infinity;
+      points.forEach((pt, idx) => {
+        const diff = Math.abs(pt.x - touchX);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closestIdx = idx;
+        }
+      });
+      setScrubIndex(closestIdx);
+    },
+    [points],
+  );
+
   // Touch pan responder for scrub interaction
   const panResponder = useMemo(
     () =>
@@ -100,22 +117,8 @@ export const CashFlowTrend: React.FC<CashFlowTrendProps> = ({
           setScrubIndex(null);
         },
       }),
-    [points, data]
+    [updateScrub],
   );
-
-  const updateScrub = (touchX: number) => {
-    if (!points || points.length === 0) return;
-    let closestIdx = 0;
-    let minDiff = Infinity;
-    points.forEach((pt, idx) => {
-      const diff = Math.abs(pt.x - touchX);
-      if (diff < minDiff) {
-        minDiff = diff;
-        closestIdx = idx;
-      }
-    });
-    setScrubIndex(closestIdx);
-  };
 
   const activePoint = scrubIndex !== null && data[scrubIndex] ? data[scrubIndex] : null;
   const activeCoordinates = scrubIndex !== null && points[scrubIndex] ? points[scrubIndex] : null;
@@ -238,7 +241,7 @@ export const CashFlowTrend: React.FC<CashFlowTrendProps> = ({
       </View>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   outerContainer: {

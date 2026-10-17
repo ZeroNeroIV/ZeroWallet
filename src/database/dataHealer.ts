@@ -340,6 +340,14 @@ async function healTransactionsData(database: SQLite.SQLiteDatabase): Promise<vo
     await database.executeSql(
       'UPDATE transactions SET converted_amount = amount WHERE converted_amount IS NULL'
     );
+
+    // Synchronize wallet_id and vault_type so queries never double-count or diverge
+    await database.executeSql(
+      "UPDATE transactions SET vault_type = wallet_id WHERE wallet_id IS NOT NULL AND wallet_id != '' AND vault_type = 'main' AND wallet_id != 'main'"
+    );
+    await database.executeSql(
+      "UPDATE transactions SET wallet_id = vault_type WHERE (wallet_id IS NULL OR wallet_id = '') AND vault_type IS NOT NULL AND vault_type != ''"
+    );
   } catch (err) {
     console.warn('[DataHealer] healTransactionsData warning:', err);
   }
@@ -393,7 +401,9 @@ async function resyncBalancesFromTransactions(database: SQLite.SQLiteDatabase): 
           categoryId: r.category_id,
           description: r.description,
           date: Number(r.date) || 0,
-          vaultType: r.vault_type,
+          vaultType: r.wallet_id || r.vault_type,
+          walletId: r.wallet_id || r.vault_type,
+          destinationWalletId: r.destination_wallet_id || undefined,
           isRecurring: r.is_recurring === 1,
           currency: r.currency || 'USD',
           convertedAmount:

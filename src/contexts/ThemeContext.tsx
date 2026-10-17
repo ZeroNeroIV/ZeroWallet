@@ -12,7 +12,7 @@
  *   - Updates theme based on settings store
  */
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useColorScheme } from 'react-native';
 import { useSettingsStore } from '../store/settingsStore';
 
@@ -40,41 +40,43 @@ export const useTheme = () => {
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const systemColorScheme = useColorScheme();
-  const { appSettings, updateAppSettings } = useSettingsStore();
+  const themeSetting = useSettingsStore((s) => s.appSettings.theme);
+  const themeFamilySetting = useSettingsStore((s) => s.appSettings.themeFamily);
+  const updateAppSettings = useSettingsStore((s) => s.updateAppSettings);
   
   const [currentTheme, setCurrentTheme] = useState<'light' | 'dark'>(() => {
-    if (appSettings.theme === 'system') {
+    if (themeSetting === 'system') {
       return systemColorScheme === 'dark' ? 'dark' : 'light';
     }
-    return appSettings.theme;
+    return themeSetting;
   });
 
-  const currentFamily: ThemeFamily = appSettings.themeFamily || 'swiss';
+  const currentFamily: ThemeFamily = themeFamilySetting || 'swiss';
 
   useEffect(() => {
-    if (appSettings.theme === 'system') {
+    if (themeSetting === 'system') {
       setCurrentTheme(systemColorScheme === 'dark' ? 'dark' : 'light');
     } else {
-      setCurrentTheme(appSettings.theme);
+      setCurrentTheme(themeSetting);
     }
-  }, [appSettings.theme, systemColorScheme]);
+  }, [themeSetting, systemColorScheme]);
 
-  const setThemeMode = (mode: ThemeMode) => {
+  const setThemeMode = useCallback((mode: ThemeMode) => {
     updateAppSettings({ theme: mode });
-  };
+  }, [updateAppSettings]);
 
-  const setThemeFamily = (family: ThemeFamily) => {
+  const setThemeFamily = useCallback((family: ThemeFamily) => {
     updateAppSettings({ themeFamily: family });
-  };
+  }, [updateAppSettings]);
 
-  const value: ThemeContextType = {
+  const value = useMemo<ThemeContextType>(() => ({
     theme: currentTheme,
-    themeMode: appSettings.theme,
+    themeMode: themeSetting,
     themeFamily: currentFamily,
     setThemeMode,
     setThemeFamily,
     isDark: currentTheme === 'dark',
-  };
+  }), [currentTheme, themeSetting, currentFamily, setThemeMode, setThemeFamily]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 };

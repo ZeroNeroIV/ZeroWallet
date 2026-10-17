@@ -57,8 +57,9 @@ export class WalletService {
         const amt = t.convertedAmount ?? t.amount;
 
         // Is this an inflow or outflow for THIS specific wallet?
+        const effectiveWallet = t.walletId || t.vaultType || 'main';
         const isDestination = t.destinationWalletId === walletId;
-        const isSource = t.walletId === walletId || t.vaultType === walletId;
+        const isSource = effectiveWallet === walletId;
 
         if (t.type === 'income' && isSource) {
           if (entry) entry.income += amt;

@@ -135,6 +135,7 @@ export class DataQueryService {
       let totalExpense = 0;
 
       for (const t of transactions) {
+        if (t.type === 'transfer' || t.destinationWalletId) continue;
         const amt = t.convertedAmount ?? t.amount;
         if (t.type === 'income') {
           totalIncome += amt;
@@ -175,7 +176,9 @@ export class DataQueryService {
         end
       );
 
-      const filtered = transactions.filter((t) => t.type === type);
+      const filtered = transactions.filter(
+        (t) => t.type === type && !t.destinationWalletId
+      );
 
       const categoryTotals = new Map<string, { total: number; count: number }>();
       let grandTotal = 0;

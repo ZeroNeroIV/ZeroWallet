@@ -20,6 +20,7 @@ import type { MainStackParamList } from '../../types/navigation';
 import type { Transaction, Category, Wallet } from '../../types/models';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../store/authStore';
+import { useAccountStore } from '../../store/accountStore';
 import { useUIStore } from '../../store/uiStore';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { TransactionRepository } from '../../database/repositories/TransactionRepository';
@@ -46,6 +47,7 @@ export const TransactionHistoryScreen: React.FC = () => {
   const navigation = useNavigation<Nav>();
   const insets = useSafeAreaInsets();
   const { currentAccountId, currentUser } = useAuthStore();
+  const dataRevision = useAccountStore((s) => s.dataRevision);
   const themeColors = useThemeColors();
   const isBalanceHidden = useUIStore((s) => s.isBalanceHidden);
   const toggleBalanceHidden = useUIStore((s) => s.toggleBalanceHidden);
@@ -114,7 +116,7 @@ export const TransactionHistoryScreen: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentAccountId, currentUser]);
+  }, [currentAccountId, currentUser, dataRevision]);
 
   useFocusEffect(
     useCallback(() => {
@@ -146,10 +148,10 @@ export const TransactionHistoryScreen: React.FC = () => {
 
       // Wallet filter
       if (selectedWalletId !== 'all') {
+        const effectiveWallet = t.walletId || t.vaultType || 'main';
         const affectsWallet =
-          t.walletId === selectedWalletId ||
-          t.vaultType === selectedWalletId ||
-          t.destinationWalletId === selectedWalletId;
+          effectiveWallet === selectedWalletId ||
+          (t.type === 'transfer' && t.destinationWalletId === selectedWalletId);
         if (!affectsWallet) return false;
       }
 

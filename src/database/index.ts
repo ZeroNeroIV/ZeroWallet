@@ -7,10 +7,8 @@ import { runMigrations as executeMigrations } from './migrations';
 // Enable promises for SQLite
 SQLite.enablePromise(true);
 
-// Enable debugging in development
-if (__DEV__) {
-  SQLite.DEBUG(true);
-}
+// Disable verbose SQLite row-by-row bridge logging for performance
+SQLite.DEBUG(false);
 
 let db: SQLite.SQLiteDatabase | null = null;
 

@@ -58,8 +58,9 @@ export const TransactionDetailsScreen: React.FC = () => {
       const walletRepo = new WalletRepository();
       const accRepo = new AccountRepository();
 
-      const [txn, acc] = await Promise.all([
+      const [txn, storedImages, acc] = await Promise.all([
         txRepo.findById(transactionId),
+        txRepo.getImages(transactionId),
         accRepo.findById(currentAccountId),
       ]);
 
@@ -69,7 +70,9 @@ export const TransactionDetailsScreen: React.FC = () => {
         return;
       }
 
-      setTransaction(txn);
+      setTransaction(
+        storedImages.length > 0 ? { ...txn, images: storedImages } : txn
+      );
       if (acc?.currency) setAccountCurrency(acc.currency);
 
       const [cat, w, destW] = await Promise.all([

@@ -175,7 +175,10 @@ export const AddTransactionScreen: React.FC = () => {
 
         // If editing existing transaction
         if (editTransactionId) {
-          const txn = await txRepo.findById(editTransactionId);
+          const [txn, storedImages] = await Promise.all([
+            txRepo.findById(editTransactionId),
+            txRepo.getImages(editTransactionId),
+          ]);
           if (txn) {
             setType(txn.type === 'income' ? 'income' : 'expense');
             setAmount(String(txn.originalAmount ?? txn.amount));
@@ -186,7 +189,8 @@ export const AddTransactionScreen: React.FC = () => {
             setCurrency(txn.currency || accCur);
             if (txn.exchangeRate) setExchangeRate(txn.exchangeRate);
             if (txn.convertedAmount) setConvertedAmount(txn.convertedAmount);
-            if (txn.images) setSelectedImageUris(txn.images);
+            if (storedImages.length > 0) setSelectedImageUris(storedImages);
+            else if (txn.images && txn.images.length > 0) setSelectedImageUris(txn.images);
             else if (txn.imagePath) setSelectedImageUris([txn.imagePath]);
           }
         } else if (route.params?.type) {
@@ -367,6 +371,7 @@ export const AddTransactionScreen: React.FC = () => {
         }
       }
 
+      const isForeignCurrency = currency !== baseCurrency;
       const txPayload = {
         accountId: currentAccountId,
         type,
@@ -377,18 +382,27 @@ export const AddTransactionScreen: React.FC = () => {
         vaultType: selectedWalletId as VaultType,
         walletId: selectedWalletId,
         currency,
-        originalAmount: currency !== baseCurrency ? numAmount : undefined,
-        exchangeRate: currency !== baseCurrency ? exchangeRate : undefined,
-        convertedAmount: currency !== baseCurrency ? convertedAmount : numAmount,
-        imagePath: savedImagePaths[0] || undefined,
+        originalAmount: isForeignCurrency ? numAmount : (null as unknown as undefined),
+        exchangeRate: isForeignCurrency ? exchangeRate : (null as unknown as undefined),
+        convertedAmount: isForeignCurrency ? (convertedAmount ?? numAmount) : numAmount,
+        imagePath: savedImagePaths[0] || (null as unknown as undefined),
         images: savedImagePaths,
         isRecurring: false,
       };
 
       if (isEditMode && editTransactionId) {
         await txRepo.update(editTransactionId, txPayload);
+        await txRepo.deleteImages(editTransactionId);
+        for (let i = 0; i < savedImagePaths.length; i++) {
+          await txRepo.addImage(editTransactionId, savedImagePaths[i], i);
+        }
       } else {
-        await txRepo.create(txPayload);
+        const created = await txRepo.create(txPayload);
+        if (created?.id) {
+          for (let i = 0; i < savedImagePaths.length; i++) {
+            await txRepo.addImage(created.id, savedImagePaths[i], i);
+          }
+        }
       }
 
       // Synchronize derived balances

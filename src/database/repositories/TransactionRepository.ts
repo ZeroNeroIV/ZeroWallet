@@ -5,6 +5,8 @@ import { BaseRepository } from '../BaseRepository';
 import type { Transaction, TransactionInput } from '../../types/models';
 import type { FieldMapping } from '../types';
 import { deleteTransactionImage } from '../../utils/imageStorage';
+import { calculateVaultBalances } from '../../utils/balanceCalculator';
+import { useAccountStore } from '../../store/accountStore';
 
 const FIELD_MAPPINGS: FieldMapping[] = [
   { field: 'accountId', column: 'account_id' },
@@ -31,6 +33,7 @@ export class TransactionRepository extends BaseRepository<Transaction, Transacti
   protected fieldMappings = FIELD_MAPPINGS;
 
   protected mapRow(row: Record<string, unknown>): Transaction {
+    const effectiveWallet = ((row.wallet_id as string) || (row.vault_type as string) || 'main') as Transaction['vaultType'];
     return {
       id: row.id as string,
       accountId: row.account_id as string,
@@ -39,8 +42,8 @@ export class TransactionRepository extends BaseRepository<Transaction, Transacti
       categoryId: row.category_id as string,
       description: row.description as string,
       date: row.date as number,
-      vaultType: row.vault_type as Transaction['vaultType'],
-      walletId: (row.wallet_id as string) || (row.vault_type as string),
+      vaultType: effectiveWallet,
+      walletId: effectiveWallet,
       destinationWalletId: (row.destination_wallet_id as string) || undefined,
       isRecurring: (row.is_recurring as number) === 1,
       recurringExpenseId: row.recurring_expense_id as string | undefined,
@@ -53,6 +56,182 @@ export class TransactionRepository extends BaseRepository<Transaction, Transacti
       createdAt: row.created_at as number,
       updatedAt: row.updated_at as number,
     };
+  }
+
+  private async notifyAccountChanged(accountId?: string): Promise<void> {
+    try {
+      if (accountId) {
+        const allTxs = await this.findByAccount(accountId);
+        const recalculated = calculateVaultBalances(allTxs);
+        useAccountStore.getState().updateBalance(accountId, recalculated);
+      }
+    } catch {
+      // Non-fatal in isolated unit tests
+    }
+    useAccountStore.getState().bumpDataRevision();
+  }
+
+  private async findTransferCounterpartId(tx: Transaction): Promise<string | null> {
+    if (!tx.destinationWalletId || tx.type === 'transfer') return null;
+    const sourceWallet = tx.walletId || tx.vaultType;
+    const destWallet = tx.destinationWalletId;
+    const oppositeType = tx.type === 'expense' ? 'income' : 'expense';
+    try {
+      const rows = await executeSql<{ id: string }>(
+        `SELECT id FROM transactions
+         WHERE account_id = ?
+           AND id != ?
+           AND type = ?
+           AND COALESCE(NULLIF(wallet_id, ''), vault_type, 'main') = ?
+           AND destination_wallet_id = ?
+           AND ABS(date - ?) <= 10000
+         ORDER BY ABS(date - ?) ASC, ABS(amount - ?) ASC
+         LIMIT 1`,
+        [
+          tx.accountId,
+          tx.id,
+          oppositeType,
+          destWallet,
+          sourceWallet,
+          tx.date,
+          tx.date,
+          tx.amount,
+        ],
+      );
+      return rows[0]?.id ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async adjustLinkedGoalOrDebt(tx: Transaction, deltaAmount: number): Promise<void> {
+    if (!deltaAmount || !tx.description) return;
+    try {
+      const goalMatch =
+        tx.description.match(/^Funded Goal:\s*(.+)$/) ||
+        tx.description.match(/\(Goal:\s*(.+)\)$/);
+      if (goalMatch?.[1]) {
+        const goalName = goalMatch[1].trim();
+        const goals = await executeSql<{
+          id: string;
+          current_amount: number;
+          target_amount: number | null;
+        }>(
+          'SELECT id, current_amount, target_amount FROM goals WHERE account_id = ? AND name = ? LIMIT 1',
+          [tx.accountId, goalName],
+        );
+        if (goals[0]) {
+          const g = goals[0];
+          const newCurrent = Math.max(
+            0,
+            Math.round(((Number(g.current_amount) || 0) + deltaAmount) * 1000) / 1000,
+          );
+          const isCompleted =
+            g.target_amount && g.target_amount > 0 && newCurrent >= g.target_amount ? 1 : 0;
+          await executeSql(
+            'UPDATE goals SET current_amount = ?, is_completed = ?, completed_at = ?, updated_at = ? WHERE id = ?',
+            [newCurrent, isCompleted, isCompleted ? Date.now() : null, Date.now(), g.id],
+          );
+        }
+      }
+
+      const debtMatch =
+        tx.description.match(/^Debt (?:Repayment|Settlement):\s*(.+?)(?:\s+—\s+.*)?$/) ||
+        tx.description.match(/^(?:Repaid loan from|Received debt repayment from)\s+(.+)$/);
+      if (debtMatch?.[1]) {
+        const personName = debtMatch[1].trim();
+        const debts = await executeSql<{
+          id: string;
+          amount: number;
+          amount_paid: number;
+        }>(
+          'SELECT id, amount, amount_paid FROM debts WHERE account_id = ? AND person_name = ? LIMIT 1',
+          [tx.accountId, personName],
+        );
+        if (debts[0]) {
+          const d = debts[0];
+          const newPaid = Math.max(
+            0,
+            Math.round(((Number(d.amount_paid) || 0) + deltaAmount) * 1000) / 1000,
+          );
+          const newStatus =
+            newPaid >= d.amount ? 'paid' : newPaid > 0 ? 'partial' : 'pending';
+          await executeSql(
+            'UPDATE debts SET amount_paid = ?, status = ?, updated_at = ? WHERE id = ?',
+            [newPaid, newStatus, Date.now(), d.id],
+          );
+        }
+      }
+    } catch {
+      // Non-fatal if goals/debts tables are mocked
+    }
+  }
+
+  override async create(data: TransactionInput): Promise<Transaction> {
+    const effectiveWallet = (data.walletId || data.vaultType || 'main') as Transaction['vaultType'];
+    const convertedAmount = data.convertedAmount ?? data.amount;
+    const created = await super.create({
+      ...data,
+      vaultType: effectiveWallet,
+      walletId: effectiveWallet,
+      convertedAmount,
+    });
+    await this.notifyAccountChanged(data.accountId);
+    return created;
+  }
+
+  override async update(id: string, updates: Partial<Transaction>): Promise<void> {
+    const existing = await this.findById(id);
+    const normalized: Record<string, unknown> = { ...updates };
+
+    if (updates.walletId !== undefined && updates.vaultType === undefined) {
+      normalized.vaultType = updates.walletId;
+    } else if (updates.vaultType !== undefined && updates.walletId === undefined) {
+      normalized.walletId = updates.vaultType;
+    }
+
+    if (updates.amount !== undefined && updates.convertedAmount === undefined) {
+      const rate =
+        updates.exchangeRate !== undefined
+          ? updates.exchangeRate
+          : existing?.exchangeRate;
+      normalized.convertedAmount =
+        rate && rate > 0 && rate !== 1 ? updates.amount * rate : updates.amount;
+    }
+
+    await super.update(id, normalized as Partial<Transaction>);
+
+    if (existing) {
+      // Keep counterpart transfer leg in sync if a transfer transaction is edited
+      if (existing.destinationWalletId) {
+        const counterpartId = await this.findTransferCounterpartId(existing);
+        if (counterpartId) {
+          const pairUpdates: Record<string, unknown> = {};
+          if (normalized.amount !== undefined) pairUpdates.amount = normalized.amount;
+          if (normalized.convertedAmount !== undefined) {
+            pairUpdates.convertedAmount = normalized.convertedAmount;
+          }
+          if (normalized.date !== undefined) pairUpdates.date = normalized.date;
+          if (Object.keys(pairUpdates).length > 0) {
+            await super.update(counterpartId, pairUpdates as Partial<Transaction>);
+          }
+        }
+      }
+
+      // Keep linked goal/debt in sync if amount changed
+      const oldEffective = existing.convertedAmount ?? existing.amount;
+      const newEffective =
+        (normalized.convertedAmount as number | undefined) ??
+        (normalized.amount as number | undefined) ??
+        oldEffective;
+      if (newEffective !== oldEffective) {
+        await this.adjustLinkedGoalOrDebt(existing, newEffective - oldEffective);
+      }
+
+      await this.notifyAccountChanged(existing.accountId);
+    } else {
+      useAccountStore.getState().bumpDataRevision();
+    }
   }
 
   async findByAccount(accountId: string, limit?: number): Promise<Transaction[]> {
@@ -72,16 +251,24 @@ export class TransactionRepository extends BaseRepository<Transaction, Transacti
     if (limit) {
       return this.rawQuery(
         `SELECT * FROM transactions
-         WHERE account_id = ? AND (wallet_id = ? OR vault_type = ? OR destination_wallet_id = ?)
+         WHERE account_id = ?
+           AND (
+             COALESCE(NULLIF(wallet_id, ''), vault_type, 'main') = ?
+             OR (type = 'transfer' AND destination_wallet_id = ?)
+           )
          ORDER BY date DESC, created_at DESC LIMIT ?`,
-        [accountId, walletId, walletId, walletId, limit],
+        [accountId, walletId, walletId, limit],
       );
     }
     return this.rawQuery(
       `SELECT * FROM transactions
-       WHERE account_id = ? AND (wallet_id = ? OR vault_type = ? OR destination_wallet_id = ?)
+       WHERE account_id = ?
+         AND (
+           COALESCE(NULLIF(wallet_id, ''), vault_type, 'main') = ?
+           OR (type = 'transfer' AND destination_wallet_id = ?)
+         )
        ORDER BY date DESC, created_at DESC`,
-      [accountId, walletId, walletId, walletId],
+      [accountId, walletId, walletId],
     );
   }
 
@@ -111,9 +298,30 @@ export class TransactionRepository extends BaseRepository<Transaction, Transacti
     return tx;
   }
 
-  async delete(id: string): Promise<void> {
+  override async delete(id: string): Promise<void> {
+    const existing = await this.findById(id);
+    let counterpartId: string | null = null;
+    if (existing?.destinationWalletId) {
+      counterpartId = await this.findTransferCounterpartId(existing);
+    }
+
+    await this.deleteImages(id);
     await deleteTransactionImage(id);
     await executeSql('DELETE FROM transactions WHERE id = ?', [id]);
+
+    if (counterpartId) {
+      await this.deleteImages(counterpartId);
+      await deleteTransactionImage(counterpartId);
+      await executeSql('DELETE FROM transactions WHERE id = ?', [counterpartId]);
+    }
+
+    if (existing) {
+      const effectiveAmt = existing.convertedAmount ?? existing.amount;
+      await this.adjustLinkedGoalOrDebt(existing, -effectiveAmt);
+      await this.notifyAccountChanged(existing.accountId);
+    } else {
+      useAccountStore.getState().bumpDataRevision();
+    }
   }
 
   async getMonthlyStats(
@@ -135,9 +343,9 @@ export class TransactionRepository extends BaseRepository<Transaction, Transacti
       transaction_count: number;
     }>(
       `SELECT
-        SUM(CASE WHEN type = 'income' THEN COALESCE(converted_amount, amount) ELSE 0 END) as total_income,
-        SUM(CASE WHEN type = 'expense' THEN COALESCE(converted_amount, amount) ELSE 0 END) as total_expense,
-        COUNT(*) as transaction_count
+        SUM(CASE WHEN type = 'income' AND (destination_wallet_id IS NULL OR destination_wallet_id = '') THEN COALESCE(converted_amount, amount) ELSE 0 END) as total_income,
+        SUM(CASE WHEN type = 'expense' AND (destination_wallet_id IS NULL OR destination_wallet_id = '') THEN COALESCE(converted_amount, amount) ELSE 0 END) as total_expense,
+        COUNT(CASE WHEN type IN ('income', 'expense') AND (destination_wallet_id IS NULL OR destination_wallet_id = '') THEN 1 END) as transaction_count
        FROM transactions WHERE account_id = ? AND date >= ? AND date <= ?`,
       [accountId, startDate, endDate],
     );
@@ -165,7 +373,10 @@ export class TransactionRepository extends BaseRepository<Transaction, Transacti
         SUM(COALESCE(converted_amount, amount)) as totalAmount,
         COUNT(*) as transactionCount
        FROM transactions
-       WHERE account_id = ? AND type = ? AND date >= ? AND date <= ?
+       WHERE account_id = ?
+         AND type = ?
+         AND (destination_wallet_id IS NULL OR destination_wallet_id = '')
+         AND date >= ? AND date <= ?
        GROUP BY category_id ORDER BY totalAmount DESC`,
       [accountId, type, startDate, endDate],
     );

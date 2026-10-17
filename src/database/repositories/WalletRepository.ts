@@ -5,6 +5,7 @@ import type { Wallet } from '../../types/models';
 import type { FieldMapping } from '../types';
 import { WALLET_META } from '../../utils/wallets';
 import { VAULT_TYPE_VALUES } from '../../domain/vault/VaultType';
+import { useAccountStore } from '../../store/accountStore';
 
 const FIELD_MAPPINGS: FieldMapping[] = [
   { field: 'accountId', column: 'account_id' },
@@ -83,6 +84,7 @@ export class WalletRepository extends BaseRepository<Wallet> {
       [id, accountId, name, icon, color, isDefault, sortOrder, createdAt, updatedAt]
     );
 
+    useAccountStore.getState().bumpDataRevision();
     const created = await this.findByAccountAndId(accountId, id);
     return created!;
   }
@@ -106,6 +108,7 @@ export class WalletRepository extends BaseRepository<Wallet> {
       qb.where('account_id', accId);
     }
     await qb.execute();
+    useAccountStore.getState().bumpDataRevision();
   }
 
   override async delete(id: string, accountId?: string, reassignToWalletId?: string): Promise<void> {
@@ -127,6 +130,10 @@ export class WalletRepository extends BaseRepository<Wallet> {
           [reassignToWalletId, id, accountId]
         );
         await executeSql(
+          'UPDATE transactions SET wallet_id = ? WHERE wallet_id = ? AND account_id = ?',
+          [reassignToWalletId, id, accountId]
+        );
+        await executeSql(
           'UPDATE subscriptions SET vault_type = ? WHERE vault_type = ? AND account_id = ?',
           [reassignToWalletId, id, accountId]
         );
@@ -136,6 +143,7 @@ export class WalletRepository extends BaseRepository<Wallet> {
         );
       } else {
         await executeSql('UPDATE transactions SET vault_type = ? WHERE vault_type = ?', [reassignToWalletId, id]);
+        await executeSql('UPDATE transactions SET wallet_id = ? WHERE wallet_id = ?', [reassignToWalletId, id]);
         await executeSql('UPDATE subscriptions SET vault_type = ? WHERE vault_type = ?', [reassignToWalletId, id]);
         await executeSql('UPDATE recurring_expenses SET vault_type = ? WHERE vault_type = ?', [reassignToWalletId, id]);
       }
@@ -152,6 +160,7 @@ export class WalletRepository extends BaseRepository<Wallet> {
     } else {
       await executeSql('DELETE FROM wallets WHERE id = ?', [id]);
     }
+    useAccountStore.getState().bumpDataRevision();
   }
 
   async countTransactions(walletId: string, accountId?: string): Promise<number> {
@@ -204,6 +213,7 @@ export class WalletRepository extends BaseRepository<Wallet> {
         );
       }
       await executeSql('COMMIT;');
+      useAccountStore.getState().bumpDataRevision();
     } catch (err) {
       await executeSql('ROLLBACK;');
       throw err;
@@ -247,22 +257,24 @@ export class WalletRepository extends BaseRepository<Wallet> {
       `SELECT
          w.id as wallet_id,
          COALESCE(SUM(CASE
-           WHEN t.type = 'income' AND (t.wallet_id = w.id OR t.vault_type = w.id)
+           WHEN t.type = 'income' AND COALESCE(NULLIF(t.wallet_id, ''), t.vault_type, 'main') = w.id
              THEN COALESCE(t.converted_amount, t.amount)
            WHEN t.type = 'transfer' AND t.destination_wallet_id = w.id
              THEN COALESCE(t.converted_amount, t.amount)
            ELSE 0
          END), 0) as inflow,
          COALESCE(SUM(CASE
-           WHEN t.type = 'expense' AND (t.wallet_id = w.id OR t.vault_type = w.id)
+           WHEN t.type = 'expense' AND COALESCE(NULLIF(t.wallet_id, ''), t.vault_type, 'main') = w.id
              THEN COALESCE(t.converted_amount, t.amount)
-           WHEN t.type = 'transfer' AND (t.wallet_id = w.id OR t.vault_type = w.id)
+           WHEN t.type = 'transfer' AND COALESCE(NULLIF(t.wallet_id, ''), t.vault_type, 'main') = w.id
              THEN COALESCE(t.converted_amount, t.amount)
            ELSE 0
          END), 0) as outflow
        FROM wallets w
-       LEFT JOIN transactions t ON (t.wallet_id = w.id OR t.vault_type = w.id OR t.destination_wallet_id = w.id)
-         AND t.account_id = w.account_id
+       LEFT JOIN transactions t ON (
+         COALESCE(NULLIF(t.wallet_id, ''), t.vault_type, 'main') = w.id
+         OR (t.type = 'transfer' AND t.destination_wallet_id = w.id)
+       ) AND t.account_id = w.account_id
        WHERE w.account_id = ?
        GROUP BY w.id`,
       [accountId]

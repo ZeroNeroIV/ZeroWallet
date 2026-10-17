@@ -36,14 +36,19 @@ export const useAccountStore = create<AccountState>()(
       balances: {},
       currentAccountId: null,
       isLoading: false,
+      dataRevision: 0,
 
       // Actions
+      bumpDataRevision: () => {
+        set((state) => ({ dataRevision: state.dataRevision + 1 }));
+      },
       setCurrentAccountId: (accountId) => {
         set({ currentAccountId: accountId });
       },
       updateBalance: (accountId, updates) => {
         set((state) => {
-          const currentBalance = state.balances[accountId] || {
+          const existing = state.balances[accountId];
+          const currentBalance = existing || {
             accountId,
             mainBalance: 0,
             savingsBalance: 0,
@@ -65,6 +70,21 @@ export const useAccountStore = create<AccountState>()(
 
           const newBalance = normalizeAccountBalance(rawMerged, accountId);
 
+          if (
+            existing &&
+            existing.mainBalance === newBalance.mainBalance &&
+            existing.savingsBalance === newBalance.savingsBalance &&
+            existing.heldBalance === newBalance.heldBalance &&
+            existing.salaryBalance === newBalance.salaryBalance &&
+            existing.emergencyBalance === newBalance.emergencyBalance &&
+            existing.cardBalance === newBalance.cardBalance &&
+            existing.physicalBalance === newBalance.physicalBalance &&
+            existing.totalBalance === newBalance.totalBalance &&
+            existing.availableBalance === newBalance.availableBalance
+          ) {
+            return state;
+          }
+
           return {
             balances: {
               ...state.balances,
@@ -72,8 +92,6 @@ export const useAccountStore = create<AccountState>()(
             },
           };
         });
-
-        console.log('[AccountStore] Balance updated for account:', accountId);
       },
 
       getCurrentBalance: (accountId) => {

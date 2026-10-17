@@ -18,7 +18,7 @@ interface SimplizumHeroProps {
   onCreateWallet: () => void;
 }
 
-export const SimplizumHero: React.FC<SimplizumHeroProps> = ({
+export const SimplizumHero: React.FC<SimplizumHeroProps> = React.memo(({
   totalBalance,
   currency,
   isBalanceHidden,
@@ -147,7 +147,7 @@ export const SimplizumHero: React.FC<SimplizumHeroProps> = ({
       </View>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

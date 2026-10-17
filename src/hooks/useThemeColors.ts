@@ -9,109 +9,113 @@
  * Side effects: None
  */
 
+import { useMemo } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { colors, lightTheme, darkTheme, brand, getSimplizumTheme } from '../theme/colors';
 
 export const useThemeColors = () => {
   const { isDark, themeFamily } = useTheme();
-  const activeTheme = getSimplizumTheme(themeFamily, isDark);
 
-  return {
-    // Brand tokens
-    brand,
-    chestnut: brand.chestnut,
-    arctic: brand.arctic,
-    gilded: brand.gilded,
-    gold: brand.gilded,
+  return useMemo(() => {
+    const activeTheme = getSimplizumTheme(themeFamily, isDark);
 
-    // Simplizum Active Theme Tokens
-    simplizum: activeTheme,
-    hairline: activeTheme.hairline,
-    railBackground: activeTheme.railBackground,
-    railBorder: activeTheme.railBorder,
-    transfer: activeTheme.transfer,
+    return {
+      // Brand tokens
+      brand,
+      chestnut: brand.chestnut,
+      arctic: brand.arctic,
+      gilded: brand.gilded,
+      gold: brand.gilded,
 
-    // Background & Surface colors
-    background: activeTheme.background,
-    surface: activeTheme.surface,
-    surfaceElevated: activeTheme.card,
-    surfaceHighlight: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
-    card: activeTheme.card,
-    cardBorder: activeTheme.hairline,
+      // Simplizum Active Theme Tokens
+      simplizum: activeTheme,
+      hairline: activeTheme.hairline,
+      railBackground: activeTheme.railBackground,
+      railBorder: activeTheme.railBorder,
+      transfer: activeTheme.transfer,
 
-    // Text & Content colors
-    text: activeTheme.text,
-    textSecondary: activeTheme.textSecondary,
-    textMuted: activeTheme.textMuted,
-    textDisabled: isDark ? '#52525B' : '#A1A1AA',
+      // Background & Surface colors
+      background: activeTheme.background,
+      surface: activeTheme.surface,
+      surfaceElevated: activeTheme.card,
+      surfaceHighlight: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
+      card: activeTheme.card,
+      cardBorder: activeTheme.hairline,
 
-    // Border colors
-    border: activeTheme.border,
-    borderSubtle: activeTheme.hairline,
+      // Text & Content colors
+      text: activeTheme.text,
+      textSecondary: activeTheme.textSecondary,
+      textMuted: activeTheme.textMuted,
+      textDisabled: isDark ? '#52525B' : '#A1A1AA',
 
-    // Primary colors & contrast onPrimary
-    primary: activeTheme.primary,
-    primaryDark: activeTheme.primary,
-    primaryLight: activeTheme.primary,
-    onPrimary: activeTheme.onPrimary,
+      // Border colors
+      border: activeTheme.border,
+      borderSubtle: activeTheme.hairline,
 
-    // Secondary colors & contrast onSecondary
-    secondary: activeTheme.secondary,
-    secondaryDark: activeTheme.secondary,
-    secondaryLight: activeTheme.secondary,
-    onSecondary: activeTheme.onSecondary,
+      // Primary colors & contrast onPrimary
+      primary: activeTheme.primary,
+      primaryDark: activeTheme.primary,
+      primaryLight: activeTheme.primary,
+      onPrimary: activeTheme.onPrimary,
 
-    // Surface / Background contrast
-    onSurface: activeTheme.text,
-    onBackground: activeTheme.text,
+      // Secondary colors & contrast onSecondary
+      secondary: activeTheme.secondary,
+      secondaryDark: activeTheme.secondary,
+      secondaryLight: activeTheme.secondary,
+      onSecondary: activeTheme.onSecondary,
 
-    // Accent colors
-    accent: activeTheme.accent,
-    accentDark: activeTheme.accent,
-    accentLight: activeTheme.accent,
+      // Surface / Background contrast
+      onSurface: activeTheme.text,
+      onBackground: activeTheme.text,
 
-    // Semantic colors
-    success: activeTheme.success,
-    error: activeTheme.error,
-    errorDark: activeTheme.error,
-    warning: activeTheme.warning,
-    info: activeTheme.info,
+      // Accent colors
+      accent: activeTheme.accent,
+      accentDark: activeTheme.accent,
+      accentLight: activeTheme.accent,
 
-    // Vault colors
-    vault: colors.vault,
+      // Semantic colors
+      success: activeTheme.success,
+      error: activeTheme.error,
+      errorDark: activeTheme.error,
+      warning: activeTheme.warning,
+      info: activeTheme.info,
 
-    // Category colors
-    category: colors.category,
+      // Vault colors
+      vault: colors.vault,
 
-    // Neutral colors
-    neutral: colors.neutral,
+      // Category colors
+      category: colors.category,
 
-    // Shadow colors
-    shadow: colors.shadow,
-    shadowLight: colors.shadowLight,
-    shadowMedium: colors.shadowMedium,
-    shadowDark: colors.shadowDark,
+      // Neutral colors
+      neutral: colors.neutral,
 
-    // Glass morphism colors
-    glass: {
-      background: isDark ? 'rgba(0, 0, 0, 0.6)' : 'rgba(255, 255, 255, 0.7)',
-      border: activeTheme.hairline,
-      borderLight: activeTheme.hairline,
-    },
+      // Shadow colors
+      shadow: colors.shadow,
+      shadowLight: colors.shadowLight,
+      shadowMedium: colors.shadowMedium,
+      shadowDark: colors.shadowDark,
 
-    // Goal/Debt colors
-    goalGreen: activeTheme.success,
-    debtRed: activeTheme.error,
+      // Glass morphism colors
+      glass: {
+        background: isDark ? 'rgba(0, 0, 0, 0.6)' : 'rgba(255, 255, 255, 0.7)',
+        border: activeTheme.hairline,
+        borderLight: activeTheme.hairline,
+      },
 
-    // Income/Expense colors (for transaction amounts)
-    incomeGreen: activeTheme.success,
-    expenseRed: activeTheme.error,
+      // Goal/Debt colors
+      goalGreen: activeTheme.success,
+      debtRed: activeTheme.error,
 
-    // Theme object (for compatibility)
-    theme: isDark ? darkTheme : lightTheme,
+      // Income/Expense colors (for transaction amounts)
+      incomeGreen: activeTheme.success,
+      expenseRed: activeTheme.error,
 
-    // Helper flag
-    isDark,
-    themeFamily,
-  };
+      // Theme object (for compatibility)
+      theme: isDark ? darkTheme : lightTheme,
+
+      // Helper flag
+      isDark,
+      themeFamily,
+    };
+  }, [isDark, themeFamily]);
 };

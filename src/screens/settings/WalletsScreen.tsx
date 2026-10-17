@@ -16,6 +16,7 @@ import type { StackNavigationProp } from '@react-navigation/stack';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import type { MainStackParamList } from '../../types/navigation';
 import { useAuthStore } from '../../store/authStore';
+import { useAccountStore } from '../../store/accountStore';
 import { useUIStore } from '../../store/uiStore';
 import { useNavigationTabStore } from '../../store/navigationTabStore';
 import { WalletRepository } from '../../database/repositories/WalletRepository';
@@ -38,6 +39,7 @@ export default function WalletsScreen() {
   const themeColors = useThemeColors();
   const currentUser = useAuthStore((s) => s.currentUser);
   const currentAccountId = useAuthStore((s) => s.currentAccountId);
+  const dataRevision = useAccountStore((s) => s.dataRevision);
   const isBalanceHidden = useUIStore((s) => s.isBalanceHidden);
   const toggleBalanceHidden = useUIStore((s) => s.toggleBalanceHidden);
 
@@ -62,7 +64,7 @@ export default function WalletsScreen() {
     } catch (err) {
       console.warn('[WalletsScreen] loadData error:', err);
     }
-  }, [currentAccountId]);
+  }, [currentAccountId, dataRevision]);
 
   const insets = useSafeAreaInsets();
   const activeTabIndex = useNavigationTabStore((s) => s.activeTabIndex);

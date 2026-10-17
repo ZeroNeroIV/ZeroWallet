@@ -37,7 +37,9 @@ export async function syncBalancesFromDatabase(accountId: string): Promise<void>
   const walletRepo = new WalletRepository();
   const txs = await txRepo.findByAccount(accountId);
   const recalculated = calculateVaultBalances(txs);
-  useAccountStore.getState().updateBalance(accountId, recalculated);
+  const accountStore = useAccountStore.getState();
+  accountStore.updateBalance(accountId, recalculated);
+  accountStore.bumpDataRevision();
   await walletRepo.getDerivedBalances(accountId);
 }
 
@@ -115,7 +117,5 @@ export async function transferBetweenWallets(
   });
 
   // Refresh persisted balances for legacy listeners
-  const updatedTxs = await txRepo.findByAccount(accountId);
-  const updatedVaults = calculateVaultBalances(updatedTxs);
-  useAccountStore.getState().updateBalance(accountId, updatedVaults);
+  await syncBalancesFromDatabase(accountId);
 }

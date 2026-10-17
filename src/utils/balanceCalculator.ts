@@ -41,8 +41,22 @@ export function calculateVaultBalances(transactions: Transaction[]): VaultBalanc
     const amount = Number(rawAmount);
     if (!Number.isFinite(amount)) continue;
 
+    const sourceVault = tx.walletId || tx.vaultType;
+
+    if (tx.type === 'transfer') {
+      const fromVt = VaultType.parse(sourceVault);
+      const fromKey = fromVt.key;
+      balances[fromKey] = (balances[fromKey] ?? 0) - amount;
+      if (tx.destinationWalletId) {
+        const toVt = VaultType.parse(tx.destinationWalletId);
+        const toKey = toVt.key;
+        balances[toKey] = (balances[toKey] ?? 0) + amount;
+      }
+      continue;
+    }
+
     const value = amount * (tx.type === 'income' ? 1 : -1);
-    const vt = VaultType.parse(tx.vaultType);
+    const vt = VaultType.parse(sourceVault);
     const key = vt.key;
 
     if (balances[key] === undefined) {

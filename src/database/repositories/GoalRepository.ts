@@ -2,6 +2,7 @@
 import { BaseRepository } from '../BaseRepository';
 import type { Goal, GoalInput } from '../../types/models';
 import type { FieldMapping } from '../types';
+import { useAccountStore } from '../../store/accountStore';
 
 const FIELD_MAPPINGS: FieldMapping[] = [
   { field: 'accountId', column: 'account_id' },
@@ -36,6 +37,22 @@ export class GoalRepository extends BaseRepository<Goal, GoalInput> {
     };
   }
 
+  override async create(data: GoalInput): Promise<Goal> {
+    const created = await super.create(data);
+    useAccountStore.getState().bumpDataRevision();
+    return created;
+  }
+
+  override async update(id: string, updates: Partial<Goal>): Promise<void> {
+    await super.update(id, updates);
+    useAccountStore.getState().bumpDataRevision();
+  }
+
+  override async delete(id: string): Promise<void> {
+    await super.delete(id);
+    useAccountStore.getState().bumpDataRevision();
+  }
+
   async getActiveGoals(accountId: string): Promise<Goal[]> {
     return this.rawQuery(
       'SELECT * FROM goals WHERE account_id = ? AND is_completed = 0 ORDER BY created_at DESC',
@@ -55,6 +72,7 @@ export class GoalRepository extends BaseRepository<Goal, GoalInput> {
       'UPDATE goals SET current_amount = ?, updated_at = ? WHERE id = ?',
       [currentAmount, Date.now(), id],
     );
+    useAccountStore.getState().bumpDataRevision();
   }
 
   async markCompleted(id: string): Promise<void> {
@@ -63,6 +81,7 @@ export class GoalRepository extends BaseRepository<Goal, GoalInput> {
       'UPDATE goals SET is_completed = 1, completed_at = ?, updated_at = ? WHERE id = ?',
       [now, now, id],
     );
+    useAccountStore.getState().bumpDataRevision();
   }
 
   async reopenGoal(id: string): Promise<void> {
@@ -70,6 +89,7 @@ export class GoalRepository extends BaseRepository<Goal, GoalInput> {
       'UPDATE goals SET is_completed = 0, completed_at = NULL, updated_at = ? WHERE id = ?',
       [Date.now(), id],
     );
+    useAccountStore.getState().bumpDataRevision();
   }
 
   async getGoalsCount(accountId: string): Promise<{

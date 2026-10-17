@@ -40,8 +40,10 @@ export interface AccountState {
   balances: Record<string, AccountBalance>; // Key: accountId
   currentAccountId: string | null;
   isLoading: boolean;
+  dataRevision: number;
 
   // Actions
+  bumpDataRevision: () => void;
   setCurrentAccountId: (accountId: string | null) => void;
   updateBalance: (
     accountId: string,

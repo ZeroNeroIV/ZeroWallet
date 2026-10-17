@@ -17,6 +17,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { format, isToday, isYesterday } from 'date-fns';
 import type { MainStackParamList } from '../../types/navigation';
 import { useAuthStore } from '../../store/authStore';
+import { useAccountStore } from '../../store/accountStore';
 import { WalletService, type WalletDetailData } from '../../services/walletService';
 import { WalletRepository } from '../../database/repositories/WalletRepository';
 import { useThemeColors } from '../../hooks/useThemeColors';
@@ -35,6 +36,7 @@ export default function WalletDetailScreen() {
   const route = useRoute<RouteProps>();
   const walletId = route.params.walletId;
   const currentAccountId = useAuthStore((s) => s.currentAccountId);
+  const dataRevision = useAccountStore((s) => s.dataRevision);
   const themeColors = useThemeColors();
 
   const [data, setData] = useState<WalletDetailData | null>(null);
@@ -54,7 +56,7 @@ export default function WalletDetailScreen() {
     } finally {
       setLoading(false);
     }
-  }, [currentAccountId, walletId, walletService]);
+  }, [currentAccountId, walletId, walletService, dataRevision]);
 
   useFocusEffect(
     useCallback(() => {

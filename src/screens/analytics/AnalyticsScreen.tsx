@@ -15,6 +15,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { addMonths, subMonths, addQuarters, subQuarters, addYears, subYears } from 'date-fns';
 import type { MainStackParamList } from '../../types/navigation';
 import { useAuthStore } from '../../store/authStore';
+import { useAccountStore } from '../../store/accountStore';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { formatCurrency } from '../../utils/currencyFormatter';
 import { triggerHaptic } from '../../services/haptics/hapticFeedback';
@@ -41,6 +42,7 @@ const HORIZONS: Array<{ id: TimeHorizon; label: string }> = [
 export const AnalyticsScreen: React.FC = () => {
   const navigation = useNavigation<NavProp>();
   const { currentAccountId, currentUser } = useAuthStore();
+  const dataRevision = useAccountStore((s) => s.dataRevision);
   const themeColors = useThemeColors();
 
   const [horizon, setHorizon] = useState<TimeHorizon>('month');
@@ -66,7 +68,7 @@ export const AnalyticsScreen: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentAccountId, currentUser, horizon, dateAnchor, analyticsService]);
+  }, [currentAccountId, currentUser, horizon, dateAnchor, analyticsService, dataRevision]);
 
   useFocusEffect(
     useCallback(() => {

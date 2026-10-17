@@ -111,41 +111,38 @@ export class DashboardService {
 
   async loadAll(): Promise<DashboardData> {
     const [
-      balance,
+      allTransactions,
+      allCategories,
       currency,
-      recentTransactions,
-      chartData,
-      monthlyData,
-      categorySpend,
       activeGoals,
       activeDebts,
       goalsCount,
       debtsStats,
       subscriptionsCount,
-      categoriesCount,
       recurringCount,
       upcomingRecurring,
-      trendData,
       walletData,
     ] = await Promise.all([
-      this.loadBalance(),
+      this.transactionRepo.findByAccount(this.accountId),
+      this.categoryRepo.findByUser(this.userId),
       this.loadCurrency(),
-      this.loadRecentTransactions(),
-      this.loadChartData(),
-      this.loadMonthlyData(),
-      this.loadCategorySpend(),
       this.loadGoalsAndDebts(),
       this.loadActiveDebts(),
       this.loadGoalsCount(),
       this.loadDebtsStats(),
       this.loadSubscriptionsCount(),
-      this.loadCategoriesCount(),
       this.loadRecurringCount(),
       this.loadUpcomingRecurring(),
-      this.load30DayTrend(),
       this.loadWalletsAndBalances(),
     ]);
 
+    const balance = this.computeBalance(allTransactions, walletData.derivedBalances);
+    const recentTransactions = this.computeRecentTransactions(allTransactions, allCategories);
+    const chartData = this.computeChartData(allTransactions);
+    const monthlyData = this.computeMonthlyData(allTransactions);
+    const categorySpend = this.computeCategorySpend(allTransactions, allCategories);
+    const trendData = this.compute30DayTrend(allTransactions);
+    const categoriesCount = allCategories.length;
     const totalMonthSpend = categorySpend.reduce((sum, s) => sum + s.amount, 0);
 
     return {
@@ -194,13 +191,26 @@ export class DashboardService {
     return notifications;
   }
 
-  // ── Private loaders ──────────────────────────────────────
+  // ── Private loaders & computers ──────────────────────────
 
-  private async loadBalance(): Promise<VaultBalances> {
-    const allTransactions = await this.transactionRepo.findByAccount(this.accountId);
+  private computeBalance(
+    allTransactions: Transaction[],
+    derivedBalances: Record<string, number>,
+  ): VaultBalances {
     const balances = calculateVaultBalances(allTransactions);
-    const { updateBalance } = (await import('../store/accountStore')).useAccountStore.getState();
-    updateBalance(this.accountId, balances);
+    const derivedKeys = Object.keys(derivedBalances);
+    if (derivedKeys.length > 0) {
+      let derivedTotal = 0;
+      for (const k of derivedKeys) {
+        derivedTotal += Number(derivedBalances[k]) || 0;
+      }
+      balances.totalBalance = Math.round(derivedTotal * 1000) / 1000;
+      balances.availableBalance =
+        Math.round((derivedTotal - (derivedBalances.held ?? balances.heldBalance ?? 0)) * 1000) /
+        1000;
+    }
+    const { useAccountStore } = require('../store/accountStore');
+    useAccountStore.getState().updateBalance(this.accountId, balances);
     return balances;
   }
 
@@ -213,134 +223,119 @@ export class DashboardService {
     }
   }
 
-  private async loadRecentTransactions(): Promise<TransactionWithCat[]> {
-    try {
-      const transactions = await this.transactionRepo.findByAccount(this.accountId, 5);
-      const categories = await this.categoryRepo.findByUser(this.userId);
-      const catMap = new Map(categories.map(c => [c.id, c]));
-      // Never hide transactions: orphaned category ids render as Unknown
-      return transactions.map(t => ({
-        ...t,
-        category: catMap.get(t.categoryId) ?? {
-          id: t.categoryId,
-          userId: this.userId,
-          name: 'Unknown',
-          type: t.type === 'income' ? 'income' : 'expense',
-          icon: 'help-circle',
-          color: '#999',
-          isDefault: false,
-          createdAt: 0,
-        },
-      }));
-    } catch (error) {
-      logger.error('[DashboardService]', 'loadRecentTransactions error', error);
-      return [];
-    }
+  private computeRecentTransactions(
+    allTransactions: Transaction[],
+    categories: Category[],
+  ): TransactionWithCat[] {
+    const catMap = new Map(categories.map((c) => [c.id, c]));
+    return allTransactions.slice(0, 5).map((t) => ({
+      ...t,
+      category: catMap.get(t.categoryId) ?? {
+        id: t.categoryId,
+        userId: this.userId,
+        name: t.destinationWalletId || t.type === 'transfer' ? 'Transfer' : 'Unknown',
+        type: t.type === 'income' ? 'income' : 'expense',
+        icon: t.destinationWalletId || t.type === 'transfer' ? 'swap-horizontal' : 'help-circle',
+        color: '#999',
+        isDefault: false,
+        createdAt: 0,
+      },
+    }));
   }
 
-  private async loadChartData(): Promise<ChartDayPoint[]> {
-    try {
-      const today = endOfDay(new Date());
-      const sevenDaysAgo = startOfDay(subDays(new Date(), 6));
-      const transactions = await this.transactionRepo.findByDateRange(
-        this.accountId, sevenDaysAgo.getTime(), today.getTime(),
-      );
+  private computeChartData(allTransactions: Transaction[]): ChartDayPoint[] {
+    const now = new Date();
+    const today = endOfDay(now).getTime();
+    const sevenDaysAgo = startOfDay(subDays(now, 6)).getTime();
 
-      const dataByDay = new Map<string, { income: number; expense: number }>();
-      for (let i = 0; i < 7; i++) {
-        const day = startOfDay(subDays(new Date(), 6 - i));
-        dataByDay.set(format(day, 'MMM d'), { income: 0, expense: 0 });
-      }
-
-      for (const tx of transactions) {
-        const dayKey = format(new Date(tx.date), 'MMM d');
-        const current = dataByDay.get(dayKey);
-        if (!current) continue;
-        const amount = tx.convertedAmount ?? tx.amount;
-        if (tx.type === 'income') current.income += amount;
-        else current.expense += amount;
-      }
-
-      return Array.from(dataByDay.entries()).map(([day, v]) => ({
-        day, income: v.income, expense: v.expense,
-      }));
-    } catch (error) {
-      logger.error('[DashboardService]', 'loadChartData error', error);
-      return [];
+    const dataByDay = new Map<string, { income: number; expense: number }>();
+    for (let i = 0; i < 7; i++) {
+      const day = startOfDay(subDays(now, 6 - i));
+      dataByDay.set(format(day, 'MMM d'), { income: 0, expense: 0 });
     }
+
+    for (const tx of allTransactions) {
+      if (tx.date < sevenDaysAgo || tx.date > today) continue;
+      if (tx.type === 'transfer' || Boolean(tx.destinationWalletId)) continue;
+      const dayKey = format(new Date(tx.date), 'MMM d');
+      const current = dataByDay.get(dayKey);
+      if (!current) continue;
+      const amount = tx.convertedAmount ?? tx.amount;
+      if (tx.type === 'income') current.income += amount;
+      else if (tx.type === 'expense') current.expense += amount;
+    }
+
+    return Array.from(dataByDay.entries()).map(([day, v]) => ({
+      day,
+      income: v.income,
+      expense: v.expense,
+    }));
   }
 
-  private async loadMonthlyData(): Promise<MonthPoint[]> {
-    try {
-      const result: MonthPoint[] = [];
-      for (let i = 5; i >= 0; i--) {
-        const monthDate = subMonths(new Date(), i);
-        const start = startOfMonth(monthDate).getTime();
-        const end = endOfMonth(monthDate).getTime();
-        const txns = await this.transactionRepo.findByDateRange(this.accountId, start, end);
-        let income = 0, expense = 0;
-        for (const t of txns) {
-          const amt = t.convertedAmount ?? t.amount;
-          if (t.type === 'income') income += amt;
-          else expense += amt;
+  private computeMonthlyData(allTransactions: Transaction[]): MonthPoint[] {
+    const now = new Date();
+    const buckets: Array<{ month: string; start: number; end: number; income: number; expense: number }> = [];
+    for (let i = 5; i >= 0; i--) {
+      const monthDate = subMonths(now, i);
+      buckets.push({
+        month: format(monthDate, 'MMM'),
+        start: startOfMonth(monthDate).getTime(),
+        end: endOfMonth(monthDate).getTime(),
+        income: 0,
+        expense: 0,
+      });
+    }
+
+    const earliest = buckets[0]?.start ?? 0;
+    const latest = buckets[buckets.length - 1]?.end ?? 0;
+
+    for (const t of allTransactions) {
+      if (t.date < earliest || t.date > latest) continue;
+      if (t.type === 'transfer' || Boolean(t.destinationWalletId)) continue;
+      const amt = t.convertedAmount ?? t.amount;
+      for (const b of buckets) {
+        if (t.date >= b.start && t.date <= b.end) {
+          if (t.type === 'income') b.income += amt;
+          else if (t.type === 'expense') b.expense += amt;
+          break;
         }
-        result.push({ month: format(monthDate, 'MMM'), income, expense });
       }
-      return result;
-    } catch (error) {
-      logger.error('[DashboardService]', 'loadMonthlyData error', error);
-      return [];
     }
+
+    return buckets.map(({ month, income, expense }) => ({ month, income, expense }));
   }
 
-  private async loadCategorySpend(): Promise<CategorySpend[]> {
-    try {
-      const start = startOfMonth(new Date()).getTime();
-      const end = endOfMonth(new Date()).getTime();
-      const txns = await this.transactionRepo.findByDateRange(this.accountId, start, end);
-      const categories = await this.categoryRepo.findByUser(this.userId);
-      const catMap = new Map(categories.map(c => [c.id, c]));
-      const spendMap = new Map<string, CategorySpend>();
+  private computeCategorySpend(
+    allTransactions: Transaction[],
+    categories: Category[],
+  ): CategorySpend[] {
+    const now = new Date();
+    const start = startOfMonth(now).getTime();
+    const end = endOfMonth(now).getTime();
+    const catMap = new Map(categories.map((c) => [c.id, c]));
+    const spendMap = new Map<string, CategorySpend>();
 
-      for (const t of txns) {
-        if (t.type !== 'expense') continue;
-        const amt = t.convertedAmount ?? t.amount;
-        const cat = catMap.get(t.categoryId) ?? {
-          id: t.categoryId,
-          name: 'Unknown',
-          color: '#999',
-        };
-        const existing = spendMap.get(cat.id);
-        if (existing) existing.amount += amt;
-        else spendMap.set(cat.id, { name: cat.name, amount: amt, color: cat.color });
-      }
-
-      return Array.from(spendMap.values()).sort((a, b) => b.amount - a.amount);
-    } catch (error) {
-      logger.error('[DashboardService]', 'loadCategorySpend error', error);
-      return [];
+    for (const t of allTransactions) {
+      if (t.date < start || t.date > end) continue;
+      if (t.type !== 'expense' || Boolean(t.destinationWalletId)) continue;
+      const amt = t.convertedAmount ?? t.amount;
+      const cat = catMap.get(t.categoryId) ?? {
+        id: t.categoryId,
+        name: 'Unknown',
+        color: '#999',
+      };
+      if (cat.name.toLowerCase() === 'transfer') continue;
+      const existing = spendMap.get(cat.id);
+      if (existing) existing.amount += amt;
+      else spendMap.set(cat.id, { name: cat.name, amount: amt, color: cat.color });
     }
+
+    return Array.from(spendMap.values()).sort((a, b) => b.amount - a.amount);
   }
 
   private async loadGoalsAndDebts(): Promise<Goal[]> {
     try {
-      const goals = await this.goalRepo.getActiveGoals(this.accountId);
-      const { balances: freshBalances } = (await import('../store/accountStore')).useAccountStore.getState();
-      const balance = freshBalances[this.accountId] ?? {
-        accountId: this.accountId,
-        mainBalance: 0, savingsBalance: 0, heldBalance: 0,
-        salaryBalance: 0, emergencyBalance: 0, cardBalance: 0, physicalBalance: 0,
-        totalBalance: 0, availableBalance: 0,
-        lastUpdated: Date.now(),
-      };
-      for (const goal of goals) {
-        const newProgress = calculateGoalProgress(goal, balance);
-        if (newProgress !== goal.currentAmount) {
-          await this.goalRepo.updateProgress(goal.id, newProgress);
-          goal.currentAmount = newProgress;
-        }
-      }
-      return goals;
+      return await this.goalRepo.getActiveGoals(this.accountId);
     } catch (error) {
       logger.error('[DashboardService]', 'loadGoalsAndDebts error', error);
       return [];
@@ -350,7 +345,7 @@ export class DashboardService {
   private async loadActiveDebts(): Promise<Debt[]> {
     try {
       const allDebts = await this.debtRepo.findByAccount(this.accountId);
-      return allDebts.filter(debt => (debt.amountPaid || 0) < debt.amount);
+      return allDebts.filter((debt) => (debt.amountPaid || 0) < debt.amount);
     } catch {
       return [];
     }
@@ -381,15 +376,6 @@ export class DashboardService {
     }
   }
 
-  private async loadCategoriesCount(): Promise<number> {
-    try {
-      const cats = await this.categoryRepo.findByUser(this.userId);
-      return cats.length;
-    } catch {
-      return 0;
-    }
-  }
-
   private async loadRecurringCount(): Promise<number> {
     try {
       const recs = await this.recurringRepo.findActiveByAccount(this.accountId);
@@ -399,7 +385,10 @@ export class DashboardService {
     }
   }
 
-  private async loadWalletsAndBalances(): Promise<{ wallets: Wallet[]; derivedBalances: Record<string, number> }> {
+  private async loadWalletsAndBalances(): Promise<{
+    wallets: Wallet[];
+    derivedBalances: Record<string, number>;
+  }> {
     try {
       const wallets = await this.walletRepo.findByAccount(this.accountId);
       const derivedBalances = await this.walletRepo.getDerivedBalances(this.accountId);
@@ -423,7 +412,7 @@ export class DashboardService {
          FROM recurring_transactions
          WHERE is_active = 1 AND next_run_date >= ?
          ORDER BY next_run_date ASC LIMIT 1`,
-        [now - 86400000]
+        [now - 86400000],
       );
 
       if (rows.length === 0) return null;
@@ -442,55 +431,51 @@ export class DashboardService {
     }
   }
 
-  private async load30DayTrend(): Promise<{ points: CashFlow30DayPoint[]; netChange: number }> {
-    try {
-      const today = endOfDay(new Date());
-      const thirtyDaysAgo = startOfDay(subDays(new Date(), 29));
-      const transactions = await this.transactionRepo.findByDateRange(
-        this.accountId,
-        thirtyDaysAgo.getTime(),
-        today.getTime()
-      );
+  private compute30DayTrend(allTransactions: Transaction[]): {
+    points: CashFlow30DayPoint[];
+    netChange: number;
+  } {
+    const now = new Date();
+    const today = endOfDay(now).getTime();
+    const thirtyDaysAgo = startOfDay(subDays(now, 29)).getTime();
 
-      const dayMap = new Map<string, { income: number; expense: number }>();
-      for (let i = 0; i < 30; i++) {
-        const d = startOfDay(subDays(new Date(), 29 - i));
-        const key = format(d, 'yyyy-MM-dd');
-        dayMap.set(key, { income: 0, expense: 0 });
-      }
-
-      for (const t of transactions) {
-        const key = format(new Date(t.date), 'yyyy-MM-dd');
-        const entry = dayMap.get(key);
-        if (entry) {
-          const amt = t.convertedAmount ?? t.amount;
-          if (t.type === 'income') entry.income += amt;
-          else if (t.type === 'expense') entry.expense += amt;
-        }
-      }
-
-      let cumulative = 0;
-      let totalNet = 0;
-      const points: CashFlow30DayPoint[] = [];
-
-      dayMap.forEach((values, dateStr) => {
-        const delta = values.income - values.expense;
-        cumulative += delta;
-        totalNet += delta;
-        const d = new Date(dateStr);
-        points.push({
-          date: dateStr,
-          day: format(d, 'MMM d'),
-          value: cumulative,
-          income: values.income,
-          expense: values.expense,
-        });
-      });
-
-      return { points, netChange: totalNet };
-    } catch (err) {
-      logger.error('[DashboardService]', 'load30DayTrend error', err);
-      return { points: [], netChange: 0 };
+    const dayMap = new Map<string, { income: number; expense: number }>();
+    for (let i = 0; i < 30; i++) {
+      const d = startOfDay(subDays(now, 29 - i));
+      const key = format(d, 'yyyy-MM-dd');
+      dayMap.set(key, { income: 0, expense: 0 });
     }
+
+    for (const t of allTransactions) {
+      if (t.date < thirtyDaysAgo || t.date > today) continue;
+      if (t.type === 'transfer' || Boolean(t.destinationWalletId)) continue;
+      const key = format(new Date(t.date), 'yyyy-MM-dd');
+      const entry = dayMap.get(key);
+      if (entry) {
+        const amt = t.convertedAmount ?? t.amount;
+        if (t.type === 'income') entry.income += amt;
+        else if (t.type === 'expense') entry.expense += amt;
+      }
+    }
+
+    let cumulative = 0;
+    let totalNet = 0;
+    const points: CashFlow30DayPoint[] = [];
+
+    dayMap.forEach((values, dateStr) => {
+      const delta = values.income - values.expense;
+      cumulative += delta;
+      totalNet += delta;
+      const d = new Date(dateStr);
+      points.push({
+        date: dateStr,
+        day: format(d, 'MMM d'),
+        value: cumulative,
+        income: values.income,
+        expense: values.expense,
+      });
+    });
+
+    return { points, netChange: totalNet };
   }
 }

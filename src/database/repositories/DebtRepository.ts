@@ -2,6 +2,7 @@
 import { BaseRepository } from '../BaseRepository';
 import type { Debt, DebtInput, DebtStats } from '../../types/models';
 import type { FieldMapping } from '../types';
+import { useAccountStore } from '../../store/accountStore';
 
 const FIELD_MAPPINGS: FieldMapping[] = [
   { field: 'accountId', column: 'account_id' },
@@ -42,7 +43,18 @@ export class DebtRepository extends BaseRepository<Debt, DebtInput> {
     const id = await this.insert(data as unknown as Record<string, unknown>, {
       status,
     });
+    useAccountStore.getState().bumpDataRevision();
     return (await this.findById(id)) as Debt;
+  }
+
+  override async update(id: string, updates: Partial<Debt>): Promise<void> {
+    await super.update(id, updates);
+    useAccountStore.getState().bumpDataRevision();
+  }
+
+  override async delete(id: string): Promise<void> {
+    await super.delete(id);
+    useAccountStore.getState().bumpDataRevision();
   }
 
   async getDebtsByType(accountId: string, type: 'lent' | 'borrowed'): Promise<Debt[]> {
@@ -75,6 +87,7 @@ export class DebtRepository extends BaseRepository<Debt, DebtInput> {
       'UPDATE debts SET amount_paid = ?, status = ?, updated_at = ? WHERE id = ?',
       [newAmountPaid, newStatus, Date.now(), id],
     );
+    useAccountStore.getState().bumpDataRevision();
   }
 
   async markAsPaid(id: string): Promise<void> {
@@ -82,6 +95,7 @@ export class DebtRepository extends BaseRepository<Debt, DebtInput> {
       "UPDATE debts SET amount_paid = amount, status = 'paid', updated_at = ? WHERE id = ?",
       [Date.now(), id],
     );
+    useAccountStore.getState().bumpDataRevision();
   }
 
   async getDebtStats(accountId: string): Promise<DebtStats> {

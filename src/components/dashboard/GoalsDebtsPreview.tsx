@@ -21,7 +21,7 @@ interface GoalsDebtsPreviewProps {
   onSelectDebts: () => void;
 }
 
-export const GoalsDebtsPreview: React.FC<GoalsDebtsPreviewProps> = ({
+export const GoalsDebtsPreview: React.FC<GoalsDebtsPreviewProps> = React.memo(({
   activeGoals,
   goalsCount,
   activeDebts,
@@ -229,7 +229,7 @@ export const GoalsDebtsPreview: React.FC<GoalsDebtsPreviewProps> = ({
       </View>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

@@ -62,6 +62,11 @@ export const getCurrencySymbol = (code: string): string => {
     return (code || 'USD').trim().toUpperCase();
 };
 
+const cachedNumberFormatter = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
+});
+
 // Format amount with currency — always uses 3-letter ISO code prefix
 export const formatCurrency = (
     amount: number,
@@ -69,11 +74,9 @@ export const formatCurrency = (
     _showCode: boolean = false
 ): string => {
     const code = (currencyCode || 'USD').trim().toUpperCase();
-    const isNegative = amount < 0;
-    const absFormatted = Math.abs(amount).toLocaleString('en-US', {
-        minimumFractionDigits: 3,
-        maximumFractionDigits: 3,
-    });
+    const safeAmount = Number.isFinite(amount) ? amount : 0;
+    const isNegative = safeAmount < 0;
+    const absFormatted = cachedNumberFormatter.format(Math.abs(safeAmount));
     const sign = isNegative ? '-' : '';
 
     // _showCode is ignored: the ISO code is always shown (kept for call-site compatibility)

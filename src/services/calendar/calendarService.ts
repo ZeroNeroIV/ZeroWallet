@@ -193,7 +193,7 @@ export class CalendarService {
         category: tx.categoryId ? catMap.get(tx.categoryId) : undefined,
         walletName: walletMap.get(tx.walletId || '') || tx.vaultType || '',
         walletId: tx.walletId,
-        transactionType: tx.type,
+        transactionType: isTransfer ? 'transfer' : tx.type,
         isRecurringTx: tx.isRecurring,
         timeFormatted: format(txDate, 'HH:mm'),
         transaction: tx,

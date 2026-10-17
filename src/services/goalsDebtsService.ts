@@ -117,6 +117,7 @@ export class GoalsDebtsService {
 
     // 2. If a wallet was selected, record the outflow transaction in the ledger
     if (params.walletId) {
+      const account = await this.accountRepo.findById(params.accountId);
       const transferCategory = await this.categoryRepo.ensureTransferCategory(
         params.userId,
         'expense'
@@ -130,8 +131,8 @@ export class GoalsDebtsService {
         categoryId: transferCategory.id,
         date: Date.now(),
         description: `Funded Goal: ${goal.name}`,
-        vaultType: 'main',
-        currency: 'USD',
+        vaultType: (params.walletId as TransactionInput['vaultType']) || 'main',
+        currency: account?.currency || 'USD',
       };
       await this.txRepo.create(txInput);
     }
@@ -206,6 +207,7 @@ export class GoalsDebtsService {
 
     // 2. If wallet is specified, log transaction to maintain derived ledger balance
     if (params.walletId) {
+      const account = await this.accountRepo.findById(params.accountId);
       const isBorrowed = debt.type === 'borrowed';
       const txType: 'expense' | 'income' = isBorrowed ? 'expense' : 'income';
 
@@ -224,8 +226,8 @@ export class GoalsDebtsService {
         description: isBorrowed
           ? `Repaid loan from ${debt.personName}`
           : `Received debt repayment from ${debt.personName}`,
-        vaultType: 'main',
-        currency: 'USD',
+        vaultType: (params.walletId as TransactionInput['vaultType']) || 'main',
+        currency: account?.currency || 'USD',
       };
       await this.txRepo.create(txInput);
     }

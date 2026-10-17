@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { executeSql } from './index';
 import { createQueryBuilder, QueryBuilder } from './QueryBuilder';
 import type { IRepository, FieldMapping } from './types';
+import { useAccountStore } from '../store/accountStore';
 
 export abstract class BaseRepository<TEntity, TInput = Partial<TEntity>>
   implements IRepository<TEntity, TInput>
@@ -43,6 +44,7 @@ export abstract class BaseRepository<TEntity, TInput = Partial<TEntity>>
     row.updated_at = now;
 
     await this.createQuery().insert(row).execute();
+    useAccountStore.getState().bumpDataRevision();
     return (await this.findById(id)) as TEntity;
   }
 
@@ -69,6 +71,7 @@ export abstract class BaseRepository<TEntity, TInput = Partial<TEntity>>
     });
 
     await this.createQuery().insert(rows).execute();
+    useAccountStore.getState().bumpDataRevision();
   }
 
   // ============================================
@@ -101,6 +104,7 @@ export abstract class BaseRepository<TEntity, TInput = Partial<TEntity>>
     row.updated_at = now;
 
     await this.createQuery().insert(row).execute();
+    useAccountStore.getState().bumpDataRevision();
     return id;
   }
 
@@ -153,6 +157,7 @@ export abstract class BaseRepository<TEntity, TInput = Partial<TEntity>>
     updateValues.updated_at = Date.now();
 
     await this.createQuery().update(updateValues).where('id', id).execute();
+    useAccountStore.getState().bumpDataRevision();
   }
 
   // ============================================
@@ -161,6 +166,7 @@ export abstract class BaseRepository<TEntity, TInput = Partial<TEntity>>
 
   async delete(id: string): Promise<void> {
     await this.createQuery().delete().where('id', id).execute();
+    useAccountStore.getState().bumpDataRevision();
   }
 
   // ============================================

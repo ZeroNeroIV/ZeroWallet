@@ -12,11 +12,13 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useAuthStore } from '../store/authStore';
+import { useAccountStore } from '../store/accountStore';
 import { WalletRepository } from '../database/repositories/WalletRepository';
 import type { Wallet } from '../types/models';
 
 export function useWallets() {
   const currentAccountId = useAuthStore((s) => s.currentAccountId);
+  const dataRevision = useAccountStore((s) => s.dataRevision);
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -37,7 +39,7 @@ export function useWallets() {
     } finally {
       setLoading(false);
     }
-  }, [currentAccountId]);
+  }, [currentAccountId, dataRevision]);
 
   useEffect(() => {
     refresh();

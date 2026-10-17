@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { format, addMonths, subMonths, isToday, isSameMonth } from 'date-fns';
 import { useAuthStore } from '../../store/authStore';
+import { useAccountStore } from '../../store/accountStore';
 import { useUIStore } from '../../store/uiStore';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { formatCurrency } from '../../utils/currencyFormatter';
@@ -43,6 +44,7 @@ export const CalendarScreen: React.FC = () => {
   const themeColors = useThemeColors();
 
   const { currentAccountId, currentUser } = useAuthStore();
+  const dataRevision = useAccountStore((s) => s.dataRevision);
   const isBalanceHidden = useUIStore((s) => s.isBalanceHidden);
   const toggleBalanceHidden = useUIStore((s) => s.toggleBalanceHidden);
 
@@ -72,24 +74,23 @@ export const CalendarScreen: React.FC = () => {
       setMonthData(data);
 
       // If selectedDateKey is not in the loaded daysMap (e.g. switched month), select 1st of month or today if same month
-      if (!data.daysMap[selectedDateKey]) {
+      setSelectedDateKey((prevKey) => {
+        if (data.daysMap[prevKey]) return prevKey;
         if (isSameMonth(new Date(), currentMonthDate)) {
-          setSelectedDateKey(format(new Date(), 'yyyy-MM-dd'));
-        } else {
-          const firstKey = format(data.monthDate, 'yyyy-MM-01');
-          setSelectedDateKey(firstKey);
+          return format(new Date(), 'yyyy-MM-dd');
         }
-      }
+        return format(data.monthDate, 'yyyy-MM-01');
+      });
     } catch (err) {
       console.error('[CalendarScreen] Failed to load month data:', err);
     } finally {
       setLoading(false);
     }
-  }, [currentAccountId, currentUser, currentMonthDate, calendarService, selectedDateKey]);
+  }, [currentAccountId, currentUser, currentMonthDate, calendarService, dataRevision]);
 
   useEffect(() => {
     loadCalendarData();
-  }, [currentMonthDate, loadCalendarData]);
+  }, [loadCalendarData]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
