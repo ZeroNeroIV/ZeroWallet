@@ -60,9 +60,14 @@ export class ChatContextManager {
     // Get account snapshot (cached)
     const snapshot = await this.getAccountSnapshot(accountId);
 
+    // Exclude error messages and empty bubbles so previous failed turns do not corrupt LLM context
+    const validMessages = messages.filter(
+      (msg) => !msg.isError && typeof msg.content === 'string' && msg.content.trim().length > 0
+    );
+
     // Split messages: last 10 in full, older messages summarized
-    const recentMessages = messages.slice(-10);
-    const olderMessages = messages.slice(0, -10);
+    const recentMessages = validMessages.slice(-10);
+    const olderMessages = validMessages.slice(0, -10);
 
     // Summarize older messages if they exist
     let conversationSummary: string | undefined;

@@ -113,8 +113,25 @@ export default function AISettingsScreen({ navigation }: any) {
         const ids: string[] = (json.models || [])
           .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
           .map((m: any) => (m.name as string).replace('models/', ''))
-          .filter(Boolean);
+          .filter(
+            (id: string) =>
+              Boolean(id) &&
+              !id.includes('-tts') &&
+              !id.includes('imagen') &&
+              !id.includes('image-generation') &&
+              !id.includes('embedding') &&
+              !id.includes('aqa') &&
+              !id.includes('robotics') &&
+              !id.includes('computer-use')
+          );
         setFetchedModels(ids);
+        if (ids.length > 0) {
+          setSelectedModel((prev) => {
+            if (prev && ids.includes(prev)) return prev;
+            const preferred = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+            return preferred.find((m) => ids.includes(m)) || ids[0];
+          });
+        }
       } else if (provider === 'groq') {
         const key = groqKey.trim();
         if (!key) { setIsFetchingModels(false); return; }
@@ -126,6 +143,13 @@ export default function AISettingsScreen({ navigation }: any) {
         const json = await res.json();
         const ids: string[] = (json.data || []).map((m: any) => m.id as string).filter(Boolean);
         setFetchedModels(ids);
+        if (ids.length > 0) {
+          setSelectedModel((prev) => {
+            if (prev && ids.includes(prev)) return prev;
+            const preferred = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'llama-3.2-3b-preview'];
+            return preferred.find((m) => ids.includes(m)) || ids[0];
+          });
+        }
       } else if (provider === 'custom_openai') {
         const base = customBaseUrl.trim().replace(/\/+$/, '');
         if (!base) { setIsFetchingModels(false); return; }

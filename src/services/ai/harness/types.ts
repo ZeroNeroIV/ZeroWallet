@@ -17,6 +17,7 @@ export interface ToolParameterProperty {
   items?: {
     type: string;
     properties?: Record<string, ToolParameterProperty>;
+    required?: readonly string[];
   };
 }
 

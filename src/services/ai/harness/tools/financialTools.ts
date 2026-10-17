@@ -11,7 +11,7 @@ import type { ExecutableTool, AgentExecutionContext, ToolExecutionResult } from 
 import type { FinancialWidget } from '../../../../types/ai';
 import { DataQueryService } from '../../dataQueryService';
 import { DataMutationService } from '../../dataMutationService';
-import { WRITE_FUNCTION_NAMES_SET } from '../../functionRegistry';
+import { FUNCTION_BY_NAME } from '../../functionRegistry';
 
 // Palette for visual chart series
 const CHART_PALETTE = ['#00E5FF', '#7C4DFF', '#00E676', '#FFB300', '#FF5252', '#E040FB', '#40C4FF', '#69F0AE'];
@@ -28,11 +28,21 @@ export class FinancialToolRegistry {
   }
 
   getToolDefinitions(): any[] {
-    return Array.from(this.tools.values()).map((tool) => ({
-      name: tool.name,
-      description: tool.description,
-      parameters: tool.parameters,
-    }));
+    return Array.from(this.tools.values()).map((tool) => {
+      const props = tool.parameters?.properties;
+      const hasProperties = props && Object.keys(props).length > 0;
+      if (!hasProperties) {
+        return {
+          name: tool.name,
+          description: tool.description,
+        };
+      }
+      return {
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters,
+      };
+    });
   }
 
   getExecutableTool(name: string): ExecutableTool | undefined {
@@ -76,6 +86,7 @@ export class FinancialToolRegistry {
                 secondaryValue: { type: 'number', description: 'Optional secondary value (e.g. expenses in an income vs expense bar chart)' },
                 color: { type: 'string', description: 'Optional hex color' },
               },
+              required: ['label', 'value'],
             },
           },
           summary: {
@@ -390,44 +401,77 @@ export class FinancialToolRegistry {
       deleteTransaction: this.dataMutation.deleteTransactionAction.bind(this.dataMutation),
       createGoal: this.dataMutation.createGoalAction.bind(this.dataMutation),
       updateGoal: this.dataMutation.updateGoalAction.bind(this.dataMutation),
+      updateGoalProgress: this.dataMutation.updateGoalProgressAction.bind(this.dataMutation),
+      completeGoal: this.dataMutation.completeGoalAction.bind(this.dataMutation),
       deleteGoal: this.dataMutation.deleteGoalAction.bind(this.dataMutation),
       createDebt: this.dataMutation.createDebtAction.bind(this.dataMutation),
       updateDebt: this.dataMutation.updateDebtAction.bind(this.dataMutation),
+      recordDebtPayment: this.dataMutation.recordDebtPaymentAction.bind(this.dataMutation),
+      markDebtAsPaid: this.dataMutation.markDebtAsPaidAction.bind(this.dataMutation),
       deleteDebt: this.dataMutation.deleteDebtAction.bind(this.dataMutation),
       createSubscription: this.dataMutation.createSubscriptionAction.bind(this.dataMutation),
+      updateSubscription: this.dataMutation.updateSubscriptionAction.bind(this.dataMutation),
+      toggleSubscription: this.dataMutation.toggleSubscriptionAction.bind(this.dataMutation),
       deleteSubscription: this.dataMutation.deleteSubscriptionAction.bind(this.dataMutation),
       createRecurringExpense: this.dataMutation.createRecurringExpenseAction.bind(this.dataMutation),
+      updateRecurringExpense: this.dataMutation.updateRecurringExpenseAction.bind(this.dataMutation),
       deleteRecurringExpense: this.dataMutation.deleteRecurringExpenseAction.bind(this.dataMutation),
       createCategory: this.dataMutation.createCategoryAction.bind(this.dataMutation),
+      updateCategory: this.dataMutation.updateCategoryAction.bind(this.dataMutation),
+      deleteCategory: this.dataMutation.deleteCategoryAction.bind(this.dataMutation),
     };
 
     Object.entries(mutationHandlers).forEach(([name, handler]) => {
+      const registryEntry = FUNCTION_BY_NAME.get(name);
+      const parameters = registryEntry?.parameters
+        ? {
+            type: 'object' as const,
+            properties: Object.fromEntries(
+              Object.entries(registryEntry.parameters.properties).map(([k, v]) => [
+                k,
+                {
+                  type: v.type,
+                  description: v.description,
+                  ...(v.enum ? { enum: [...v.enum] } : {}),
+                },
+              ])
+            ),
+            ...(registryEntry.parameters.required
+              ? { required: [...registryEntry.parameters.required] }
+              : {}),
+          }
+        : {
+            type: 'object' as const,
+            properties: {},
+          };
+
       this.register({
         name,
-        description: `Perform ${name} operation. REQUIRES USER CONFIRMATION via interactive ticket.`,
+        description:
+          registryEntry?.description ||
+          `Perform ${name} operation. REQUIRES USER CONFIRMATION via interactive ticket.`,
         kind: 'write',
-        parameters: {
-          type: 'object',
-          properties: {
-            parameters: { type: 'object', description: 'Arguments for the mutation' },
-          },
-        },
+        parameters,
         execute: async (args: any, context: AgentExecutionContext): Promise<ToolExecutionResult> => {
           try {
-            const pendingAction = await handler(args);
+            const resolvedArgs =
+              args && typeof args === 'object' && args.parameters && typeof args.parameters === 'object'
+                ? args.parameters
+                : args || {};
+            const pendingAction = await handler(resolvedArgs);
             let widget: FinancialWidget | undefined;
 
-            if (name === 'createTransaction' && args.amount) {
+            if (name === 'createTransaction' && resolvedArgs.amount) {
               widget = {
                 type: 'transaction_proposal',
                 transaction: {
-                  type: args.type || 'expense',
-                  amount: Number(args.amount),
+                  type: resolvedArgs.type || 'expense',
+                  amount: Number(resolvedArgs.amount),
                   currency: context.currency,
-                  categoryName: args.categoryName || 'General',
-                  vaultType: args.vaultType || 'main',
-                  date: args.date || new Date().toISOString().split('T')[0],
-                  description: args.description || '',
+                  categoryName: resolvedArgs.categoryName || 'General',
+                  vaultType: resolvedArgs.vaultType || 'main',
+                  date: resolvedArgs.date || new Date().toISOString().split('T')[0],
+                  description: resolvedArgs.description || '',
                 },
                 pendingActionId: pendingAction.id,
               };

@@ -338,27 +338,64 @@ export class GeminiService {
       });
     }
 
-    // Add recent messages from context
+    // Add recent messages from context (excluding error messages and empty bubbles)
     if (context?.recentMessages && Array.isArray(context.recentMessages)) {
-      context.recentMessages.forEach((msg) => {
-        messages.push({
-          role: msg.role === 'user' ? 'user' : 'model',
-          parts: [{ text: msg.content }],
-        });
+      const validRecent = context.recentMessages.filter(
+        (msg) => !msg.isError && typeof msg.content === 'string' && msg.content.trim().length > 0
+      );
+
+      if (
+        validRecent.length > 0 &&
+        validRecent[validRecent.length - 1].role === 'user' &&
+        validRecent[validRecent.length - 1].content.trim() === newMessage.trim()
+      ) {
+        validRecent.pop();
+      }
+
+      validRecent.forEach((msg) => {
+        const role = msg.role === 'user' ? ('user' as const) : ('model' as const);
+        const prev = messages[messages.length - 1];
+        if (prev && prev.role === role) {
+          if (role === 'user') {
+            prev.parts = [{ text: msg.content.trim() }];
+          } else {
+            prev.parts = [{ text: `${prev.parts[0]?.text || ''}\n\n${msg.content.trim()}`.trim() }];
+          }
+        } else {
+          messages.push({
+            role,
+            parts: [{ text: msg.content.trim() }],
+          });
+        }
       });
     }
 
     // Add new message
-    messages.push({
-      role: 'user',
-      parts: [{ text: newMessage }],
-    });
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg && lastMsg.role === 'user') {
+      lastMsg.parts = [{ text: newMessage }];
+    } else {
+      messages.push({
+        role: 'user',
+        parts: [{ text: newMessage }],
+      });
+    }
 
     return messages;
   }
 
   private getFunctionDefinitions() {
-    return FUNCTION_DEFINITIONS;
+    return FUNCTION_DEFINITIONS.map((def) => {
+      const props = def.parameters?.properties;
+      const hasProps = props && Object.keys(props).length > 0;
+      if (!hasProps) {
+        return {
+          name: def.name,
+          description: def.description,
+        };
+      }
+      return def;
+    });
   }
 
   /**
