@@ -34,6 +34,7 @@ import { Input } from '../../components/forms/Input';
 import { Button } from '../../components/forms/Button';
 import { AmountInput } from '../../components/forms/AmountInput';
 import { CategoryPicker } from '../../components/forms/CategoryPicker';
+import { DatePicker } from '../../components/forms/DatePicker';
 import { useAuthStore } from '../../store/authStore';
 import { RecurringExpenseRepository } from '../../database/repositories/RecurringExpenseRepository';
 import { CategoryRepository } from '../../database/repositories/CategoryRepository';
@@ -86,6 +87,8 @@ export default function AddRecurringExpenseScreen() {
   const [frequency, setFrequency] = useState<RecurringFrequency>('monthly');
   const [interval, setInterval] = useState(1);
   const [selectedVault, setSelectedVault] = useState<VaultType>('main');
+  const [startDate, setStartDate] = useState<Date | null>(null);
+  const [endDate, setEndDate] = useState<Date | null>(null);
   const [isActive, setIsActive] = useState(true);
   const [autoDeduct, setAutoDeduct] = useState(false);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
@@ -144,6 +147,8 @@ export default function AddRecurringExpenseScreen() {
         setSelectedVault(expense.vaultType);
         setIsActive(expense.isActive);
         setAutoDeduct(expense.autoDeduct);
+        if (expense.startDate) setStartDate(new Date(expense.startDate));
+        if (expense.endDate) setEndDate(new Date(expense.endDate));
 
         const category = await categoryRepo.findById(expense.categoryId);
         setSelectedCategory(category);
@@ -211,6 +216,11 @@ export default function AddRecurringExpenseScreen() {
       return;
     }
 
+    if (startDate && endDate && endDate.getTime() < startDate.getTime()) {
+      Alert.alert('Error', 'End date cannot be earlier than start date');
+      return;
+    }
+
     setErrors({});
     setLoading(true);
 
@@ -228,6 +238,8 @@ export default function AddRecurringExpenseScreen() {
           interval,
           nextOccurrence,
           vaultType: selectedVault,
+          startDate: startDate ? startDate.getTime() : null,
+          endDate: endDate ? endDate.getTime() : null,
           isActive,
           autoDeduct,
         });
@@ -249,6 +261,8 @@ export default function AddRecurringExpenseScreen() {
           interval,
           nextOccurrence,
           vaultType: selectedVault,
+          startDate: startDate ? startDate.getTime() : null,
+          endDate: endDate ? endDate.getTime() : null,
           isActive,
           autoDeduct,
         });
@@ -444,6 +458,25 @@ export default function AddRecurringExpenseScreen() {
             ))}
           </View>
         </View>
+
+        {/* Start Date (Optional) */}
+        <DatePicker
+          label="Start Date (Optional)"
+          placeholder="Starts immediately (optional)"
+          value={startDate}
+          onChange={setStartDate}
+          clearable
+        />
+
+        {/* End Date (Optional) */}
+        <DatePicker
+          label="End Date (Optional)"
+          placeholder="No end date / Indefinite (optional)"
+          value={endDate}
+          onChange={setEndDate}
+          minimumDate={startDate || undefined}
+          clearable
+        />
 
         {/* Auto-Deduct Toggle */}
         <TouchableOpacity

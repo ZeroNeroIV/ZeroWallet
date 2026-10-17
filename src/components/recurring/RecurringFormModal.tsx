@@ -1,4 +1,3 @@
-// Simplizum Recurring Form Modal — Swift Natural Language Cadence Builder & Unified Commitment Model
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
@@ -13,6 +12,7 @@ import {
   Alert,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { triggerHaptic } from '../../services/haptics/hapticFeedback';
@@ -36,6 +36,7 @@ interface RecurringFormModalProps {
     frequencyInterval: number;
     billingDay?: number | null;
     startDate: number;
+    endDate?: number | null;
     autoDeduct: boolean;
     reminderDaysBefore: number;
     isSubscription: boolean;
@@ -76,6 +77,9 @@ export const RecurringFormModal: React.FC<RecurringFormModalProps> = ({
   const [billingDay, setBillingDay] = useState<string>('1');
   const [autoDeduct, setAutoDeduct] = useState(true);
   const [reminderDays, setReminderDays] = useState(1);
+  const [startDate, setStartDate] = useState<Date | null>(new Date());
+  const [endDate, setEndDate] = useState<Date | null>(null);
+  const [activeDatePicker, setActiveDatePicker] = useState<'start' | 'end' | null>(null);
   const [isCustomCadence, setIsCustomCadence] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,6 +99,8 @@ export const RecurringFormModal: React.FC<RecurringFormModalProps> = ({
       setBillingDay(item.billingDay ? String(item.billingDay) : '1');
       setAutoDeduct(item.autoDeduct);
       setReminderDays(item.reminderDaysBefore ?? 1);
+      setStartDate(item.startDate ? new Date(item.startDate) : new Date());
+      setEndDate(item.endDate ? new Date(item.endDate) : null);
 
       // Check if matches standard preset
       const isPreset = CADENCE_PRESETS.some(
@@ -114,6 +120,8 @@ export const RecurringFormModal: React.FC<RecurringFormModalProps> = ({
       setBillingDay(String(new Date().getDate()));
       setAutoDeduct(true);
       setReminderDays(1);
+      setStartDate(new Date());
+      setEndDate(null);
       setIsCustomCadence(false);
     }
     setError(null);
@@ -154,6 +162,12 @@ export const RecurringFormModal: React.FC<RecurringFormModalProps> = ({
       return;
     }
 
+    if (startDate && endDate && endDate.getTime() < startDate.getTime()) {
+      setError('End date cannot be earlier than start date');
+      triggerHaptic('notificationError');
+      return;
+    }
+
     const numInterval = Math.max(1, parseInt(frequencyInterval, 10) || 1);
     const parsedBillingDay = frequencyUnit === 'month' ? parseInt(billingDay, 10) || 1 : null;
 
@@ -169,7 +183,8 @@ export const RecurringFormModal: React.FC<RecurringFormModalProps> = ({
         frequencyUnit,
         frequencyInterval: numInterval,
         billingDay: parsedBillingDay,
-        startDate: item?.startDate || Date.now(),
+        startDate: startDate ? startDate.getTime() : (item?.startDate || Date.now()),
+        endDate: endDate ? endDate.getTime() : null,
         autoDeduct,
         reminderDaysBefore: reminderDays,
         isSubscription,
@@ -471,6 +486,109 @@ export const RecurringFormModal: React.FC<RecurringFormModalProps> = ({
               )}
             </View>
 
+            {/* Start and End Dates (Optional) */}
+            <View style={styles.datesRow}>
+              {/* Start Date */}
+              <View style={[styles.fieldGroup, { flex: 1, marginRight: 8 }]}>
+                <Text style={[styles.fieldLabel, { color: themeColors.textMuted }]}>
+                  START DATE (OPTIONAL)
+                </Text>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    triggerHaptic('selection');
+                    setActiveDatePicker('start');
+                  }}
+                  style={[
+                    styles.dateChip,
+                    {
+                      borderColor: themeColors.hairline,
+                      backgroundColor: themeColors.background,
+                    },
+                  ]}
+                >
+                  <View style={styles.dateChipLeft}>
+                    <MaterialCommunityIcons
+                      name="calendar-start"
+                      size={16}
+                      color={themeColors.text}
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text
+                      style={[
+                        styles.dateChipText,
+                        { color: startDate ? themeColors.text : themeColors.textMuted },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {startDate ? format(startDate, 'MMM d, yyyy') : 'Immediate'}
+                    </Text>
+                  </View>
+                  {startDate && (
+                    <TouchableOpacity
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        setStartDate(null);
+                      }}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <MaterialCommunityIcons name="close-circle" size={16} color={themeColors.textMuted} />
+                    </TouchableOpacity>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {/* End Date */}
+              <View style={[styles.fieldGroup, { flex: 1, marginLeft: 8 }]}>
+                <Text style={[styles.fieldLabel, { color: themeColors.textMuted }]}>
+                  END DATE (OPTIONAL)
+                </Text>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    triggerHaptic('selection');
+                    setActiveDatePicker('end');
+                  }}
+                  style={[
+                    styles.dateChip,
+                    {
+                      borderColor: themeColors.hairline,
+                      backgroundColor: themeColors.background,
+                    },
+                  ]}
+                >
+                  <View style={styles.dateChipLeft}>
+                    <MaterialCommunityIcons
+                      name="calendar-end"
+                      size={16}
+                      color={themeColors.text}
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text
+                      style={[
+                        styles.dateChipText,
+                        { color: endDate ? themeColors.text : themeColors.textMuted },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {endDate ? format(endDate, 'MMM d, yyyy') : 'Indefinite'}
+                    </Text>
+                  </View>
+                  {endDate && (
+                    <TouchableOpacity
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        setEndDate(null);
+                      }}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <MaterialCommunityIcons name="close-circle" size={16} color={themeColors.textMuted} />
+                    </TouchableOpacity>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+
             {/* Auto-Deduct Toggle */}
             <TouchableOpacity
               activeOpacity={0.8}
@@ -598,6 +716,86 @@ export const RecurringFormModal: React.FC<RecurringFormModalProps> = ({
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Date Picker Sub-Modal for iOS */}
+      {Platform.OS === 'ios' && (
+        <Modal
+          visible={activeDatePicker !== null}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setActiveDatePicker(null)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => setActiveDatePicker(null)}
+            style={styles.modalBackdrop}
+          >
+            <View
+              style={[
+                styles.modalSheet,
+                {
+                  backgroundColor: themeColors.surface,
+                  borderColor: themeColors.cardBorder,
+                  paddingBottom: 24,
+                },
+              ]}
+            >
+              <View style={[styles.sheetHeader, { borderBottomColor: themeColors.hairline }]}>
+                <Text style={[styles.sheetTitle, { color: themeColors.text }]}>
+                  {activeDatePicker === 'start' ? 'SELECT START DATE' : 'SELECT END DATE'}
+                </Text>
+                <TouchableOpacity onPress={() => setActiveDatePicker(null)}>
+                  <Text style={[styles.sheetDoneText, { color: themeColors.text }]}>DONE</Text>
+                </TouchableOpacity>
+              </View>
+              <DateTimePicker
+                value={
+                  activeDatePicker === 'start'
+                    ? (startDate || new Date())
+                    : (endDate || startDate || new Date())
+                }
+                mode="date"
+                display="spinner"
+                minimumDate={activeDatePicker === 'end' ? (startDate || undefined) : undefined}
+                onChange={(_, selectedDate) => {
+                  if (selectedDate) {
+                    if (activeDatePicker === 'start') {
+                      setStartDate(selectedDate);
+                    } else {
+                      setEndDate(selectedDate);
+                    }
+                  }
+                }}
+                textColor={themeColors.text}
+              />
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
+
+      {/* Date Picker for Android */}
+      {Platform.OS === 'android' && activeDatePicker !== null && (
+        <DateTimePicker
+          value={
+            activeDatePicker === 'start'
+              ? (startDate || new Date())
+              : (endDate || startDate || new Date())
+          }
+          mode="date"
+          display="default"
+          minimumDate={activeDatePicker === 'end' ? (startDate || undefined) : undefined}
+          onChange={(event, selectedDate) => {
+            setActiveDatePicker(null);
+            if (event.type === 'set' && selectedDate) {
+              if (activeDatePicker === 'start') {
+                setStartDate(selectedDate);
+              } else {
+                setEndDate(selectedDate);
+              }
+            }
+          }}
+        />
+      )}
     </Modal>
   );
 };
@@ -840,5 +1038,32 @@ const styles = StyleSheet.create({
   pickerOptionName: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  datesRow: {
+    flexDirection: 'row',
+    marginBottom: 16,
+  },
+  dateChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 42,
+    borderWidth: 1,
+    borderRadius: 2,
+    paddingHorizontal: 12,
+  },
+  dateChipLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  dateChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  sheetDoneText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
   },
 });

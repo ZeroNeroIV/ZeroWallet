@@ -14,29 +14,33 @@ import { spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 
 interface DatePickerProps {
-  value: Date;
-  onChange: (date: Date) => void;
+  value?: Date | null;
+  onChange: (date: Date | null) => void;
   label?: string;
+  placeholder?: string;
   error?: string;
   maximumDate?: Date;
   minimumDate?: Date;
+  clearable?: boolean;
 }
 
 export const DatePicker: React.FC<DatePickerProps> = ({
   value,
   onChange,
   label = 'Date',
+  placeholder = 'Select date (optional)',
   error,
   maximumDate,
   minimumDate,
+  clearable = true,
 }) => {
   const [showPicker, setShowPicker] = useState(false);
-  const [tempDate, setTempDate] = useState(value);
+  const [tempDate, setTempDate] = useState<Date>(value || new Date());
 
   const formatDate = (date: Date) => {
     const options: Intl.DateTimeFormatOptions = {
       year: 'numeric',
-      month: 'long',
+      month: 'short',
       day: 'numeric',
     };
     return date.toLocaleDateString('en-US', options);
@@ -61,8 +65,13 @@ export const DatePicker: React.FC<DatePickerProps> = ({
   };
 
   const handleCancel = () => {
-    setTempDate(value);
+    setTempDate(value || new Date());
     setShowPicker(false);
+  };
+
+  const handleClear = (e: any) => {
+    e.stopPropagation();
+    onChange(null);
   };
 
   return (
@@ -71,7 +80,10 @@ export const DatePicker: React.FC<DatePickerProps> = ({
 
       <TouchableOpacity
         style={[styles.picker, error && styles.pickerError]}
-        onPress={() => setShowPicker(true)}
+        onPress={() => {
+          setTempDate(value || new Date());
+          setShowPicker(true);
+        }}
       >
         <View style={styles.dateContainer}>
           <MaterialCommunityIcons
@@ -79,13 +91,28 @@ export const DatePicker: React.FC<DatePickerProps> = ({
             size={20}
             color={colors.primary.main}
           />
-          <Text style={styles.dateText}>{formatDate(value)}</Text>
+          <Text style={[styles.dateText, !value && styles.placeholderText]}>
+            {value ? formatDate(value) : placeholder}
+          </Text>
         </View>
-        <MaterialCommunityIcons
-          name="chevron-down"
-          size={24}
-          color={colors.neutral.gray500}
-        />
+
+        <View style={styles.trailingIcons}>
+          {clearable && value && (
+            <TouchableOpacity onPress={handleClear} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <MaterialCommunityIcons
+                name="close-circle"
+                size={18}
+                color={colors.neutral.gray500}
+                style={{ marginRight: 6 }}
+              />
+            </TouchableOpacity>
+          )}
+          <MaterialCommunityIcons
+            name="chevron-down"
+            size={24}
+            color={colors.neutral.gray500}
+          />
+        </View>
       </TouchableOpacity>
 
       {error && <Text style={styles.error}>{error}</Text>}
@@ -123,7 +150,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({
       ) : (
         showPicker && (
           <DateTimePicker
-            value={value}
+            value={value || new Date()}
             mode="date"
             display="default"
             onChange={handleDateChange}
@@ -165,10 +192,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
+  trailingIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   dateText: {
     ...typography.body,
     color: colors.neutral.gray900,
     fontWeight: '500',
+  },
+  placeholderText: {
+    color: colors.neutral.gray500,
+    fontWeight: '400',
   },
   error: {
     ...typography.caption,

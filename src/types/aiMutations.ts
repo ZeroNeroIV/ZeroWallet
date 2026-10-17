@@ -223,6 +223,8 @@ export interface CreateSubscriptionParams {
   categoryName: string;
   billingDay: number;
   vaultType?: VaultType;
+  startDate?: string;
+  endDate?: string;
 }
 
 export interface UpdateSubscriptionParams {
@@ -233,6 +235,8 @@ export interface UpdateSubscriptionParams {
   billingDay?: number;
   isActive?: boolean;
   vaultType?: VaultType;
+  startDate?: string;
+  endDate?: string;
 }
 
 export interface ToggleSubscriptionParams {
@@ -255,7 +259,8 @@ export interface CreateRecurringExpenseParams {
   categoryName: string;
   frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
   interval: number;
-  startDate: string;
+  startDate?: string;
+  endDate?: string;
   vaultType?: VaultType;
   autoDeduct?: boolean;
 }
@@ -269,6 +274,8 @@ export interface UpdateRecurringExpenseParams {
   interval?: number;
   isActive?: boolean;
   vaultType?: VaultType;
+  startDate?: string;
+  endDate?: string;
   autoDeduct?: boolean;
 }
 
@@ -336,6 +343,8 @@ export interface ValidatedSubscriptionInput {
   categoryName: string;
   billingDay: number;
   vaultType: VaultType;
+  startDate?: number | null;
+  endDate?: number | null;
 }
 
 export interface ValidatedRecurringExpenseInput {
@@ -348,6 +357,8 @@ export interface ValidatedRecurringExpenseInput {
   nextOccurrence: number;
   vaultType: VaultType;
   autoDeduct: boolean;
+  startDate?: number | null;
+  endDate?: number | null;
 }
 
 export interface ValidatedCategoryInput {

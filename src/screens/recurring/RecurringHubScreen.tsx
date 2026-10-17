@@ -133,9 +133,12 @@ export default function RecurringHubScreen() {
   const projections = useMemo(() => {
     let monthlyBurn = 0;
     let activeCount = 0;
+    const now = Date.now();
 
     for (const item of items) {
-      if (item.isActive) {
+      const isStarted = !item.startDate || item.startDate <= now;
+      const isNotEnded = !item.endDate || item.endDate >= now;
+      if (item.isActive && isStarted && isNotEnded) {
         monthlyBurn += item.monthlyCost;
         activeCount++;
       }
@@ -286,6 +289,7 @@ export default function RecurringHubScreen() {
     frequencyInterval: number;
     billingDay?: number | null;
     startDate: number;
+    endDate?: number | null;
     autoDeduct: boolean;
     reminderDaysBefore: number;
     isSubscription: boolean;
@@ -306,6 +310,8 @@ export default function RecurringHubScreen() {
         frequencyUnit: data.frequencyUnit,
         frequencyInterval: data.frequencyInterval,
         billingDay: data.billingDay,
+        startDate: data.startDate,
+        endDate: data.endDate ?? null,
         autoDeduct: data.autoDeduct,
         reminderDaysBefore: data.reminderDaysBefore,
         isSubscription: data.isSubscription,
@@ -321,6 +327,7 @@ export default function RecurringHubScreen() {
         frequencyInterval: data.frequencyInterval,
         billingDay: data.billingDay,
         startDate: data.startDate,
+        endDate: data.endDate ?? null,
         nextRunDate: nextRun,
         autoDeduct: data.autoDeduct,
         reminderDaysBefore: data.reminderDaysBefore,
@@ -558,8 +565,11 @@ export default function RecurringHubScreen() {
             </View>
           ) : (
             filteredItems.map((item) => {
-              const isOverdue = item.daysUntilDue < 0;
-              const isDueSoon = item.daysUntilDue >= 0 && item.daysUntilDue <= 3;
+              const now = Date.now();
+              const isFutureStart = Boolean(item.startDate && item.startDate > now);
+              const isEnded = Boolean(item.endDate && item.endDate < now);
+              const isOverdue = !isFutureStart && !isEnded && item.daysUntilDue < 0;
+              const isDueSoon = !isFutureStart && !isEnded && item.daysUntilDue >= 0 && item.daysUntilDue <= 3;
 
               return (
                 <TouchableOpacity
@@ -571,7 +581,7 @@ export default function RecurringHubScreen() {
                     {
                       backgroundColor: themeColors.surface,
                       borderColor: themeColors.cardBorder,
-                      opacity: item.isActive ? 1 : 0.5,
+                      opacity: item.isActive && !isEnded ? 1 : 0.5,
                     },
                   ]}
                 >
@@ -608,6 +618,11 @@ export default function RecurringHubScreen() {
                         <Text style={[styles.walletTag, { color: themeColors.textMuted }]}>
                           • {item.walletName}
                         </Text>
+                        {item.endDate && (
+                          <Text style={[styles.walletTag, { color: isEnded ? themeColors.error : themeColors.textMuted }]}>
+                            • Until {format(new Date(item.endDate), 'MMM d, yyyy')}
+                          </Text>
+                        )}
                       </View>
                     </View>
                   </View>
@@ -623,7 +638,11 @@ export default function RecurringHubScreen() {
                       style={[
                         styles.duePill,
                         {
-                          borderColor: isOverdue
+                          borderColor: isEnded
+                            ? themeColors.hairline
+                            : isFutureStart
+                            ? themeColors.hairline
+                            : isOverdue
                             ? themeColors.error
                             : isDueSoon
                             ? themeColors.warning
@@ -635,7 +654,11 @@ export default function RecurringHubScreen() {
                         style={[
                           styles.duePillText,
                           {
-                            color: isOverdue
+                            color: isEnded
+                              ? themeColors.textMuted
+                              : isFutureStart
+                              ? themeColors.textMuted
+                              : isOverdue
                               ? themeColors.error
                               : isDueSoon
                               ? themeColors.warning
@@ -643,7 +666,11 @@ export default function RecurringHubScreen() {
                           },
                         ]}
                       >
-                        {isOverdue
+                        {isEnded
+                          ? 'ENDED'
+                          : isFutureStart
+                          ? `STARTS ${format(new Date(item.startDate!), 'MMM d')}`
+                          : isOverdue
                           ? `${Math.abs(item.daysUntilDue)}D OVERDUE`
                           : item.daysUntilDue === 0
                           ? 'DUE TODAY'

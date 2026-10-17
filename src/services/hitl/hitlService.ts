@@ -173,8 +173,17 @@ export async function checkDueItems(accountId: string): Promise<HitlApprovalItem
     // 2. Check Subscriptions
     const activeSubscriptions = await subscriptionRepo.findActiveByAccount(accountId);
     for (const sub of activeSubscriptions) {
+      if (sub.startDate && sub.startDate > now.getTime()) {
+        continue;
+      }
+      if (sub.endDate && sub.endDate < sub.nextProcessing) {
+        continue;
+      }
       if (sub.nextProcessing <= now.getTime()) {
         const billingDate = new Date(sub.nextProcessing);
+        if (sub.endDate && sub.endDate < billingDate.getTime()) {
+          continue;
+        }
         const alreadyProcessed = await transactionRepo.existsBySubscriptionAndDate(
           sub.id,
           billingDate.getTime()
@@ -207,8 +216,17 @@ export async function checkDueItems(accountId: string): Promise<HitlApprovalItem
     // 3. Check Recurring Expenses
     const activeExpenses = await recurringRepo.findActiveByAccount(accountId);
     for (const exp of activeExpenses) {
+      if (exp.startDate && exp.startDate > now.getTime()) {
+        continue;
+      }
+      if (exp.endDate && exp.endDate < exp.nextOccurrence) {
+        continue;
+      }
       if (exp.nextOccurrence <= now.getTime()) {
         const occurrenceDate = new Date(exp.nextOccurrence);
+        if (exp.endDate && exp.endDate < occurrenceDate.getTime()) {
+          continue;
+        }
         const alreadyProcessed = await transactionRepo.existsByRecurringExpenseAndDate(
           exp.id,
           occurrenceDate.getTime()

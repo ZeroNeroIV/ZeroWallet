@@ -33,6 +33,7 @@ import { Input } from '../../components/forms/Input';
 import { Button } from '../../components/forms/Button';
 import { AmountInput } from '../../components/forms/AmountInput';
 import { CategoryPicker } from '../../components/forms/CategoryPicker';
+import { DatePicker } from '../../components/forms/DatePicker';
 import { useAuthStore } from '../../store/authStore';
 import { SubscriptionRepository } from '../../database/repositories/SubscriptionRepository';
 import { CategoryRepository } from '../../database/repositories/CategoryRepository';
@@ -74,6 +75,8 @@ export default function AddSubscriptionScreen() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [billingDay, setBillingDay] = useState(1);
   const [selectedVault, setSelectedVault] = useState<VaultType>('main');
+  const [startDate, setStartDate] = useState<Date | null>(null);
+  const [endDate, setEndDate] = useState<Date | null>(null);
   const [isActive, setIsActive] = useState(true);
 
   const [showBillingDayPicker, setShowBillingDayPicker] = useState(false);
@@ -131,6 +134,9 @@ export default function AddSubscriptionScreen() {
         setSelectedVault(subscription.vaultType);
         setIsActive(subscription.isActive);
 
+        if (subscription.startDate) setStartDate(new Date(subscription.startDate));
+        if (subscription.endDate) setEndDate(new Date(subscription.endDate));
+
         const category = await categoryRepo.findById(subscription.categoryId);
         setSelectedCategory(category);
       } else {
@@ -173,6 +179,11 @@ export default function AddSubscriptionScreen() {
       return;
     }
 
+    if (startDate && endDate && endDate.getTime() < startDate.getTime()) {
+      Alert.alert('Error', 'End date cannot be earlier than start date');
+      return;
+    }
+
     setErrors({});
     setLoading(true);
 
@@ -187,6 +198,8 @@ export default function AddSubscriptionScreen() {
           categoryId: selectedCategory.id,
           billingDay,
           vaultType: selectedVault,
+          startDate: startDate ? startDate.getTime() : null,
+          endDate: endDate ? endDate.getTime() : null,
           isActive,
         });
 
@@ -205,6 +218,8 @@ export default function AddSubscriptionScreen() {
           categoryId: selectedCategory.id,
           billingDay,
           vaultType: selectedVault,
+          startDate: startDate ? startDate.getTime() : null,
+          endDate: endDate ? endDate.getTime() : null,
           isActive,
         });
 
@@ -355,6 +370,25 @@ export default function AddSubscriptionScreen() {
             ))}
           </View>
         </View>
+
+        {/* Start Date (Optional) */}
+        <DatePicker
+          label="Start Date (Optional)"
+          placeholder="Starts immediately (optional)"
+          value={startDate}
+          onChange={setStartDate}
+          clearable
+        />
+
+        {/* End Date (Optional) */}
+        <DatePicker
+          label="End Date (Optional)"
+          placeholder="No end date / Indefinite (optional)"
+          value={endDate}
+          onChange={setEndDate}
+          minimumDate={startDate || undefined}
+          clearable
+        />
 
         {/* Active Toggle */}
         <TouchableOpacity

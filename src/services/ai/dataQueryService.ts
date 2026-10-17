@@ -345,6 +345,8 @@ export class DataQueryService {
           .toISOString()
           .split('T')[0],
         category: catNameMap.get(sub.categoryId) || 'Unknown',
+        startDate: sub.startDate ? new Date(sub.startDate).toISOString().split('T')[0] : null,
+        endDate: sub.endDate ? new Date(sub.endDate).toISOString().split('T')[0] : null,
       }));
     } catch (error: any) {
       logger.error('[DataQuery] getActiveSubscriptions error:', error);
@@ -374,6 +376,8 @@ export class DataQueryService {
         frequency: expense.frequency,
         nextDate: new Date(expense.nextOccurrence).toISOString().split('T')[0],
         category: catNameMap.get(expense.categoryId) || 'Unknown',
+        startDate: expense.startDate ? new Date(expense.startDate).toISOString().split('T')[0] : null,
+        endDate: expense.endDate ? new Date(expense.endDate).toISOString().split('T')[0] : null,
       }));
     } catch (error: any) {
       logger.error('[DataQuery] getRecurringExpenses error:', error);

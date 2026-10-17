@@ -12,6 +12,8 @@ const FIELD_MAPPINGS: FieldMapping[] = [
   { field: 'interval', column: 'interval' },
   { field: 'nextOccurrence', column: 'next_occurrence' },
   { field: 'vaultType', column: 'vault_type' },
+  { field: 'startDate', column: 'start_date' },
+  { field: 'endDate', column: 'end_date' },
   { field: 'isActive', column: 'is_active' },
   { field: 'autoDeduct', column: 'auto_deduct' },
   { field: 'lastProcessed', column: 'last_processed' },
@@ -32,6 +34,8 @@ export class RecurringExpenseRepository extends BaseRepository<RecurringExpense,
       interval: row.interval as number,
       nextOccurrence: row.next_occurrence as number,
       vaultType: row.vault_type as RecurringExpense['vaultType'],
+      startDate: row.start_date != null ? Number(row.start_date) : null,
+      endDate: row.end_date != null ? Number(row.end_date) : null,
       isActive: (row.is_active as number) === 1,
       autoDeduct: (row.auto_deduct as number) === 1,
       lastProcessed: row.last_processed as number | null,
@@ -48,16 +52,18 @@ export class RecurringExpenseRepository extends BaseRepository<RecurringExpense,
   }
 
   async findDue(): Promise<RecurringExpense[]> {
+    const now = Date.now();
     return this.rawQuery(
-      'SELECT * FROM recurring_expenses WHERE is_active = 1 AND next_occurrence <= ?',
-      [Date.now()],
+      'SELECT * FROM recurring_expenses WHERE is_active = 1 AND (start_date IS NULL OR start_date <= ?) AND (end_date IS NULL OR end_date >= ?) AND next_occurrence <= ?',
+      [now, now, now],
     );
   }
 
   async findOverdue(): Promise<RecurringExpense[]> {
+    const now = Date.now();
     return this.rawQuery(
-      'SELECT * FROM recurring_expenses WHERE is_active = 1 AND next_occurrence < ? ORDER BY next_occurrence ASC',
-      [Date.now()],
+      'SELECT * FROM recurring_expenses WHERE is_active = 1 AND (start_date IS NULL OR start_date <= ?) AND (end_date IS NULL OR end_date >= ?) AND next_occurrence < ? ORDER BY next_occurrence ASC',
+      [now, now, now],
     );
   }
 

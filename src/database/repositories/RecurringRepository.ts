@@ -41,7 +41,7 @@ export class RecurringRepository extends BaseRepository<RecurringTransaction> {
       frequencyUnit: (row.frequency_unit as 'day' | 'week' | 'month' | 'year') || 'month',
       frequencyInterval: Number(row.frequency_interval) || 1,
       billingDay: row.billing_day != null ? Number(row.billing_day) : null,
-      startDate: Number(row.start_date) || Date.now(),
+      startDate: row.start_date != null ? Number(row.start_date) : null,
       endDate: row.end_date != null ? Number(row.end_date) : null,
       nextRunDate: Number(row.next_run_date) || Date.now(),
       lastRunDate: row.last_run_date != null ? Number(row.last_run_date) : null,
@@ -55,8 +55,10 @@ export class RecurringRepository extends BaseRepository<RecurringTransaction> {
   }
 
   async findAllActive(): Promise<RecurringTransaction[]> {
+    const now = Date.now();
     return this.rawQuery(
-      'SELECT * FROM recurring_transactions WHERE is_active = 1 ORDER BY next_run_date ASC'
+      'SELECT * FROM recurring_transactions WHERE is_active = 1 AND (end_date IS NULL OR end_date >= ?) ORDER BY next_run_date ASC',
+      [now]
     );
   }
 
@@ -80,8 +82,8 @@ export class RecurringRepository extends BaseRepository<RecurringTransaction> {
   async findUpcoming(limit: number = 3): Promise<RecurringTransaction[]> {
     const now = Date.now();
     return this.rawQuery(
-      'SELECT * FROM recurring_transactions WHERE is_active = 1 ORDER BY next_run_date ASC LIMIT ?',
-      [limit]
+      'SELECT * FROM recurring_transactions WHERE is_active = 1 AND (start_date IS NULL OR start_date <= ?) AND (end_date IS NULL OR end_date >= ?) ORDER BY next_run_date ASC LIMIT ?',
+      [now, now, limit]
     );
   }
 

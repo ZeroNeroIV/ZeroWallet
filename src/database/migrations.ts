@@ -83,6 +83,10 @@ async function applyMigration(
       await migration_v12(database);
       break;
 
+    case 13:
+      await migration_v13(database);
+      break;
+
     default:
       console.warn(`[Migrations] No migration defined for version ${version}`);
   }
@@ -787,4 +791,28 @@ export async function migration_v12(database: SQLite.SQLiteDatabase): Promise<vo
 
   console.log('[Migration v12] Successfully applied migration v12');
 }
+
+/**
+ * Migration v13: Add optional start_date and end_date columns to subscriptions and recurring_expenses
+ */
+async function migration_v13(database: SQLite.SQLiteDatabase): Promise<void> {
+  console.log('[Migration v13] Adding start_date and end_date columns to subscriptions and recurring_expenses');
+
+  const addColumnIfNotExists = async (table: string, column: string, type: string) => {
+    try {
+      await database.executeSql(`ALTER TABLE ${table} ADD COLUMN ${column} ${type};`);
+      console.log(`[Migration v13] Added ${column} to ${table}`);
+    } catch (err: any) {
+      console.log(`[Migration v13] Column ${column} in ${table} notice:`, err?.message || err);
+    }
+  };
+
+  await addColumnIfNotExists('subscriptions', 'start_date', 'INTEGER');
+  await addColumnIfNotExists('subscriptions', 'end_date', 'INTEGER');
+  await addColumnIfNotExists('recurring_expenses', 'start_date', 'INTEGER');
+  await addColumnIfNotExists('recurring_expenses', 'end_date', 'INTEGER');
+
+  console.log('[Migration v13] Successfully applied migration v13');
+}
+
 

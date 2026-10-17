@@ -427,6 +427,20 @@ export class DataMutationService {
         updates.push(`billing day: ${params.billingDay}`);
       }
 
+      if (params.startDate !== undefined) {
+        resolvedData.startDate = params.startDate ? this.validator.validateDateString(params.startDate, 'Start date') : null;
+        updates.push(`start date: ${params.startDate || 'none'}`);
+      }
+
+      if (params.endDate !== undefined) {
+        resolvedData.endDate = params.endDate ? this.validator.validateDateString(params.endDate, 'End date') : null;
+        updates.push(`end date: ${params.endDate || 'none'}`);
+      }
+
+      if (resolvedData.startDate && resolvedData.endDate && resolvedData.endDate < resolvedData.startDate) {
+        this.validator.throwValidationError('End date', 'End date cannot be earlier than start date');
+      }
+
       if (params.isActive !== undefined) {
         resolvedData.isActive = params.isActive;
         updates.push(`active: ${params.isActive}`);
@@ -494,6 +508,20 @@ export class DataMutationService {
         this.validator.validateInterval(params.interval);
         resolvedData.interval = params.interval;
         updates.push(`interval: ${params.interval}`);
+      }
+
+      if (params.startDate !== undefined) {
+        resolvedData.startDate = params.startDate ? this.validator.validateDateString(params.startDate, 'Start date') : null;
+        updates.push(`start date: ${params.startDate || 'none'}`);
+      }
+
+      if (params.endDate !== undefined) {
+        resolvedData.endDate = params.endDate ? this.validator.validateDateString(params.endDate, 'End date') : null;
+        updates.push(`end date: ${params.endDate || 'none'}`);
+      }
+
+      if (resolvedData.startDate && resolvedData.endDate && resolvedData.endDate < resolvedData.startDate) {
+        this.validator.throwValidationError('End date', 'End date cannot be earlier than start date');
       }
 
       if (params.isActive !== undefined) {
@@ -663,6 +691,8 @@ export class DataMutationService {
       categoryId: data.categoryId,
       billingDay: data.billingDay,
       vaultType: data.vaultType,
+      startDate: data.startDate ?? null,
+      endDate: data.endDate ?? null,
       isActive: true,
     });
     return subscription.id;
@@ -679,6 +709,8 @@ export class DataMutationService {
       nextOccurrence: data.nextOccurrence,
       vaultType: data.vaultType,
       autoDeduct: data.autoDeduct,
+      startDate: data.startDate ?? null,
+      endDate: data.endDate ?? null,
       isActive: true,
     });
     return recurring.id;

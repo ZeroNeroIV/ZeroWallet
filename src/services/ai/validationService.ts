@@ -419,6 +419,17 @@ export class ValidationService {
       ? await this.resolveWalletId(params.vaultType)
       : DEFAULT_VAULT_TYPE;
 
+    const startDate = params.startDate
+      ? this.validateDateString(params.startDate, 'Start date')
+      : null;
+    const endDate = params.endDate
+      ? this.validateDateString(params.endDate, 'End date')
+      : null;
+
+    if (startDate && endDate && endDate < startDate) {
+      this.throwValidationError('End date', 'End date cannot be earlier than start date');
+    }
+
     return {
       name: params.name.trim(),
       amount: params.amount,
@@ -426,6 +437,8 @@ export class ValidationService {
       categoryName: category.name,
       billingDay: params.billingDay,
       vaultType,
+      startDate,
+      endDate,
     };
   }
 
@@ -442,7 +455,6 @@ export class ValidationService {
     this.validateRequired(params.categoryName, 'Category');
     this.validateRequired(params.frequency, 'Frequency');
     this.validateRequired(params.interval, 'Interval');
-    this.validateRequired(params.startDate, 'Start date');
 
     // Validate name length
     this.validateStringLength(params.name, 'Expense name', 1, 100);
@@ -460,8 +472,19 @@ export class ValidationService {
     // Validate interval
     this.validateInterval(params.interval);
 
-    // Validate start date
-    const nextOccurrence = this.validateDateString(params.startDate, 'Start date');
+    // Validate optional start and end dates
+    const startDate = params.startDate
+      ? this.validateDateString(params.startDate, 'Start date')
+      : null;
+    const endDate = params.endDate
+      ? this.validateDateString(params.endDate, 'End date')
+      : null;
+
+    if (startDate && endDate && endDate < startDate) {
+      this.throwValidationError('End date', 'End date cannot be earlier than start date');
+    }
+
+    const nextOccurrence = startDate || Date.now();
 
     // Resolve category (recurring expenses are always expenses)
     const category = await this.resolveCategoryName(params.categoryName, 'expense');
@@ -481,6 +504,8 @@ export class ValidationService {
       nextOccurrence,
       vaultType,
       autoDeduct: params.autoDeduct ?? false,
+      startDate,
+      endDate,
     };
   }
 

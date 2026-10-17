@@ -1,6 +1,6 @@
 // SQLite Database Schema Definitions
 
-export const SCHEMA_VERSION = 12;
+export const SCHEMA_VERSION = 13;
 
 // All wallet keys allowed in vault_type columns (v6+)
 export const VAULT_TYPE_CHECK = `('main', 'savings', 'held', 'salary', 'emergency', 'card', 'physical')`;
@@ -85,6 +85,8 @@ export const CREATE_SUBSCRIPTIONS_TABLE = `
     billing_day INTEGER NOT NULL CHECK(billing_day >= 1 AND billing_day <= 31),
     is_active INTEGER NOT NULL DEFAULT 1,
     vault_type TEXT NOT NULL,
+    start_date INTEGER,
+    end_date INTEGER,
     last_processed INTEGER,
     next_processing INTEGER NOT NULL,
     created_at INTEGER NOT NULL,
@@ -105,6 +107,8 @@ export const CREATE_RECURRING_EXPENSES_TABLE = `
     interval INTEGER NOT NULL DEFAULT 1,
     next_occurrence INTEGER NOT NULL,
     vault_type TEXT NOT NULL,
+    start_date INTEGER,
+    end_date INTEGER,
     is_active INTEGER NOT NULL DEFAULT 1,
     auto_deduct INTEGER NOT NULL DEFAULT 1,
     last_processed INTEGER,
@@ -127,7 +131,7 @@ export const CREATE_RECURRING_TRANSACTIONS_TABLE = `
     frequency_unit TEXT NOT NULL CHECK(frequency_unit IN ('day', 'week', 'month', 'year')),
     frequency_interval INTEGER NOT NULL DEFAULT 1,
     billing_day INTEGER,
-    start_date INTEGER NOT NULL,
+    start_date INTEGER,
     end_date INTEGER,
     next_run_date INTEGER NOT NULL,
     last_run_date INTEGER,

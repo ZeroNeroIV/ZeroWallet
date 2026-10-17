@@ -11,6 +11,8 @@ const FIELD_MAPPINGS: FieldMapping[] = [
   { field: 'billingDay', column: 'billing_day' },
   { field: 'isActive', column: 'is_active' },
   { field: 'vaultType', column: 'vault_type' },
+  { field: 'startDate', column: 'start_date' },
+  { field: 'endDate', column: 'end_date' },
   { field: 'lastProcessed', column: 'last_processed' },
   { field: 'nextProcessing', column: 'next_processing' },
 ];
@@ -29,6 +31,8 @@ export class SubscriptionRepository extends BaseRepository<Subscription, Subscri
       billingDay: row.billing_day as number,
       isActive: (row.is_active as number) === 1,
       vaultType: row.vault_type as Subscription['vaultType'],
+      startDate: row.start_date != null ? Number(row.start_date) : null,
+      endDate: row.end_date != null ? Number(row.end_date) : null,
       lastProcessed: row.last_processed as number | null,
       nextProcessing: row.next_processing as number,
       createdAt: row.created_at as number,
@@ -36,11 +40,11 @@ export class SubscriptionRepository extends BaseRepository<Subscription, Subscri
     };
   }
 
-  private calculateNextProcessing(billingDay: number): number {
-    const now = new Date();
-    const currentDay = now.getDate();
-    let targetMonth = now.getMonth();
-    let targetYear = now.getFullYear();
+  private calculateNextProcessing(billingDay: number, from: Date | number = new Date()): number {
+    const fromDate = typeof from === 'number' ? new Date(from) : from;
+    const currentDay = fromDate.getDate();
+    let targetMonth = fromDate.getMonth();
+    let targetYear = fromDate.getFullYear();
 
     if (currentDay >= billingDay) {
       targetMonth += 1;
@@ -53,7 +57,8 @@ export class SubscriptionRepository extends BaseRepository<Subscription, Subscri
   }
 
   async create(data: SubscriptionInput): Promise<Subscription> {
-    const nextProcessing = this.calculateNextProcessing(data.billingDay);
+    const fromDate = data.startDate && data.startDate > Date.now() ? new Date(data.startDate) : new Date();
+    const nextProcessing = this.calculateNextProcessing(data.billingDay, fromDate);
     const id = await this.insert(data as unknown as Record<string, unknown>, {
       next_processing: nextProcessing,
       last_processed: null,
@@ -69,9 +74,10 @@ export class SubscriptionRepository extends BaseRepository<Subscription, Subscri
   }
 
   async findDueSubscriptions(): Promise<Subscription[]> {
+    const now = Date.now();
     return this.rawQuery(
-      'SELECT * FROM subscriptions WHERE is_active = 1 AND next_processing <= ?',
-      [Date.now()],
+      'SELECT * FROM subscriptions WHERE is_active = 1 AND (start_date IS NULL OR start_date <= ?) AND (end_date IS NULL OR end_date >= ?) AND next_processing <= ?',
+      [now, now, now],
     );
   }
 
@@ -86,16 +92,18 @@ export class SubscriptionRepository extends BaseRepository<Subscription, Subscri
   }
 
   async findDue(): Promise<Subscription[]> {
+    const now = Date.now();
     return this.rawQuery(
-      'SELECT * FROM subscriptions WHERE is_active = 1 AND next_processing <= ? ORDER BY name ASC',
-      [Date.now()],
+      'SELECT * FROM subscriptions WHERE is_active = 1 AND (start_date IS NULL OR start_date <= ?) AND (end_date IS NULL OR end_date >= ?) AND next_processing <= ? ORDER BY name ASC',
+      [now, now, now],
     );
   }
 
   async findOverdue(): Promise<Subscription[]> {
+    const now = Date.now();
     return this.rawQuery(
-      'SELECT * FROM subscriptions WHERE is_active = 1 AND next_processing < ? ORDER BY next_processing ASC',
-      [Date.now()],
+      'SELECT * FROM subscriptions WHERE is_active = 1 AND (start_date IS NULL OR start_date <= ?) AND (end_date IS NULL OR end_date >= ?) AND next_processing < ? ORDER BY next_processing ASC',
+      [now, now, now],
     );
   }
 

@@ -143,6 +143,8 @@ export interface Subscription {
   billingDay: number; // 1-31 (day of month)
   isActive: boolean;
   vaultType: VaultType; // Which vault to deduct from
+  startDate?: number | null; // Optional start date timestamp
+  endDate?: number | null; // Optional end date timestamp
   lastProcessed: number | null; // Unix timestamp of last deduction
   nextProcessing: number; // Unix timestamp of next deduction
   createdAt: number;
@@ -170,6 +172,8 @@ export interface RecurringExpense {
   interval: number; // Every X days/weeks/months/years
   nextOccurrence: number; // Unix timestamp
   vaultType: VaultType; // Which vault to deduct from
+  startDate?: number | null; // Optional start date timestamp
+  endDate?: number | null; // Optional end date timestamp
   isActive: boolean;
   autoDeduct: boolean; // If true, auto-create transaction
   lastProcessed: number | null; // Unix timestamp
@@ -199,7 +203,7 @@ export interface RecurringTransaction {
   frequencyUnit: FrequencyUnit;
   frequencyInterval: number; // Every X days/weeks/months/years
   billingDay?: number | null; // Optional day of month (1-31)
-  startDate: number;
+  startDate?: number | null;
   endDate?: number | null;
   nextRunDate: number;
   lastRunDate?: number | null;
