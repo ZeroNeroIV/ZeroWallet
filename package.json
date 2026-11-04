@@ -1,6 +1,6 @@
 {
   "name": "wallet",
-  "version": "1.0.40",
+  "version": "1.0.41",
   "private": true,
   "scripts": {
     "android": "react-native run-android --port 8082",
