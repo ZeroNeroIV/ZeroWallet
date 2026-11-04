@@ -83,6 +83,21 @@ export default function ChatScreen({ navigation }: any) {
   }, [currentAccountId]);
 
   useEffect(() => {
+    // Automatically migrate deprecated Gemini 1.5 models to Gemini 3.8 Flash
+    const currentModel = aiSettings?.selectedModel;
+    if (
+      aiSettings?.provider === 'gemini' &&
+      (!currentModel ||
+        currentModel.startsWith('gemini-1.5') ||
+        currentModel === 'gemini-2.0-flash-lite')
+    ) {
+      settingsStore.updateAISettings({
+        selectedModel: 'gemini-3.8-flash',
+      });
+    }
+  }, [aiSettings?.provider, aiSettings?.selectedModel, settingsStore]);
+
+  useEffect(() => {
     if (messages.length > 0) {
       setTimeout(() => {
         scrollViewRef.current?.scrollToEnd({ animated: true });

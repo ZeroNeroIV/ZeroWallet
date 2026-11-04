@@ -216,7 +216,7 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: 'settings-storage',
       storage: mmkvStorage,
-      version: 5,
+      version: 6,
       migrate: (persistedState: any, version: number) => {
         // v5: googleDriveSettings
         if (version < 5) {
@@ -235,14 +235,18 @@ export const useSettingsStore = create<SettingsState>()(
         if (persistedState?.aiSettings?.selectedModel) {
           const oldModel = persistedState.aiSettings.selectedModel;
           const modelMigration: Record<string, string> = {
-            'gemini-2.0-flash-lite': 'gemini-1.5-flash',
+            'gemini-1.5-flash': 'gemini-3.8-flash',
+            'gemini-1.5-pro': 'gemini-3.1-pro-preview',
+            'gemini-2.0-flash-lite': 'gemini-3.5-flash-lite',
             'gemini-2.0-flash': 'gemini-2.5-flash',
-            'gemini-2.0-pro': 'gemini-1.5-pro',
+            'gemini-2.0-pro': 'gemini-3.1-pro-preview',
           };
 
           if (modelMigration[oldModel]) {
             console.log(`[SettingsStore] Migrating model: ${oldModel} → ${modelMigration[oldModel]}`);
             persistedState.aiSettings.selectedModel = modelMigration[oldModel];
+          } else if (oldModel.startsWith('gemini-1.5')) {
+            persistedState.aiSettings.selectedModel = 'gemini-3.8-flash';
           }
         }
 

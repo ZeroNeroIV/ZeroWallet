@@ -45,7 +45,7 @@ export class GeminiService {
     this.apiKey = apiKey;
     this.accountId = accountId;
     this.userId = userId;
-    this.modelId = modelId;
+    this.modelId = (modelId && !modelId.startsWith('gemini-1.5') ? modelId : 'gemini-3.8-flash') as GeminiModel;
     this.dataQuery = new DataQueryService(accountId);
     this.dataMutation = new DataMutationService(accountId, userId);
     this.writeHandlers = new Map<string, (params: any) => Promise<any>>([
@@ -258,7 +258,7 @@ export class GeminiService {
     if (enableFunctions) {
       body.tools = [
         {
-          function_declarations: this.getFunctionDefinitions(),
+          functionDeclarations: this.getFunctionDefinitions(),
         },
       ];
     }

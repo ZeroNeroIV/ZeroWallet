@@ -369,4 +369,45 @@ describe('FinancialToolRegistry & LayaHarness Gemini Compatibility', () => {
     expect(callHeaders['X-Title']).toBe('ZeroWallet AI Copilot');
     expect(callHeaders.Authorization).toBe('Bearer sk-or-test-key');
   });
+
+  test('automatically sanitizes deprecated gemini-1.5-flash and never requests 1.5 endpoints', async () => {
+    const legacySettings: AISettings = {
+      provider: 'gemini',
+      apiKey: 'test-gemini-key',
+      geminiApiKey: 'test-gemini-key',
+      selectedModel: 'gemini-1.5-flash',
+      system1Enabled: false,
+      isConfigured: true,
+      totalTokensUsed: 0,
+      conversationCount: 0,
+      lastUsed: null,
+    };
+
+    const fetchMock = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [
+          {
+            content: {
+              role: 'model',
+              parts: [{ text: 'Your net income today is $240.00.' }],
+            },
+          },
+        ],
+      }),
+    });
+
+    (global as any).fetch = fetchMock;
+
+    const harness = new LayaHarness(legacySettings, 'acc-1', 'user-1', 'USD', 1000);
+    const res = await harness.processMessage('just tell me my net income for this day only');
+
+    expect(res.text).toBe('Your net income today is $240.00.');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const url = fetchMock.mock.calls[0][0];
+    expect(url).toContain('models/gemini-3.8-flash:generateContent');
+    expect(url).not.toContain('gemini-1.5-flash');
+  });
 });

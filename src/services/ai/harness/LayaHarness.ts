@@ -131,6 +131,9 @@ export class LayaHarness {
    */
   private resolveGeminiModel(selectedModel?: string): string {
     const trimmed = (selectedModel || '').trim();
+    if (!trimmed || trimmed.startsWith('gemini-1.5') || trimmed === 'gemini-2.0-flash-lite') {
+      return 'gemini-3.8-flash';
+    }
     if (
       trimmed.startsWith('gemini-') &&
       !trimmed.includes('-tts') &&
@@ -139,7 +142,7 @@ export class LayaHarness {
     ) {
       return trimmed;
     }
-    return 'gemini-2.5-flash';
+    return 'gemini-3.8-flash';
   }
 
   /**
@@ -394,7 +397,7 @@ export class LayaHarness {
         this.resolveGeminiModel(model),
         'gemini-2.5-flash',
         'gemini-2.0-flash',
-        'gemini-1.5-flash',
+        'gemini-3.5-flash-lite',
       ])
     );
 
@@ -481,7 +484,7 @@ export class LayaHarness {
     if (tools && tools.length > 0) {
       body.tools = [
         {
-          function_declarations: tools,
+          functionDeclarations: tools,
         },
       ];
     }

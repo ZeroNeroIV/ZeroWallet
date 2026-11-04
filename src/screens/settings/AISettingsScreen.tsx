@@ -66,7 +66,7 @@ export default function AISettingsScreen({ navigation }: any) {
   );
 
   const [selectedModel, setSelectedModel] = useState<string>(
-    aiSettings?.selectedModel ||
+    (aiSettings?.selectedModel && !aiSettings.selectedModel.startsWith('gemini-1.5') ? aiSettings.selectedModel : undefined) ||
       (provider === 'groq'
         ? 'llama-3.3-70b-versatile'
         : provider === 'openrouter'
