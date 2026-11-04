@@ -14,7 +14,7 @@ import type { AgentResponse, AgentExecutionContext, ToolExecutionResult } from '
 import { FinancialToolRegistry } from './tools/financialTools';
 import { buildLayaSystemPrompt } from './prompts/layaSystemPrompt';
 import { LayaSystem1Router } from '../layaSystem1';
-import { GROQ_API_URL } from '../../../constants/aiProviders';
+import { GROQ_API_URL, OPENROUTER_API_URL } from '../../../constants/aiProviders';
 
 interface GeminiAPIPart {
   text?: string;
@@ -532,34 +532,48 @@ export class LayaHarness {
   }
 
   /**
-   * Fallback for OpenAI-compatible providers (Groq / Ollama)
+   * Universal Agent Loop for OpenAI-compatible providers (Groq, OpenRouter, Ollama, LM Studio)
+   * Executes multi-turn ReAct reasoning loop with tools, financial widgets, and mutation tickets.
    */
   private async executeOpenAICompatibleAgentLoop(
     prompt: string,
     context?: AIConversationContext
   ): Promise<AgentResponse> {
-    const isGroq = this.settings.provider === 'groq';
-    const apiKey = (
-      isGroq
-        ? this.settings.groqApiKey || this.settings.apiKey || ''
-        : this.settings.customApiKey || ''
-    ).trim();
-    const endpoint = isGroq
-      ? GROQ_API_URL
-      : `${(this.settings.customBaseUrl || 'http://localhost:11434/v1').replace(/\/+$/, '')}/chat/completions`;
+    const provider = this.settings.provider;
+    const isGroq = provider === 'groq';
+    const isOpenRouter = provider === 'openrouter';
 
-    if (isGroq && !apiKey) {
-      throw new Error('Groq Cloud API key not configured. Please add your key in AI Settings.');
+    let apiKey = '';
+    let endpoint = '';
+
+    if (isGroq) {
+      apiKey = (this.settings.groqApiKey || this.settings.apiKey || '').trim();
+      endpoint = GROQ_API_URL;
+      if (!apiKey) {
+        throw new Error('Groq Cloud API key not configured. Please add your free key in AI Settings.');
+      }
+    } else if (isOpenRouter) {
+      apiKey = (this.settings.openrouterApiKey || this.settings.apiKey || '').trim();
+      endpoint = OPENROUTER_API_URL;
+      if (!apiKey) {
+        throw new Error('OpenRouter API key not configured. Please add your key in AI Settings.');
+      }
+    } else {
+      apiKey = (this.settings.customApiKey || this.settings.apiKey || '').trim();
+      let base = (this.settings.customBaseUrl || 'http://localhost:11434/v1').trim();
+      if (!base.endsWith('/chat/completions')) {
+        base = base.replace(/\/+$/, '') + '/chat/completions';
+      }
+      endpoint = base;
     }
 
     const rawSelected = (this.settings.selectedModel || '').trim();
-    const primaryModel = isGroq
-      ? rawSelected && !rawSelected.startsWith('gemini-')
-        ? rawSelected
-        : 'llama-3.3-70b-versatile'
-      : rawSelected && !rawSelected.startsWith('gemini-')
-      ? rawSelected
-      : 'llama3.2:3b';
+    let primaryModel = rawSelected;
+    if (!primaryModel || primaryModel.startsWith('gemini-')) {
+      if (isGroq) primaryModel = 'llama-3.3-70b-versatile';
+      else if (isOpenRouter) primaryModel = 'deepseek/deepseek-r1';
+      else primaryModel = 'llama3.2:3b';
+    }
 
     const systemPrompt = buildLayaSystemPrompt({
       accountId: this.accountId,
@@ -568,7 +582,14 @@ export class LayaHarness {
       modelName: primaryModel,
     });
 
-    const chatMessages: Array<{ role: string; content: string }> = [
+    const execContext: AgentExecutionContext = {
+      accountId: this.accountId,
+      userId: this.userId,
+      currency: this.currency,
+      balance: this.balance,
+    };
+
+    const chatMessages: Array<any> = [
       { role: 'system', content: systemPrompt },
     ];
 
@@ -587,43 +608,146 @@ export class LayaHarness {
 
     chatMessages.push({ role: 'user', content: prompt });
 
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (apiKey) {
+      headers.Authorization = `Bearer ${apiKey}`;
+    }
+    if (isOpenRouter) {
+      headers['HTTP-Referer'] = 'https://github.com/ZeroWallet';
+      headers['X-Title'] = 'ZeroWallet AI Copilot';
+    }
 
-    const candidateModels = isGroq
-      ? Array.from(new Set([primaryModel, 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'llama-3.2-3b-preview']))
-      : [primaryModel];
+    // Format tool definitions for OpenAI tool calling spec
+    const openAITools = this.toolRegistry.getToolDefinitions().map((t) => ({
+      type: 'function',
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters || { type: 'object', properties: {} },
+      },
+    }));
 
-    let lastErr: Error | null = null;
-    for (const candidateModel of candidateModels) {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          model: candidateModel,
-          messages: chatMessages,
-          temperature: 0.5,
-        }),
-      });
+    const accumulatedWidgets: FinancialWidget[] = [];
+    const accumulatedActions: PendingAction[] = [];
 
-      if (res.ok) {
-        const json = await res.json();
-        const content = json.choices?.[0]?.message?.content || 'Unable to generate response.';
-        return {
-          text: content,
-          engineBadge: 'system2',
-        };
+    let turns = 0;
+    const maxTurns = 4;
+    let finalAnswer = '';
+
+    while (turns < maxTurns) {
+      turns++;
+
+      let res;
+      try {
+        res = await fetch(endpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            model: primaryModel,
+            messages: chatMessages,
+            tools: openAITools,
+            temperature: 0.3,
+            max_tokens: 1024,
+          }),
+        });
+      } catch (networkErr: any) {
+        throw new Error(`Failed to reach ${provider}: ${networkErr.message || 'Network error'}`);
       }
 
-      const errJson = await res.json().catch(() => ({}));
-      lastErr = new Error(
-        errJson.error?.message || `Inference provider failed with status ${res.status}`
-      );
-      if (res.status === 401 || res.status === 403) {
-        throw lastErr;
+      if (!res.ok) {
+        // Fallback: If model doesn't support tools (e.g. small local SLM on Ollama), retry once without tools
+        if (turns === 1 && res.status >= 400 && res.status < 500 && res.status !== 401 && res.status !== 403) {
+          try {
+            const noToolsRes = await fetch(endpoint, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({
+                model: primaryModel,
+                messages: chatMessages,
+                temperature: 0.5,
+              }),
+            });
+            if (noToolsRes.ok) {
+              const noToolsJson = await noToolsRes.json();
+              return {
+                text: noToolsJson.choices?.[0]?.message?.content || 'Ledger review complete.',
+                engineBadge: 'system2',
+              };
+            }
+          } catch {}
+        }
+
+        const errJson = await res.json().catch(() => ({}));
+        const errorMsg = errJson.error?.message || `Provider returned HTTP ${res.status}`;
+        throw new Error(`${provider.toUpperCase()} Error: ${errorMsg}`);
+      }
+
+      const json = await res.json();
+      const choice = json.choices?.[0];
+      if (!choice) break;
+
+      const messageObj = choice.message;
+      const toolCalls = messageObj?.tool_calls;
+
+      if (toolCalls && Array.isArray(toolCalls) && toolCalls.length > 0) {
+        chatMessages.push(messageObj);
+
+        for (const call of toolCalls) {
+          const fnName = call.function?.name;
+          let fnArgs = {};
+          try {
+            fnArgs = JSON.parse(call.function?.arguments || '{}');
+          } catch {
+            fnArgs = {};
+          }
+
+          const tool = this.toolRegistry.getExecutableTool(fnName);
+          let toolResult;
+
+          if (tool) {
+            toolResult = await tool.execute(fnArgs, execContext);
+          } else {
+            toolResult = { success: false, error: `Unknown tool: ${fnName}` };
+          }
+
+          if (toolResult.widget) {
+            accumulatedWidgets.push(toolResult.widget);
+          }
+          if (toolResult.pendingAction) {
+            accumulatedActions.push(toolResult.pendingAction);
+          }
+
+          const resultPayload = toolResult.data || {
+            success: toolResult.success,
+            error: toolResult.error,
+          };
+
+          chatMessages.push({
+            role: 'tool',
+            tool_call_id: call.id,
+            name: fnName,
+            content: JSON.stringify(resultPayload),
+          });
+        }
+      } else {
+        finalAnswer = messageObj?.content || 'I completed your financial request.';
+        break;
       }
     }
 
-    throw lastErr || new Error('Inference provider request failed');
+    if (!finalAnswer && accumulatedActions.length > 0) {
+      finalAnswer = `I have drafted ${accumulatedActions[0].summary}. Please review the interactive ticket below.`;
+    } else if (!finalAnswer && accumulatedWidgets.length > 0) {
+      finalAnswer = `Here is your requested financial visualization.`;
+    }
+
+    return {
+      text: finalAnswer || 'Ledger analysis complete.',
+      widgets: accumulatedWidgets.length > 0 ? accumulatedWidgets : undefined,
+      pendingActions: accumulatedActions.length > 0 ? accumulatedActions : undefined,
+      engineBadge: 'system2',
+    };
   }
 }

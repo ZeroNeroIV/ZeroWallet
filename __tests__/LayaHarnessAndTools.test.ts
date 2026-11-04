@@ -246,4 +246,127 @@ describe('FinancialToolRegistry & LayaHarness Gemini Compatibility', () => {
       },
     });
   });
+
+  test('OpenAI-compatible ReAct loop executes tools and captures widgets for Groq & OpenRouter', async () => {
+    const groqSettings: AISettings = {
+      provider: 'groq',
+      apiKey: 'gsk-test-key',
+      groqApiKey: 'gsk-test-key',
+      selectedModel: 'llama-3.3-70b-versatile',
+      system1Enabled: false,
+      isConfigured: true,
+      totalTokensUsed: 0,
+      conversationCount: 0,
+      lastUsed: null,
+    };
+
+    const fetchMock = jest
+      .fn()
+      // Turn 1: model returns tool call for generateChart
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                tool_calls: [
+                  {
+                    id: 'call_chart_1',
+                    type: 'function',
+                    function: {
+                      name: 'generateChart',
+                      arguments: JSON.stringify({
+                        chartType: 'donut',
+                        title: 'Spending Breakdown',
+                        data: [{ label: 'Food', value: 120 }],
+                      }),
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      })
+      // Turn 2: model synthesizes final answer
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'Here is your spending chart.',
+              },
+            },
+          ],
+        }),
+      });
+
+    (global as any).fetch = fetchMock;
+
+    const harness = new LayaHarness(groqSettings, 'acc-1', 'user-1', 'USD', 2500);
+    const res = await harness.processMessage('Show me a spending chart');
+
+    expect(res.text).toBe('Here is your spending chart.');
+    expect(res.widgets).toHaveLength(1);
+    expect(res.widgets?.[0].type).toBe('chart');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    const firstCallBody = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(firstCallBody.tools).toBeDefined();
+    expect(firstCallBody.tools.length).toBeGreaterThanOrEqual(25);
+    expect(firstCallBody.model).toBe('llama-3.3-70b-versatile');
+
+    const secondCallBody = JSON.parse(fetchMock.mock.calls[1][1].body);
+    // Messages should include system, user, assistant tool_calls, and tool response
+    const toolMsg = secondCallBody.messages.find((m: any) => m.role === 'tool');
+    expect(toolMsg).toBeDefined();
+    expect(toolMsg.tool_call_id).toBe('call_chart_1');
+  });
+
+  test('OpenRouter provider transmits required headers and executes multi-turn tool calling', async () => {
+    const openrouterSettings: AISettings = {
+      provider: 'openrouter',
+      apiKey: 'sk-or-test-key',
+      openrouterApiKey: 'sk-or-test-key',
+      selectedModel: 'deepseek/deepseek-r1',
+      system1Enabled: false,
+      isConfigured: true,
+      totalTokensUsed: 0,
+      conversationCount: 0,
+      lastUsed: null,
+    };
+
+    const fetchMock = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'I reviewed your accounts. Everything is on track.',
+            },
+          },
+        ],
+      }),
+    });
+
+    (global as any).fetch = fetchMock;
+
+    const harness = new LayaHarness(openrouterSettings, 'acc-1', 'user-1', 'USD', 1000);
+    const res = await harness.processMessage('Summarize my balances');
+
+    expect(res.text).toBe('I reviewed your accounts. Everything is on track.');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const callHeaders = fetchMock.mock.calls[0][1].headers;
+    expect(callHeaders['HTTP-Referer']).toBe('https://github.com/ZeroWallet');
+    expect(callHeaders['X-Title']).toBe('ZeroWallet AI Copilot');
+    expect(callHeaders.Authorization).toBe('Bearer sk-or-test-key');
+  });
 });

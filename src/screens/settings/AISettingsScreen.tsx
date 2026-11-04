@@ -1,11 +1,12 @@
 /**
- * AISettingsScreen — Simplizum Multi-Provider Architectural Deck
+ * AISettingsScreen — Multi-Provider Intelligence Engine & Architectural Deck
  *
  * Disciplined, sparse, hairline-bordered AI engine configuration:
- *  - System-1 Laya Sub-20ms Router toggle
- *  - Multi-Provider architectural deck (Google Gemini, Groq SLM, Local Ollama)
- *  - Foundation model matrix with latency & capability specs
- *  - Secure masked API credential storage
+ *  - System-1 Laya Sub-20ms Hyper-Router toggle
+ *  - Multi-Provider architectural deck (Google Gemini, Groq Cloud, OpenRouter, Local SLM / Custom)
+ *  - Provider portal links, API keys, and official documentation gateways
+ *  - 1-tap local endpoint presets (Ollama Local, Ollama Android Host 10.0.2.2, LM Studio, OpenAI)
+ *  - Foundation model matrix with curated specs & live REST discovery
  *  - Real-time connectivity benchmark with millisecond latency ping
  */
 
@@ -32,12 +33,12 @@ import { lightHaptic, mediumHaptic, heavyHaptic, errorHaptic } from '../../servi
 import {
   PROVIDER_LABELS,
   PROVIDER_MODELS,
+  PROVIDER_PORTAL_LINKS,
+  LOCAL_ENDPOINT_PRESETS,
   GROQ_API_URL,
+  OPENROUTER_API_URL,
 } from '../../constants/aiProviders';
 import type { AIProvider } from '../../types/ai';
-
-const GROQ_CONSOLE_URL = 'https://console.groq.com/keys';
-const GEMINI_STUDIO_URL = 'https://aistudio.google.com/app/apikey';
 
 export default function AISettingsScreen({ navigation }: any) {
   const store = useSettingsStore();
@@ -45,23 +46,34 @@ export default function AISettingsScreen({ navigation }: any) {
   const updateAISettings = store.updateAISettings;
   const themeColors = useThemeColors();
 
-  // State
+  // Active Provider & Laya System-1 toggle
   const [provider, setProvider] = useState<AIProvider>(aiSettings?.provider || 'gemini');
   const [system1Enabled, setSystem1Enabled] = useState<boolean>(aiSettings?.system1Enabled ?? true);
 
-  // Keys per provider
+  // Credentials per provider
   const [geminiKey, setGeminiKey] = useState<string>(
     aiSettings?.geminiApiKey || (aiSettings?.provider === 'gemini' ? aiSettings?.apiKey || '' : '')
   );
   const [groqKey, setGroqKey] = useState<string>(
     aiSettings?.groqApiKey || (aiSettings?.provider === 'groq' ? aiSettings?.apiKey || '' : '')
   );
+  const [openrouterKey, setOpenrouterKey] = useState<string>(
+    aiSettings?.openrouterApiKey || ''
+  );
   const [customKey, setCustomKey] = useState<string>(aiSettings?.customApiKey || '');
   const [customBaseUrl, setCustomBaseUrl] = useState<string>(
     aiSettings?.customBaseUrl || 'http://localhost:11434/v1'
   );
+
   const [selectedModel, setSelectedModel] = useState<string>(
-    aiSettings?.selectedModel || (provider === 'groq' ? 'llama-3.2-3b-preview' : 'gemini-3.8-flash')
+    aiSettings?.selectedModel ||
+      (provider === 'groq'
+        ? 'llama-3.3-70b-versatile'
+        : provider === 'openrouter'
+        ? 'deepseek/deepseek-r1'
+        : provider === 'custom_openai'
+        ? 'llama3.2:3b'
+        : 'gemini-3.8-flash')
   );
 
   const [showKey, setShowKey] = useState<boolean>(false);
@@ -69,27 +81,43 @@ export default function AISettingsScreen({ navigation }: any) {
   const [latencyResult, setLatencyResult] = useState<number | null>(null);
   const [hasChanges, setHasChanges] = useState<boolean>(false);
 
-  // Dynamic model list fetched from the provider's API
+  // Model matrix view mode: 'curated' vs 'live'
+  const [modelViewMode, setModelViewMode] = useState<'curated' | 'live'>('curated');
+
+  // Dynamic model list fetched from provider's API
   const [fetchedModels, setFetchedModels] = useState<string[]>([]);
   const [isFetchingModels, setIsFetchingModels] = useState<boolean>(false);
   const [fetchModelError, setFetchModelError] = useState<string | null>(null);
   const fetchAbortRef = useRef<AbortController | null>(null);
 
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
+  const activePortalMeta = PROVIDER_PORTAL_LINKS[provider];
 
   const handleProviderSelect = (p: AIProvider) => {
     lightHaptic();
     setProvider(p);
     setLatencyResult(null);
     setHasChanges(true);
-    // Clear fetched models — they'll reload via useEffect when key is present
     setFetchedModels([]);
     setFetchModelError(null);
+    setModelViewMode('curated');
+
     const models = PROVIDER_MODELS[p];
     if (models && models.length > 0) {
       setSelectedModel(models.find((m) => m.recommended)?.id || models[0].id);
     }
   };
+
+  // Open external URL with validation
+  const handleOpenUrl = useCallback(async (url: string) => {
+    lightHaptic();
+    const canOpen = await Linking.canOpenURL(url);
+    if (canOpen) {
+      await Linking.openURL(url);
+    } else {
+      Alert.alert('Cannot open link', `Direct URL:\n${url}`);
+    }
+  }, []);
 
   // Fetch available models from the provider's REST endpoint
   const fetchModels = useCallback(async () => {
@@ -103,12 +131,17 @@ export default function AISettingsScreen({ navigation }: any) {
     try {
       if (provider === 'gemini') {
         const key = geminiKey.trim();
-        if (!key) { setIsFetchingModels(false); return; }
+        if (!key) {
+          setIsFetchingModels(false);
+          return;
+        }
         const res = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`,
           { signal: controller.signal }
         );
-        if (!res.ok) { throw new Error(`${res.status}`); }
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
         const json = await res.json();
         const ids: string[] = (json.models || [])
           .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
@@ -128,36 +161,87 @@ export default function AISettingsScreen({ navigation }: any) {
         if (ids.length > 0) {
           setSelectedModel((prev) => {
             if (prev && ids.includes(prev)) return prev;
-            const preferred = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+            const preferred = [
+              'gemini-3.8-flash',
+              'gemini-3.5-flash-lite',
+              'gemini-2.5-flash',
+              'gemini-2.0-flash',
+              'gemini-1.5-flash',
+            ];
             return preferred.find((m) => ids.includes(m)) || ids[0];
           });
         }
       } else if (provider === 'groq') {
         const key = groqKey.trim();
-        if (!key) { setIsFetchingModels(false); return; }
+        if (!key) {
+          setIsFetchingModels(false);
+          return;
+        }
         const res = await fetch('https://api.groq.com/openai/v1/models', {
           headers: { Authorization: `Bearer ${key}` },
           signal: controller.signal,
         });
-        if (!res.ok) { throw new Error(`${res.status}`); }
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
         const json = await res.json();
         const ids: string[] = (json.data || []).map((m: any) => m.id as string).filter(Boolean);
         setFetchedModels(ids);
         if (ids.length > 0) {
           setSelectedModel((prev) => {
             if (prev && ids.includes(prev)) return prev;
-            const preferred = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'llama-3.2-3b-preview'];
+            const preferred = [
+              'llama-3.3-70b-versatile',
+              'llama-3.1-8b-instant',
+              'llama-3.2-3b-preview',
+            ];
+            return preferred.find((m) => ids.includes(m)) || ids[0];
+          });
+        }
+      } else if (provider === 'openrouter') {
+        const key = openrouterKey.trim();
+        if (!key) {
+          setIsFetchingModels(false);
+          return;
+        }
+        const res = await fetch('https://openrouter.ai/api/v1/models', {
+          headers: { Authorization: `Bearer ${key}` },
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        const json = await res.json();
+        const ids: string[] = (json.data || []).map((m: any) => m.id as string).filter(Boolean);
+        setFetchedModels(ids);
+        if (ids.length > 0) {
+          setSelectedModel((prev) => {
+            if (prev && ids.includes(prev)) return prev;
+            const preferred = [
+              'deepseek/deepseek-r1',
+              'deepseek/deepseek-chat',
+              'meta-llama/llama-3.3-70b-instruct',
+              'google/gemini-2.5-flash',
+              'openai/gpt-4o-mini',
+            ];
             return preferred.find((m) => ids.includes(m)) || ids[0];
           });
         }
       } else if (provider === 'custom_openai') {
         const base = customBaseUrl.trim().replace(/\/+$/, '');
-        if (!base) { setIsFetchingModels(false); return; }
+        if (!base) {
+          setIsFetchingModels(false);
+          return;
+        }
         const endpoint = `${base}/models`;
         const headers: Record<string, string> = {};
-        if (customKey.trim()) { headers.Authorization = `Bearer ${customKey.trim()}`; }
+        if (customKey.trim()) {
+          headers.Authorization = `Bearer ${customKey.trim()}`;
+        }
         const res = await fetch(endpoint, { headers, signal: controller.signal });
-        if (!res.ok) { throw new Error(`${res.status}`); }
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
         const json = await res.json();
         const ids: string[] = (json.data || json.models || [])
           .map((m: any) => (m.id || m.name) as string)
@@ -166,28 +250,18 @@ export default function AISettingsScreen({ navigation }: any) {
       }
     } catch (e: any) {
       if (e?.name === 'AbortError') return;
-      setFetchModelError('Could not load models — check your key/endpoint');
+      setFetchModelError('Could not load models — check key/endpoint');
     } finally {
       setIsFetchingModels(false);
     }
-  }, [provider, geminiKey, groqKey, customKey, customBaseUrl]);
+  }, [provider, geminiKey, groqKey, openrouterKey, customKey, customBaseUrl]);
 
-  // Reload model list whenever the active key or base url changes
   useEffect(() => {
     fetchModels();
-    return () => { fetchAbortRef.current?.abort(); };
+    return () => {
+      fetchAbortRef.current?.abort();
+    };
   }, [fetchModels]);
-
-  const handleGetAPIKey = useCallback(async () => {
-    lightHaptic();
-    const url = provider === 'groq' ? GROQ_CONSOLE_URL : GEMINI_STUDIO_URL;
-    const canOpen = await Linking.canOpenURL(url);
-    if (canOpen) {
-      await Linking.openURL(url);
-    } else {
-      Alert.alert('Cannot open link', `Direct URL:\n${url}`);
-    }
-  }, [provider]);
 
   // Live test connection with latency benchmark
   const handleTestConnection = useCallback(async () => {
@@ -197,37 +271,7 @@ export default function AISettingsScreen({ navigation }: any) {
     const startTime = Date.now();
 
     try {
-      if (provider === 'groq') {
-        if (!groqKey || groqKey.trim().length === 0) {
-          errorHaptic();
-          Alert.alert('Key Required', 'Please enter your Groq API key.');
-          return;
-        }
-
-        const res = await fetch(GROQ_API_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${groqKey.trim()}`,
-          },
-          body: JSON.stringify({
-            model: selectedModel || 'llama-3.2-3b-preview',
-            messages: [{ role: 'user', content: 'ping' }],
-            max_tokens: 5,
-          }),
-        });
-
-        const elapsed = Date.now() - startTime;
-        if (res.ok) {
-          lightHaptic();
-          setLatencyResult(elapsed);
-          Alert.alert('BENCHMARK PASSED', `Connected to Groq Cloud in ${elapsed}ms.`);
-        } else {
-          errorHaptic();
-          const err = await res.json();
-          Alert.alert('Connection Failed', err.error?.message || 'Check your Groq API key.');
-        }
-      } else if (provider === 'gemini') {
+      if (provider === 'gemini') {
         if (!geminiKey || geminiKey.trim().length === 0) {
           errorHaptic();
           Alert.alert('Key Required', 'Please enter your Google Gemini API key.');
@@ -246,8 +290,70 @@ export default function AISettingsScreen({ navigation }: any) {
           Alert.alert('BENCHMARK PASSED', `Connected to Google Gemini in ${elapsed}ms.`);
         } else {
           errorHaptic();
-          const err = await res.json();
+          const err = await res.json().catch(() => ({}));
           Alert.alert('Connection Failed', err.error?.message || 'Check your Gemini key.');
+        }
+      } else if (provider === 'groq') {
+        if (!groqKey || groqKey.trim().length === 0) {
+          errorHaptic();
+          Alert.alert('Key Required', 'Please enter your Groq API key.');
+          return;
+        }
+
+        const res = await fetch(GROQ_API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${groqKey.trim()}`,
+          },
+          body: JSON.stringify({
+            model: selectedModel || 'llama-3.3-70b-versatile',
+            messages: [{ role: 'user', content: 'ping' }],
+            max_tokens: 5,
+          }),
+        });
+
+        const elapsed = Date.now() - startTime;
+        if (res.ok) {
+          lightHaptic();
+          setLatencyResult(elapsed);
+          Alert.alert('BENCHMARK PASSED', `Connected to Groq Cloud in ${elapsed}ms.`);
+        } else {
+          errorHaptic();
+          const err = await res.json().catch(() => ({}));
+          Alert.alert('Connection Failed', err.error?.message || 'Check your Groq API key.');
+        }
+      } else if (provider === 'openrouter') {
+        if (!openrouterKey || openrouterKey.trim().length === 0) {
+          errorHaptic();
+          Alert.alert('Key Required', 'Please enter your OpenRouter API key.');
+          return;
+        }
+
+        const res = await fetch(OPENROUTER_API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${openrouterKey.trim()}`,
+            'HTTP-Referer': 'https://github.com/ZeroWallet',
+            'X-Title': 'ZeroWallet AI Copilot',
+          },
+          body: JSON.stringify({
+            model: selectedModel || 'deepseek/deepseek-r1',
+            messages: [{ role: 'user', content: 'ping' }],
+            max_tokens: 5,
+          }),
+        });
+
+        const elapsed = Date.now() - startTime;
+        if (res.ok) {
+          lightHaptic();
+          setLatencyResult(elapsed);
+          Alert.alert('BENCHMARK PASSED', `Connected to OpenRouter in ${elapsed}ms.`);
+        } else {
+          errorHaptic();
+          const err = await res.json().catch(() => ({}));
+          Alert.alert('Connection Failed', err.error?.message || 'Check your OpenRouter API key.');
         }
       } else {
         let endpoint = customBaseUrl.trim();
@@ -264,7 +370,7 @@ export default function AISettingsScreen({ navigation }: any) {
           method: 'POST',
           headers,
           body: JSON.stringify({
-            model: selectedModel || 'smollm2:1.7b',
+            model: selectedModel || 'llama3.2:3b',
             messages: [{ role: 'user', content: 'ping' }],
             max_tokens: 5,
           }),
@@ -289,12 +395,18 @@ export default function AISettingsScreen({ navigation }: any) {
     } finally {
       setIsValidating(false);
     }
-  }, [provider, groqKey, geminiKey, customKey, customBaseUrl, selectedModel]);
+  }, [provider, geminiKey, groqKey, openrouterKey, customKey, customBaseUrl, selectedModel]);
 
   const handleSave = () => {
     heavyHaptic();
     const activeApiKey =
-      provider === 'groq' ? groqKey : provider === 'gemini' ? geminiKey : customKey;
+      provider === 'groq'
+        ? groqKey
+        : provider === 'gemini'
+        ? geminiKey
+        : provider === 'openrouter'
+        ? openrouterKey
+        : customKey;
 
     updateAISettings({
       provider,
@@ -302,16 +414,17 @@ export default function AISettingsScreen({ navigation }: any) {
       apiKey: activeApiKey,
       groqApiKey: groqKey,
       geminiApiKey: geminiKey,
+      openrouterApiKey: openrouterKey,
       customApiKey: customKey,
       customBaseUrl,
       selectedModel,
-      isConfigured: provider === 'custom_openai' ? true : Boolean(activeApiKey && activeApiKey.length > 0),
+      isConfigured:
+        provider === 'custom_openai' ? true : Boolean(activeApiKey && activeApiKey.length > 0),
     });
 
     setHasChanges(false);
     Alert.alert('CONFIGURED', 'AI Assistant preferences updated.');
   };
-
 
   return (
     <View style={styles.root}>
@@ -367,20 +480,44 @@ export default function AISettingsScreen({ navigation }: any) {
             <Text style={styles.cardHeaderTitle}>FOUNDATION PROVIDER DECK</Text>
           </View>
           <View style={styles.providerRow}>
-            {(['gemini', 'groq', 'custom_openai'] as AIProvider[]).map((p) => {
+            {(['gemini', 'groq', 'openrouter', 'custom_openai'] as AIProvider[]).map((p) => {
               const isSelected = provider === p;
               const meta = PROVIDER_LABELS[p];
+              const shortName =
+                p === 'gemini'
+                  ? 'GEMINI'
+                  : p === 'groq'
+                  ? 'GROQ'
+                  : p === 'openrouter'
+                  ? 'OPENROUTER'
+                  : 'LOCAL SLM';
+
+              const badgeText =
+                p === 'gemini'
+                  ? 'Multimodal'
+                  : p === 'groq'
+                  ? 'Ultra-Fast'
+                  : p === 'openrouter'
+                  ? 'Unified'
+                  : 'Private';
+
               return (
                 <TouchableOpacity
                   key={p}
                   style={[styles.providerTab, isSelected ? styles.providerTabActive : null]}
                   onPress={() => handleProviderSelect(p)}
                 >
-                  <Text style={[styles.providerTabTitle, isSelected ? styles.providerTabTitleActive : null]}>
-                    {meta.name.toUpperCase()}
+                  <Text
+                    style={[styles.providerTabTitle, isSelected ? styles.providerTabTitleActive : null]}
+                    numberOfLines={1}
+                  >
+                    {shortName}
                   </Text>
-                  <Text style={[styles.providerTabSub, isSelected ? styles.providerTabSubActive : null]}>
-                    {p === 'gemini' ? 'Multimodal' : p === 'groq' ? 'Ultra-Fast' : 'Self-Hosted'}
+                  <Text
+                    style={[styles.providerTabSub, isSelected ? styles.providerTabSubActive : null]}
+                    numberOfLines={1}
+                  >
+                    {badgeText}
                   </Text>
                 </TouchableOpacity>
               );
@@ -388,7 +525,63 @@ export default function AISettingsScreen({ navigation }: any) {
           </View>
         </View>
 
-        {/* CARD 3: CREDENTIALS & SECURITY VAULT */}
+        {/* CARD 3: PROVIDER PORTAL & DOCUMENTATION LINKS */}
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.cardHeaderTitle}>PROVIDER PORTAL & DOCUMENTATION</Text>
+            {activePortalMeta?.badge && (
+              <View style={styles.recBadge}>
+                <Text style={styles.recBadgeText}>{activePortalMeta.badge}</Text>
+              </View>
+            )}
+          </View>
+          <View style={styles.portalBody}>
+            <View style={styles.portalMetaHeader}>
+              <MaterialCommunityIcons
+                name={activePortalMeta?.icon || 'brain'}
+                size={22}
+                color={themeColors.text}
+              />
+              <View style={styles.portalMetaTexts}>
+                <Text style={styles.portalName}>{activePortalMeta?.name}</Text>
+                <Text style={styles.portalSubtitle}>{activePortalMeta?.subtitle}</Text>
+              </View>
+            </View>
+
+            <Text style={styles.portalDescription}>{activePortalMeta?.description}</Text>
+
+            <View style={styles.freeTierRow}>
+              <MaterialCommunityIcons name="tag-outline" size={14} color={themeColors.textSecondary} />
+              <Text style={styles.freeTierText}>{activePortalMeta?.freeTier}</Text>
+            </View>
+
+            <View style={styles.portalLinksGrid}>
+              <TouchableOpacity
+                style={styles.portalLinkButton}
+                onPress={() => handleOpenUrl(activePortalMeta.consoleUrl)}
+              >
+                <MaterialCommunityIcons name="key-outline" size={15} color={themeColors.text} />
+                <Text style={styles.portalLinkButtonText} numberOfLines={1}>
+                  {activePortalMeta.consoleLabel}
+                </Text>
+                <MaterialCommunityIcons name="open-in-new" size={12} color={themeColors.textSecondary} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.portalLinkButton}
+                onPress={() => handleOpenUrl(activePortalMeta.docsUrl)}
+              >
+                <MaterialCommunityIcons name="book-open-outline" size={15} color={themeColors.text} />
+                <Text style={styles.portalLinkButtonText} numberOfLines={1}>
+                  Official Docs & Guide
+                </Text>
+                <MaterialCommunityIcons name="open-in-new" size={12} color={themeColors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
+        {/* CARD 4: CREDENTIALS & SECURITY VAULT */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardHeaderTitle}>CREDENTIALS & SECURITY</Text>
@@ -397,18 +590,35 @@ export default function AISettingsScreen({ navigation }: any) {
           {provider !== 'custom_openai' ? (
             <View style={styles.cardBody}>
               <Text style={styles.fieldLabel}>
-                {provider === 'groq' ? 'GROQ API KEY' : 'GOOGLE GEMINI API KEY'}
+                {provider === 'groq'
+                  ? 'GROQ API KEY'
+                  : provider === 'openrouter'
+                  ? 'OPENROUTER API KEY'
+                  : 'GOOGLE GEMINI API KEY'}
               </Text>
               <View style={styles.inputContainer}>
                 <TextInput
                   style={styles.keyInput}
-                  value={provider === 'groq' ? groqKey : geminiKey}
+                  value={
+                    provider === 'groq'
+                      ? groqKey
+                      : provider === 'openrouter'
+                      ? openrouterKey
+                      : geminiKey
+                  }
                   onChangeText={(val) => {
                     if (provider === 'groq') setGroqKey(val.trim());
+                    else if (provider === 'openrouter') setOpenrouterKey(val.trim());
                     else setGeminiKey(val.trim());
                     setHasChanges(true);
                   }}
-                  placeholder={`Paste ${provider === 'groq' ? 'gsk_...' : 'AIza...'} key`}
+                  placeholder={
+                    provider === 'groq'
+                      ? 'Paste gsk_... key'
+                      : provider === 'openrouter'
+                      ? 'Paste sk-or-... key'
+                      : 'Paste AIza... key'
+                  }
                   placeholderTextColor={themeColors.textSecondary}
                   secureTextEntry={!showKey}
                   autoCapitalize="none"
@@ -427,16 +637,53 @@ export default function AISettingsScreen({ navigation }: any) {
                 </TouchableOpacity>
               </View>
 
-              <TouchableOpacity style={styles.linkRow} onPress={handleGetAPIKey}>
+              <TouchableOpacity
+                style={styles.linkRow}
+                onPress={() => handleOpenUrl(activePortalMeta.consoleUrl)}
+              >
                 <MaterialCommunityIcons name="open-in-new" size={14} color={themeColors.text} />
                 <Text style={styles.linkText}>
-                  Get free key from {provider === 'groq' ? 'Groq Console' : 'Google AI Studio'}
+                  Get free API key from {activePortalMeta.consoleLabel}
                 </Text>
               </TouchableOpacity>
             </View>
           ) : (
             <View style={styles.cardBody}>
-              <Text style={styles.fieldLabel}>LOCAL ENDPOINT BASE URL</Text>
+              <Text style={styles.fieldLabel}>QUICK ENDPOINT PRESETS</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.presetRow}
+              >
+                {LOCAL_ENDPOINT_PRESETS.map((preset) => {
+                  const isPresetActive = customBaseUrl.trim() === preset.baseUrl.trim();
+                  return (
+                    <TouchableOpacity
+                      key={preset.id}
+                      style={[styles.presetPill, isPresetActive ? styles.presetPillActive : null]}
+                      onPress={() => {
+                        lightHaptic();
+                        setCustomBaseUrl(preset.baseUrl);
+                        setSelectedModel(preset.defaultModel);
+                        setHasChanges(true);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.presetPillText,
+                          isPresetActive ? styles.presetPillTextActive : null,
+                        ]}
+                      >
+                        {preset.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              <Text style={[styles.fieldLabel, { marginTop: spacing.md }]}>
+                LOCAL ENDPOINT BASE URL
+              </Text>
               <TextInput
                 style={styles.plainInput}
                 value={customBaseUrl}
@@ -444,13 +691,18 @@ export default function AISettingsScreen({ navigation }: any) {
                   setCustomBaseUrl(val.trim());
                   setHasChanges(true);
                 }}
-                placeholder="http://192.168.1.100:11434/v1"
+                placeholder="http://localhost:11434/v1"
                 placeholderTextColor={themeColors.textSecondary}
                 autoCapitalize="none"
                 autoCorrect={false}
               />
+              <Text style={styles.hintText}>
+                Android Emulator host: http://10.0.2.2:11434/v1 · Physical device: use LAN IP
+              </Text>
 
-              <Text style={[styles.fieldLabel, { marginTop: spacing.md }]}>BEARER TOKEN (OPTIONAL)</Text>
+              <Text style={[styles.fieldLabel, { marginTop: spacing.md }]}>
+                BEARER TOKEN (OPTIONAL)
+              </Text>
               <TextInput
                 style={styles.plainInput}
                 value={customKey}
@@ -458,7 +710,7 @@ export default function AISettingsScreen({ navigation }: any) {
                   setCustomKey(val.trim());
                   setHasChanges(true);
                 }}
-                placeholder="Authorization header token"
+                placeholder="Authorization header token (e.g. OpenAI key)"
                 placeholderTextColor={themeColors.textSecondary}
                 secureTextEntry={!showKey}
                 autoCapitalize="none"
@@ -467,38 +719,128 @@ export default function AISettingsScreen({ navigation }: any) {
           )}
         </View>
 
-
-        {/* CARD 4: FOUNDATION MODEL MATRIX */}
+        {/* CARD 5: FOUNDATION MODEL MATRIX */}
         <View style={styles.card}>
-          <View style={styles.cardHeader}>
+          <View style={styles.cardHeaderRow}>
             <Text style={styles.cardHeaderTitle}>FOUNDATION MODEL MATRIX</Text>
-            <TouchableOpacity
-              onPress={() => { lightHaptic(); fetchModels(); }}
-              hitSlop={8}
-              disabled={isFetchingModels}
-            >
-              {isFetchingModels ? (
-                <ActivityIndicator size="small" color={themeColors.textSecondary} />
-              ) : (
-                <MaterialCommunityIcons name="refresh" size={16} color={themeColors.textSecondary} />
+            <View style={styles.modelHeaderActions}>
+              {fetchedModels.length > 0 && (
+                <View style={styles.modeToggleGroup}>
+                  <TouchableOpacity
+                    style={[
+                      styles.modeToggleBtn,
+                      modelViewMode === 'curated' ? styles.modeToggleBtnActive : null,
+                    ]}
+                    onPress={() => {
+                      lightHaptic();
+                      setModelViewMode('curated');
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.modeToggleText,
+                        modelViewMode === 'curated' ? styles.modeToggleTextActive : null,
+                      ]}
+                    >
+                      CURATED
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.modeToggleBtn,
+                      modelViewMode === 'live' ? styles.modeToggleBtnActive : null,
+                    ]}
+                    onPress={() => {
+                      lightHaptic();
+                      setModelViewMode('live');
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.modeToggleText,
+                        modelViewMode === 'live' ? styles.modeToggleTextActive : null,
+                      ]}
+                    >
+                      LIVE ({fetchedModels.length})
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               )}
-            </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  lightHaptic();
+                  fetchModels();
+                }}
+                hitSlop={8}
+                disabled={isFetchingModels}
+              >
+                {isFetchingModels ? (
+                  <ActivityIndicator size="small" color={themeColors.textSecondary} />
+                ) : (
+                  <MaterialCommunityIcons
+                    name="refresh"
+                    size={16}
+                    color={themeColors.textSecondary}
+                  />
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
 
           {isFetchingModels && fetchedModels.length === 0 ? (
             <View style={styles.modelLoadingRow}>
               <ActivityIndicator size="small" color={themeColors.textSecondary} />
-              <Text style={styles.modelLoadingText}>LOADING MODELS…</Text>
+              <Text style={styles.modelLoadingText}>QUERYING PROVIDER MODEL ENDPOINTS…</Text>
             </View>
-          ) : fetchModelError && fetchedModels.length === 0 ? (
-            /* Fallback: show static models when fetch failed */
+          ) : modelViewMode === 'live' && fetchedModels.length > 0 ? (
+            /* Live models list from API */
+            fetchedModels.map((modelId, idx) => {
+              const isSelected = selectedModel === modelId;
+              return (
+                <React.Fragment key={modelId}>
+                  {idx > 0 && <View style={styles.divider} />}
+                  <TouchableOpacity
+                    style={[styles.modelRow, isSelected ? styles.modelRowActive : null]}
+                    onPress={() => {
+                      lightHaptic();
+                      setSelectedModel(modelId);
+                      setHasChanges(true);
+                    }}
+                  >
+                    <View style={styles.modelLeft}>
+                      <Text style={[styles.modelName, isSelected ? styles.modelNameActive : null]}>
+                        {modelId}
+                      </Text>
+                    </View>
+                    <View style={styles.modelRight}>
+                      {isSelected ? (
+                        <View style={styles.checkPill}>
+                          <Text style={styles.checkPillText}>SELECTED</Text>
+                        </View>
+                      ) : (
+                        <Text style={styles.selectText}>SELECT</Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                </React.Fragment>
+              );
+            })
+          ) : (
+            /* Curated models with architectural details */
             <>
-              <View style={styles.modelErrorBanner}>
-                <MaterialCommunityIcons name="alert-circle-outline" size={13} color={themeColors.textSecondary} />
-                <Text style={styles.modelErrorText}>
-                  {fetchModelError} · Showing defaults
-                </Text>
-              </View>
+              {fetchModelError && (
+                <View style={styles.modelErrorBanner}>
+                  <MaterialCommunityIcons
+                    name="information-outline"
+                    size={13}
+                    color={themeColors.textSecondary}
+                  />
+                  <Text style={styles.modelErrorText}>
+                    Showing optimized recommendations · Enter API key to unlock dynamic catalog
+                  </Text>
+                </View>
+              )}
               {(PROVIDER_MODELS[provider] || []).map((m, idx) => {
                 const isSelected = selectedModel === m.id;
                 return (
@@ -506,11 +848,17 @@ export default function AISettingsScreen({ navigation }: any) {
                     {idx > 0 && <View style={styles.divider} />}
                     <TouchableOpacity
                       style={[styles.modelRow, isSelected ? styles.modelRowActive : null]}
-                      onPress={() => { lightHaptic(); setSelectedModel(m.id); setHasChanges(true); }}
+                      onPress={() => {
+                        lightHaptic();
+                        setSelectedModel(m.id);
+                        setHasChanges(true);
+                      }}
                     >
                       <View style={styles.modelLeft}>
                         <View style={styles.modelNameRow}>
-                          <Text style={[styles.modelName, isSelected ? styles.modelNameActive : null]}>
+                          <Text
+                            style={[styles.modelName, isSelected ? styles.modelNameActive : null]}
+                          >
                             {m.name}
                           </Text>
                           {m.recommended && (
@@ -520,10 +868,25 @@ export default function AISettingsScreen({ navigation }: any) {
                           )}
                         </View>
                         <Text style={styles.modelDesc}>{m.description}</Text>
+                        <View style={styles.specsRow}>
+                          <Text style={styles.specBadge}>
+                            ⚡ {m.speed === 3 ? 'Ultra-Fast' : m.speed === 2 ? 'Fast' : 'Deep'}
+                          </Text>
+                          <Text style={styles.specBadge}>
+                            🎯 {m.accuracy === 4 ? 'Best Reasoning' : 'High Accuracy'}
+                          </Text>
+                          {m.bestFor ? (
+                            <Text style={styles.bestForText} numberOfLines={1}>
+                              {m.bestFor}
+                            </Text>
+                          ) : null}
+                        </View>
                       </View>
                       <View style={styles.modelRight}>
                         {isSelected ? (
-                          <View style={styles.checkPill}><Text style={styles.checkPillText}>SELECTED</Text></View>
+                          <View style={styles.checkPill}>
+                            <Text style={styles.checkPillText}>SELECTED</Text>
+                          </View>
                         ) : (
                           <Text style={styles.selectText}>SELECT</Text>
                         )}
@@ -533,37 +896,10 @@ export default function AISettingsScreen({ navigation }: any) {
                 );
               })}
             </>
-          ) : (
-            /* Live models from API */
-            fetchedModels.map((modelId, idx) => {
-              const isSelected = selectedModel === modelId;
-              return (
-                <React.Fragment key={modelId}>
-                  {idx > 0 && <View style={styles.divider} />}
-                  <TouchableOpacity
-                    style={[styles.modelRow, isSelected ? styles.modelRowActive : null]}
-                    onPress={() => { lightHaptic(); setSelectedModel(modelId); setHasChanges(true); }}
-                  >
-                    <View style={styles.modelLeft}>
-                      <Text style={[styles.modelName, isSelected ? styles.modelNameActive : null]}>
-                        {modelId}
-                      </Text>
-                    </View>
-                    <View style={styles.modelRight}>
-                      {isSelected ? (
-                        <View style={styles.checkPill}><Text style={styles.checkPillText}>SELECTED</Text></View>
-                      ) : (
-                        <Text style={styles.selectText}>SELECT</Text>
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                </React.Fragment>
-              );
-            })
           )}
         </View>
 
-        {/* CARD 5: LATENCY BENCHMARK & TEST */}
+        {/* CARD 6: LATENCY BENCHMARK & TEST */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardHeaderTitle}>CONNECTIVITY & LATENCY BENCHMARK</Text>
@@ -586,13 +922,12 @@ export default function AISettingsScreen({ navigation }: any) {
               ) : (
                 <>
                   <MaterialCommunityIcons name="speedometer" size={16} color={themeColors.text} />
-                  <Text style={styles.pingButtonText}>RUN LIVE LATENCY BENCHMARK</Text>
+                  <Text style={styles.pingButtonText}>RUN LIVE BENCHMARK</Text>
                 </>
               )}
             </TouchableOpacity>
           </View>
         </View>
-
       </ScrollView>
 
       {/* FLOATING SAVE BUTTON */}
@@ -683,6 +1018,16 @@ const createStyles = (theme: any) =>
       borderBottomColor: theme.hairline || theme.border,
       backgroundColor: theme.background,
     },
+    cardHeaderRow: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.hairline || theme.border,
+      backgroundColor: theme.background,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
     cardHeaderTitle: {
       ...typography.caption,
       color: theme.textSecondary,
@@ -736,7 +1081,7 @@ const createStyles = (theme: any) =>
       ...typography.caption,
       color: theme.text,
       fontWeight: '700',
-      fontSize: 11,
+      fontSize: 10,
       letterSpacing: 0.5,
     },
     providerTabTitleActive: {
@@ -751,6 +1096,108 @@ const createStyles = (theme: any) =>
     providerTabSubActive: {
       color: theme.background,
       opacity: 0.8,
+    },
+    portalBody: {
+      padding: spacing.md,
+    },
+    portalMetaHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      marginBottom: spacing.xs,
+    },
+    portalMetaTexts: {
+      flex: 1,
+    },
+    portalName: {
+      ...typography.body,
+      color: theme.text,
+      fontWeight: '700',
+      fontSize: 14,
+    },
+    portalSubtitle: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 11,
+    },
+    portalDescription: {
+      ...typography.caption,
+      color: theme.text,
+      fontSize: 12,
+      lineHeight: 17,
+      marginTop: spacing.xs,
+      marginBottom: spacing.xs,
+    },
+    freeTierRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: spacing.md,
+      marginTop: 2,
+    },
+    freeTierText: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 11,
+      fontWeight: '500',
+    },
+    portalLinksGrid: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+    },
+    portalLinkButton: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      borderRadius: 2,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.sm,
+      backgroundColor: theme.background,
+      gap: 4,
+    },
+    portalLinkButtonText: {
+      ...typography.caption,
+      color: theme.text,
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 0.3,
+      flex: 1,
+    },
+    presetRow: {
+      flexDirection: 'row',
+      gap: spacing.xs,
+      paddingVertical: spacing.xs,
+    },
+    presetPill: {
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      borderRadius: 2,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 5,
+      backgroundColor: theme.background,
+    },
+    presetPillActive: {
+      borderColor: theme.text,
+      backgroundColor: theme.text,
+    },
+    presetPillText: {
+      ...typography.caption,
+      fontSize: 10,
+      fontWeight: '600',
+      color: theme.text,
+    },
+    presetPillTextActive: {
+      color: theme.background,
+    },
+    hintText: {
+      ...typography.caption,
+      color: theme.textSecondary,
+      fontSize: 10,
+      marginTop: 4,
+      fontStyle: 'italic',
     },
     fieldLabel: {
       ...typography.caption,
@@ -808,6 +1255,36 @@ const createStyles = (theme: any) =>
       backgroundColor: theme.hairline || theme.border,
       marginLeft: spacing.md,
     },
+    modelHeaderActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+    },
+    modeToggleGroup: {
+      flexDirection: 'row',
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      borderRadius: 2,
+      overflow: 'hidden',
+    },
+    modeToggleBtn: {
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      backgroundColor: theme.background,
+    },
+    modeToggleBtnActive: {
+      backgroundColor: theme.text,
+    },
+    modeToggleText: {
+      ...typography.caption,
+      fontSize: 8,
+      fontWeight: '700',
+      letterSpacing: 0.5,
+      color: theme.textSecondary,
+    },
+    modeToggleTextActive: {
+      color: theme.background,
+    },
     modelRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -855,6 +1332,31 @@ const createStyles = (theme: any) =>
       ...typography.caption,
       color: theme.textSecondary,
       fontSize: 11,
+      marginBottom: 3,
+    },
+    specsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      flexWrap: 'wrap',
+    },
+    specBadge: {
+      ...typography.caption,
+      fontSize: 9,
+      color: theme.text,
+      borderWidth: 1,
+      borderColor: theme.hairline || theme.border,
+      paddingHorizontal: 4,
+      paddingVertical: 1,
+      borderRadius: 2,
+      backgroundColor: theme.background,
+    },
+    bestForText: {
+      ...typography.caption,
+      fontSize: 9,
+      color: theme.textSecondary,
+      fontStyle: 'italic',
+      flex: 1,
     },
     modelRight: {
       alignItems: 'flex-end',

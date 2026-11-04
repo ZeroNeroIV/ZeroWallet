@@ -92,7 +92,16 @@ export default function ChatScreen({ navigation }: any) {
 
   const providerName = useMemo(() => {
     const model = aiSettings?.selectedModel || 'gemini-3.8-flash';
-    if (aiSettings?.provider === 'groq') return 'GROQ LLAMA 3.3';
+    if (aiSettings?.provider === 'groq') {
+      if (model.includes('70b')) return 'GROQ LLAMA 3.3';
+      if (model.includes('8b')) return 'GROQ LLAMA 3.1';
+      return 'GROQ SLM';
+    }
+    if (aiSettings?.provider === 'openrouter') {
+      if (model.includes('deepseek')) return 'DEEPSEEK R1 (OPENROUTER)';
+      if (model.includes('claude')) return 'CLAUDE 3.5 (OPENROUTER)';
+      return 'OPENROUTER';
+    }
     if (aiSettings?.provider === 'custom_openai') return 'LOCAL SLM';
     if (model.includes('3.8')) return 'GEMINI 3.8 FLASH';
     if (model.includes('3.5')) return 'GEMINI 3.5';
@@ -119,7 +128,7 @@ export default function ChatScreen({ navigation }: any) {
       providerName.includes('3.8')
         ? 'GEMINI 3.8'
         : providerName.includes('GROQ')
-        ? 'GROQ'
+        ? 'GROQ' : providerName.includes('DEEPSEEK') ? 'DEEPSEEK' : providerName.includes('OPENROUTER') ? 'ROUTER'
         : providerName.includes('LOCAL')
         ? 'LOCAL'
         : 'GEMINI';

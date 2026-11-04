@@ -15,7 +15,7 @@ import { DataQueryService } from './dataQueryService';
 import { DataMutationService } from './dataMutationService';
 import { buildSystemPrompt } from './systemPrompt';
 import { FUNCTION_DEFINITIONS, WRITE_FUNCTION_NAMES_SET } from './functionRegistry';
-import { GROQ_API_URL } from '../../constants/aiProviders';
+import { GROQ_API_URL, OPENROUTER_API_URL } from '../../constants/aiProviders';
 
 export interface AIProviderResponse {
   text: string;
@@ -99,6 +99,20 @@ export class AIProviderService {
         endpoint: GROQ_API_URL,
         apiKey,
         model: this.settings.selectedModel || 'llama-3.2-3b-preview',
+        message,
+        context,
+      });
+    }
+
+    if (provider === 'openrouter') {
+      const apiKey = this.settings.openrouterApiKey || this.settings.apiKey;
+      if (!apiKey) {
+        throw new Error('OpenRouter API key not configured. Please enter your key in AI settings.');
+      }
+      return await this.callOpenAICompatibleAPI({
+        endpoint: OPENROUTER_API_URL,
+        apiKey,
+        model: this.settings.selectedModel || 'deepseek/deepseek-r1',
         message,
         context,
       });

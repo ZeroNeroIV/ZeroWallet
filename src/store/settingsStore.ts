@@ -79,6 +79,7 @@ const defaultAISettings: AISettings = {
   apiKey: null,
   geminiApiKey: null,
   groqApiKey: null,
+  openrouterApiKey: null,
   customApiKey: null,
   customBaseUrl: 'http://localhost:11434/v1',
   selectedModel: 'llama-3.2-3b-preview',

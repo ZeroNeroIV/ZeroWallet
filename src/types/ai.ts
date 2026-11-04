@@ -9,7 +9,7 @@
 /**
  * Supported AI Providers
  */
-export type AIProvider = 'gemini' | 'groq' | 'custom_openai';
+export type AIProvider = 'gemini' | 'groq' | 'openrouter' | 'custom_openai';
 
 /**
  * Available Gemini model identifiers (including latest Gemini 3.8 and 3.5 series)
@@ -105,6 +105,7 @@ export interface AISettings {
   apiKey: string | null; // Active or Gemini API key
   geminiApiKey?: string | null;
   groqApiKey?: string | null;
+  openrouterApiKey?: string | null;
   customApiKey?: string | null;
   customBaseUrl?: string; // Custom endpoint (e.g., http://localhost:11434/v1)
   selectedModel: string; // Model identifier
